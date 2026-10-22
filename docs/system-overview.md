@@ -17,6 +17,7 @@
 - **소비자 (Consumer/Buyer)**: 비싼 월 구독 없이, 원하는 모델을 필요한 토큰 단위로 저렴하게 이용.
 - **빅테크 추적 회피 (Anti-Tracking & Privacy Sovereignty)**: 실제 사용자는 빅테크(OpenAI 등) 입장에서 '유령'이 되며, 질문이 여러 공급자 노드로 분산되어 개인의 관심사·지적 활동이 빅데이터로 수집/프로파일링되는 것을 원천 차단 (DuckDuckGo/Tor 효과).
 - **P2P & 무신뢰(Trustless)**: 중앙 서버 없이 Broker 네트워크와 탈중앙 분산 원장(Decentralized Ledger)을 통해 완전 자동화된 매칭 및 정산 수행.
+- **P2P 한계를 무력화하는 무상태(Stateless) 내결함성**: 장시간 연결 유지가 필요한 기존 P2P와 달리, 단 3초 단위의 무상태 마이크로 태스크와 클라이언트 측 대화 기억(Context) 관리로 피어의 잦은 이탈(Churn)에도 100% 무중단 연속 대화 보장 (Zero-Downtime Failover).
 - **익명성 및 보안**: Peer 간에는 서로의 신원이나 원본 API Key를 알지 못한 채 안전한 백그라운드 터널링으로 통신.
 
 ---
