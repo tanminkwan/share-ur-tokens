@@ -47,10 +47,10 @@ flowchart TB
         SC["Smart Contract & Escrow / Token Settlement"]
     end
 
-    Cursor ==="Standard OpenAI API (Transparent)"===> CA
+    Cursor -->|"Standard OpenAI API (Transparent)"| CA
     PA -.->|"1. Register Profile & Capacity"| B1
     CA -.->|"2. Lookup & Match Request"| B2
-    CA ==="3. P2P Encrypted Proxy Request (Blind Tunnel)"===> PA
+    CA -->|"3. P2P Encrypted Proxy Request (Blind Tunnel)"| PA
     PA -.->|"4. Report Usage & Proof"| SC
     CA -.->|"4. Verify & Settle"| SC
 ```

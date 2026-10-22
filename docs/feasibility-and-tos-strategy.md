@@ -26,11 +26,11 @@ OpenAI, Anthropic 등 빅테크의 약관에는 *"API Key를 제3자에게 재�
 ```mermaid
 flowchart LR
     subgraph SUT_Network["SUT P2P 네트워크 (외부 비공개)"]
-        Consumer["소비자 (Cursor)"] ==="E2EE 암호화 터널"===> Provider["공급자 PC (SUT Agent)"]
+        Consumer["소비자 (Cursor)"] -->|"E2EE 암호화 터널"| Provider["공급자 PC (SUT Agent)"]
     end
 
     subgraph External_Call["공식 인터넷 망 (OpenAI가 보는 시야)"]
-        Provider ==="일반적인 로컬 Python/SDK 호출"===> OpenAI["OpenAI API 서버"]
+        Provider -->|"일반적인 로컬 Python/SDK 호출"| OpenAI["OpenAI API 서버"]
     end
 ```
 

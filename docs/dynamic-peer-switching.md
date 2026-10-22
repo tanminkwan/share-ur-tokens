@@ -24,9 +24,9 @@ flowchart LR
         P3["공급자 C (독일)"] --> LLM3["OpenAI"]
     end
 
-    History ==="1회차 호출 (질문 1)"===> Turn1
-    History ==="2회차 호출 (질문 1+2)"===> Turn2
-    History ==="3회차 호출 (질문 1+2+3)"===> Turn3
+    History -->|"1회차 호출 (질문 1)"| Turn1
+    History -->|"2회차 호출 (질문 1+2)"| Turn2
+    History -->|"3회차 호출 (질문 1+2+3)"| Turn3
 ```
 
 - **대화 기억(Context)의 소유 주체**: 공급자 Peer나 OpenAI가 아니라, **오직 소비자의 로컬 SUT Agent**입니다.
