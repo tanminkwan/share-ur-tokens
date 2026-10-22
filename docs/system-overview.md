@@ -237,6 +237,7 @@ share-ur-tokens/
 │   ├── market-analysis-and-competitors.md # 시장 유사 서비스 분석 및 경쟁력 비교
 │   ├── privacy-and-tool-calling.md    # 로컬 마스킹 및 안전한 툴 콜링(Tool Calling)
 │   ├── dynamic-peer-switching.md      # 턴 단위 동적 피어 스위칭 및 장애 복구(Failover)
+│   ├── dispute-and-indemnity.md       # 정책 위반 분쟁 해결 및 구상권(Slashing) 배상
 │   └── protocol-spec.md               # 통신 프로토콜 및 메시지 포맷 (추후 작성)
 ├── agent/                        # SUT Agent 소스코드 (Go / Rust / Node.js)
 │   ├── proxy/                    # LLM API Reverse Proxy & Tokenizer
