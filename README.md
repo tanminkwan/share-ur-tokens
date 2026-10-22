@@ -16,3 +16,5 @@
 - 🛡️ **[기술 실현 가능성 및 ToS 회피 전략](docs/feasibility-and-tos-strategy.md)**: 기술적 타당성 검증 및 빅테크 이용약관(ToS) 단속 무력화 방안
 - 📊 **[시장 유사 서비스 분석 및 경쟁력](docs/market-analysis-and-competitors.md)**: One-API, Morpheus, Grass 등 기존 서비스 대비 독창적 블루오션 포지셔닝
 - 🔒 **[로컬 프라이버시 및 안전한 툴 콜링](docs/privacy-and-tool-calling.md)**: 초경량 로컬 마스킹 파이프라인 및 안전한 금융/상거래 툴 콜링 격리 실행
+- 🔄 **[동적 턴 단위 피어 스위칭](docs/dynamic-peer-switching.md)**: 무중단 장애 복구(Failover), 실시간 최저가 사냥 및 대화 파편화(Context Sharding) 기술
+
