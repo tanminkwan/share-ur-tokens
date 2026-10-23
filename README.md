@@ -1,8 +1,8 @@
 # Share-Ur-Tokens (SUT)
 
-> **P2P LLM 토큰 공유 네트워크 (P2P LLM Token Sharing Network, 공개형 / 폐쇄형 배포)**
+> **P2P LLM 토큰 공유 연합 네트워크 (P2P LLM Token Sharing Federation, 공개형 / 폐쇄형 배포)**
 
-조직이 계약한 상용 LLM과 구성원·참여자의 GPU 오픈 모델을 하나의 입구로 골라 쓰고, 제공한 서비스는 실시간 가치평가를 거쳐 포인트로 돌려받아 다른 모델을 쓰는 데 사용하는 선순환형 P2P 공유 플랫폼입니다.
+소유자가 서로 다른 AI 자원(조직이 계약한 상용 LLM, 참여자의 GPU 오픈 모델)을 단일 운영자 없이 함께 쓰는 P2P 연합 네트워크입니다. 참여자는 하나의 입구로 여러 공급원을 골라 쓰고, 제공한 서비스는 실시간 가치평가를 거쳐 포인트로 돌려받으며, 공급·사용 기록은 어느 한쪽도 혼자 고칠 수 없는 공동 원장에 남습니다. 조직 하나 안의 공유는 사내 LLM 게이트웨이가 더 적합하며, SUT는 게이트웨이가 닿지 않는 조직 사이의 공유를 맡습니다.
 
 ---
 
@@ -14,7 +14,7 @@
 - 🌐 **[P2P 네트워크 및 DID 구조](docs/p2p-and-identity.md)**: libp2p, Blind Relay, DID 자급 발급과 가명성의 범위(파생 DID), 분산 브로커 운영 보상
 - ⛓️ **[포인트 원장 및 정산](docs/ledger-and-settlement.md)**: 상호신용(공급 +P, 사용 -P, 합계 0) 정산과 Broker 합의형 블록체인 원장
 - 🛡️ **[기술 실현 가능성 및 이용 조건 준수 구조](docs/feasibility-and-compliance.md)**: 기술적 타당성 검증, 모든 공급이 공급원의 이용 조건(업체 약관, 모델 라이선스, 조직 정책)이 허용하는 네트워크에서만 이루어지도록 하는 구조
-- 📊 **[시장 유사 서비스 분석 및 경쟁력](docs/market-analysis-and-competitors.md)**: One-API, Morpheus, Grass 등 기존 서비스 대비 독창적 블루오션 포지셔닝
+- 📊 **[시장 유사 서비스 분석 및 경쟁력](docs/market-analysis-and-competitors.md)**: One-API, Morpheus, Grass, 사내 LLM 게이트웨이(LiteLLM Proxy 등) 대비 포지셔닝: 단일 운영자 없는 연합 네트워크
 - 🔒 **[로컬 프라이버시 및 안전한 툴 콜링](docs/privacy-and-tool-calling.md)**: 초경량 로컬 마스킹 파이프라인 및 안전한 금융/상거래 툴 콜링 격리 실행
 - 🔄 **[동적 턴 단위 피어 스위칭](docs/dynamic-peer-switching.md)**: 세션 친화(Sticky) 라우팅으로 캐시 효율 확보, 장애 시 무상태 Fallback 및 KV 캐시 전달안 검토 결과
 - ⚖️ **[분쟁 해결 및 공급자 보호](docs/dispute-and-indemnity.md)**: 정책 위반 질의의 2중 사전 차단, 서명 증거 기반 Broker 심사, 포인트·신용 한도를 통한 제재와 공급자 보상
