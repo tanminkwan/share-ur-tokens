@@ -1,7 +1,7 @@
 # Share-Ur-Tokens (SUT) 시스템 개요 및 아키텍처
 
-> **탈중앙화 P2P LLM 토큰 공유 및 거래 네트워크**  
-> 개인이 보유한 LLM API 사용 한도(및 로컬 오픈 모델 추론 자원)를 공유·판매하고, 필요한 사용자는 구독 없이 필요한 만큼 종량제로 안전하게 구매할 수 있는 무신뢰(Trustless) 분산 플랫폼입니다.
+> **탈중앙화 P2P LLM 토큰 공유 네트워크**  
+> 개인이 보유한 LLM API 사용 한도(및 로컬 오픈 모델 추론 자원)를 서로 공유하고, 제공한 서비스는 실시간 가치평가를 거쳐 포인트로 돌려받아 다른 모델을 쓰는 데 사용하는 선순환형 무신뢰(Trustless) 분산 플랫폼입니다.
 
 ---
 
@@ -13,10 +13,10 @@
 - **중앙화 플랫폼의 한계**: 기존의 중앙화 중계 서비스는 마진 수수료, 개인정보(프롬프트) 검열, 중앙 서버 단일 장애점(SPOF), 그리고 API Key 유출 위험이 존재합니다.
 
 ### 1.2 핵심 가치 (Value Proposition)
-- **공급자 (Provider/Seller)**: API 한도의 여유분이나 유휴 GPU의 추론 자원을 시장에 판매하여 비용을 회수하고 수익화. (공급 대상은 1.3절 참조)
-- **소비자 (Consumer/Buyer)**: 비싼 월 구독 없이, 원하는 모델을 필요한 토큰 단위로 저렴하게 이용.
+- **공급자 (Provider)**: API 한도의 여유분이나 유휴 GPU의 추론 자원을 공유하고, 제공한 서비스만큼 포인트를 받음. (공급 대상은 1.3절 참조)
+- **소비자 (Consumer)**: 월 구독 없이, 원하는 모델을 필요한 만큼 이용하고 포인트로 정산. 신규 참여자도 작은 신용 한도로 바로 시작 가능.
 - **빅테크 추적 회피 (Anti-Tracking & Privacy Sovereignty)**: 실제 사용자는 빅테크(OpenAI 등) 입장에서 '유령'이 됨. 단, 공급자 피어는 전달받은 대화 내용을 볼 수 있으며 피어를 자주 바꿀수록 대화 전체를 보는 상대가 늘어남 (4.2절 참조).
-- **P2P & 무신뢰(Trustless)**: 중앙 서버 없이 Broker 네트워크와 탈중앙 분산 원장(Decentralized Ledger)을 통해 완전 자동화된 매칭 및 정산 수행.
+- **P2P & 무신뢰(Trustless)**: 중앙 서버 없이 Broker 네트워크와 Broker 합의형 블록체인 원장을 통해 자동화된 매칭 및 포인트 정산 수행.
 - **무상태(Stateless) 내결함성 + Sticky 라우팅**: 장시간 연결 유지가 필요한 기존 P2P와 달리, 턴 단위 무상태 마이크로 태스크와 클라이언트 측 대화 기억(Context) 관리로 피어 이탈(Churn) 시 다른 피어로 대화를 이어감. 평소에는 같은 세션을 같은 피어로 보내 캐시 효율을 유지하고, 장애 시에만 교체 (Failover).
 - **익명성 및 보안**: Peer 간에는 서로의 신원이나 원본 API Key를 알지 못한 채 안전한 백그라운드 터널링으로 통신.
 
@@ -55,16 +55,16 @@ flowchart TB
         PA -->|"Private API Key"| LLM["Upstream LLM Service (OpenAI, Anthropic, etc.)"]
     end
 
-    subgraph Ledger_Layer["Decentralized Ledger / Blockchain"]
-        SC["Smart Contract & Escrow / Token Settlement"]
+    subgraph Ledger_Layer["Permissioned Blockchain Ledger (Broker Consensus)"]
+        SC["Point Ledger / Signed Receipts"]
     end
 
     Cursor -->|"Standard OpenAI API (Transparent)"| CA
     PA -.->|"1. Register Profile & Capacity"| B1
     CA -.->|"2. Lookup & Match Request"| B2
     CA -->|"3. P2P Encrypted Proxy Request (Blind Tunnel)"| PA
-    PA -.->|"4. Report Usage & Proof"| SC
-    CA -.->|"4. Verify & Settle"| SC
+    PA -.->|"4. Submit Signed Receipt (+P)"| SC
+    CA -.->|"4. Co-sign Receipt (-P)"| SC
 ```
 
 ### 2.1 SUT Agent
@@ -84,11 +84,11 @@ flowchart TB
 - **제공자 모드 (Provider Mode)**:
   - 사용자가 업스트림 LLM 엔드포인트(예: OpenAI, Anthropic, Ollama 등)와 API Key를 로컬 환경설정에 등록.
   - SUT Agent가 해당 엔드포인트의 유효성, 지원 모델(Context window, RPM/TPM 등)을 검증하여 **검증된 프로필(Verifiable Profile)** 자동 생성.
-  - 제공자는 판매할 최대 토큰 한도(Limit), 시간대, 허용 모델, 단가 등을 직접 지정.
+  - 제공자는 공유할 최대 토큰 한도(Limit), 공유 시간대, 허용 모델 등을 직접 지정.
   - 외부로 API Key를 절대 유출하지 않고, 인입된 요청을 로컬에서 대신 호출해 주는 **Reverse Proxy** 역할 수행.
 
 - **소비자 모드 (Consumer Mode)**:
-  - 로컬 포트(`localhost:8080`)로 들어오는 프롬프트 요청을 가로채, Broker 네트워크를 통해 조건(모델, 지연시간, 예산)에 맞는 최적의 공급자 Peer를 즉시 매칭하고 E2EE P2P 터널로 연결.
+  - 로컬 포트(`localhost:8080`)로 들어오는 프롬프트 요청을 가로채, Broker 네트워크를 통해 조건(모델, 지연시간, 포인트 효율)에 맞는 최적의 공급자 Peer를 즉시 매칭하고 E2EE P2P 터널로 연결.
   - **로컬 자동 마스킹 엔진 (Data Sanitizer)**: 프롬프트에 포함된 API Key나 개인정보(이메일, 전화번호 등)를 감지하여 네트워크 송출 전 가짜 플레이스홀더(`[MASKED_KEY]`)로 자동 치환하고, LLM 응답 수신 시 원래 값으로 자동 복원(De-masking).
 
 - **보안 및 측정 모듈**:
@@ -104,29 +104,30 @@ P2P 디스커버리(Discovery) 및 매칭을 담당하는 분산형 브로커 �
   - 각 Agent가 제공할 수 있는 LLM 스펙, 가용 토큰량, 신뢰도 점수(Reputation)를 인덱싱.
   - Agent 스스로 프로필 스펙을 허위 조작할 수 없도록 초기 핑/검증 챌린지 프로토콜 적용.
 - **스마트 매칭 엔진**:
-  - 소비자의 요구 조건(모델 종류, 필요 토큰량, 예산)에 부합하는 최적의 단일 또는 복수(Multi-peer fallback) 공급자 Agent를 탐색하여 P2P 핸드셰이크 주선.
+  - 소비자의 요구 조건(모델 종류, 필요 토큰량, 포인트 효율)에 부합하는 최적의 단일 또는 복수(Multi-peer fallback) 공급자 Agent를 탐색하여 P2P 핸드셰이크 주선.
 
-### 2.3 탈중앙화 원장 (Decentralized Ledger & Settlement)
-신뢰 기관 없이도 사용량과 정산의 무결성을 보장하는 블록체인/레이어2 인프라입니다.
-- **에스크로(Escrow) 기반 마이크로페이먼트**:
-  - 소비자는 요청 전 일정 금액의 크레딧/토큰을 스마트 컨트랙트 또는 상태 채널(State Channels)에 에스크로 예치.
-  - 스트리밍 방식으로 청구되거나, 세션 완료 후 실제 소비된 토큰만큼 공급자에게 지급.
+### 2.3 포인트 원장 (Permissioned Blockchain Ledger)
+Broker 노드들이 합의해 운영하는 허가형 블록체인 원장입니다. 제공·사용한 토큰과 그 가치평가 결과(포인트)를 영구히 기록합니다. (상세: [포인트 원장 및 정산](ledger-and-settlement.md))
 - **사용량 기록 및 영수증 (Proof of Usage)**:
-  - 완료된 프롬프트/응답 토큰 수량을 상호 서명(Dual Signature)하여 원장에 기록.
-  - 분쟁(Dispute) 발생 시 챌린지 검증 로직 제공.
+  - 완료된 요청의 입력·출력·캐시 토큰 수량과 평가 포인트를 양측이 서명(Dual Signature)해 원장에 기록.
+  - 블록 해시 체인과 Broker 합의로 기록 위변조를 차단.
+- **상호신용 정산**:
+  - 공급자 +P, 소비자 -P로 기록되어 전체 합계는 항상 0.
+  - 신규 참여자는 작은 신용 한도(마이너스 허용)로 시작하며, 기여 이력에 따라 한도가 늘어남.
+- **분쟁 처리**: 정책 위반 등 분쟁은 서명 증거를 바탕으로 복수 Broker가 심사. (상세: [분쟁 해결 및 공급자 보호](dispute-and-indemnity.md))
 
 ---
 
 ## 3. 핵심 워크플로우 (Workflows)
 
 ### 3.1 공급자 (Token Provider) 등록
-1. 사용자가 SUT Agent를 실행하고 OpenAI API Key 및 일일 판매 한도(예: 500,000 토큰)를 설정.
+1. 사용자가 SUT Agent를 실행하고 OpenAI API Key 및 일일 공유 한도(예: 500,000 토큰)를 설정.
 2. SUT Agent가 자체 테스트 호출을 통해 모델 티어 및 응답성을 확인.
 3. 변조 불가능한 프로필 해시(Profile Digest)를 생성하여 인접 SUT Broker에 등록.
 4. Broker 네트워크 전역으로 프로필 메타데이터가 전파되어 대기 상태(Standby)로 전환.
 
 ### 3.2 소비자 (Token Consumer) 매칭 및 연결
-1. 소비자는 SUT Agent에 원하는 조건(예: `claude-sonnet-5-5`, 최대 10,000 토큰, max price)을 입력.
+1. 소비자는 SUT Agent에 원하는 조건(예: `claude-sonnet-5-5`, 최대 10,000 토큰, 포인트 효율 우선)을 입력.
 2. 소비자 Agent가 Broker 네트워크를 통해 조건에 부합하는 공급자 Agent 후보군을 질의.
 3. Broker는 매칭된 공급자 노드의 P2P 연결 정보(ICE/STUN/TURN 기반 주소)를 전달.
 4. 양자 간에 직접 엔드투엔드 암호화 터널(E2EE P2P Tunnel)이 수립됨.
@@ -136,14 +137,14 @@ P2P 디스커버리(Discovery) 및 매칭을 담당하는 분산형 브로커 �
 2. 공급자 Agent는 프롬프트를 자신의 업스트림 LLM(OpenAI 등)으로 포워딩.
 3. 응답 스트림이 소비자의 Agent로 실시간 릴레이.
 4. 요청 완료 후, 양측 Agent는 송수신된 실제 토큰 수를 계산하고 사용량 티켓에 서명.
-5. 오프체인 상태 채널 또는 롤업 레이어에 정산 트랜잭션이 제출되어 정산 완료.
+5. 최종 영수증이 블록체인 원장에 기록되고, 제공된 서비스를 가치평가한 포인트가 공급자 +P, 소비자 -P로 반영됨.
 
 ---
 
 ## 4. 프라이버시 및 실용주의적 보안 철학 (Pragmatic Security Philosophy)
 
 > **투명한 트레이드오프(Trade-off) 고지**:  
-> SUT는 불필요한 구독료 없이 저렴하게 LLM을 종량제로 쓰는 **실용성 중심 플랫폼**입니다. 전송 구간은 암호화되지만, **최종 프록시를 수행하는 공급자 PC 환경에 프롬프트가 노출될 수 있는 기술적 한계를 투명하게 인정**하고 이에 맞는 적합한 유즈케이스를 정의합니다.
+> SUT는 구독 없이 서로의 LLM 자원을 필요한 만큼 나눠 쓰는 **실용성 중심 플랫폼**입니다. 전송 구간은 암호화되지만, **최종 프록시를 수행하는 공급자 PC 환경에 프롬프트가 노출될 수 있는 기술적 한계를 투명하게 인정**하고 이에 맞는 적합한 유즈케이스를 정의합니다.
 
 ### 4.1 핵심 보안 및 보호 영역
 
@@ -151,8 +152,8 @@ P2P 디스커버리(Discovery) 및 매칭을 담당하는 분산형 브로커 �
 | :--- | :--- | :--- |
 | **API Key 보호** | 타인에게 API Key 노출 원천 차단 | 공급자 Agent 로컬 내부에만 암호화 보관되며, 프록시 요청만 처리 (외부 유출 불가) |
 | **P2P 전송 보안** | 제3자 및 ISP 도청 방지 | libp2p QUIC + Noise Protocol 기반 엔드투엔드(E2EE) 암호화 터널 적용 |
-| **토큰 카운트 부정** | 소비 토큰 과대/과소 청구 방지 | 표준 토크나이저(Tiktoken) 상호 검증 및 블록체인 상태 채널 서명 정산 |
-| **프로필 조작 방지** | 가짜 성능/모델 등록 시도 차단 | Broker의 핑/벤치마크 챌린지 및 신뢰도/스테이킹 메커니즘 |
+| **토큰 카운트 부정** | 소비 토큰 과대/과소 청구 방지 | 업스트림 `usage` 값 기준 + 소비자 측 근사 검증, 양측 서명 영수증 |
+| **프로필 조작 방지** | 가짜 성능/모델 등록 시도 차단 | Broker의 핑/벤치마크 챌린지 및 신뢰도 점수 |
 
 ### 4.2 컨텍스트 노출에 대한 실용적 한계와 사용 가이드라인
 
@@ -164,7 +165,7 @@ P2P 디스커버리(Discovery) 및 매칭을 담당하는 분산형 브로커 �
   - 일회성 아이디어 브레인스토밍, 비실시간 대량 배치 작업
 - **비권장 유즈케이스 (공식 직접 구독 권장)**:
   - 기업 비밀 소스코드, 미공개 특허/재무 데이터, 고객 개인정보(PII)
-  - *이러한 극비 데이터는 SUT가 아닌 OpenAI/Anthropic의 공식 유료 계정을 직접 결제하여 사용하는 것을 권장합니다.*
+  - *이러한 극비 데이터는 SUT가 아닌 OpenAI/Anthropic의 공식 계정으로 직접 사용하는 것을 권장합니다.*
 
 ### 4.3 로컬 자동 비밀키/개인정보(PII) 마스킹 파이프라인
 
@@ -196,42 +197,36 @@ sequenceDiagram
 
 ---
 
-## 5. SUT 토큰 이코노미 및 유동성 (Tokenomics & Circulation)
+## 5. 포인트 순환 구조 (Point Circulation)
 
-공급자가 LLM 서비스를 제공하고 획득한 플랫폼 토큰(`$SUT`)은 단순한 정산 수단을 넘어, **교차 소비, 자유 양도, 시장 현금화가 가능한 유동적 자산**으로 기능합니다.
+SUT에서 참여자가 주고받는 것은 토큰 자체가 아니라, **제공한 서비스를 실시간으로 가치평가한 포인트**입니다. 포인트는 공급·사용 정산용이며, 계정 간 이전 없이 공급과 사용으로만 움직입니다.
 
 ```mermaid
-flowchart TD
-    Provider["공급자 (상용 API 모델 제공)"] -->|"토큰 보상 (Earning)"| SUT["$SUT 토큰 확보"]
-    
-    SUT -->|"1. 교차 소비 (Cross-Consumption)"| Consumer["다른 Peer의 Claude/Llama 이용"]
-    SUT -->|"2. 자유 양도 (P2P Transfer)"| PeerB["동료/팀원/타인에게 자유 증여"]
-    SUT -->|"3. 시장 매매 (Liquidity & Cash-out)"| DEX["DEX/거래소에서 현금(USDT)화"]
+flowchart LR
+    Supply["공급<br/>(남는 API 한도 · 유휴 GPU)"] -->|"실시간 가치평가"| Earn["포인트 +P"]
+    Earn --> Use["다른 모델 사용<br/>(내가 없는 모델 · 필요한 시간대)"]
+    Use -->|"실시간 가치평가"| Spend["포인트 -P"]
+    Spend --> Supply
+    Earn -.->|"기여 이력 누적"| Limit["신용 한도 상향"]
+    Limit -.-> Use
 ```
 
-### 5.1 3대 핵심 유틸리티
-1. **교차 소비 (LLM 바터/품앗이)**:
-   - 본인이 제공하는 모델(예: OpenAI API 모델)을 통해 번 토큰으로, 다른 Peer가 제공하는 다양한 모델(Anthropic API 모델, 로컬 오픈 모델 등)을 구독 없이 자유롭게 교차 이용.
-2. **P2P 자유 증여 및 양도 (Gifting & Transfer)**:
-   - 스마트 컨트랙트 기반 표준 토큰이므로, 제3자나 플랫폼의 제약 없이 친구, 연구팀, 커뮤니티에 자유롭게 전송 및 선물 가능.
-3. **탈중앙 시장(DEX) 매매 및 수익 실현**:
-   - Uniswap 등의 탈중앙 거래소 유동성 풀을 통해 스테이블코인(USDT/USDC)이나 법정화폐로 언제든지 환전 가능.
+### 5.1 왜 토큰이 아니라 포인트인가
+- 토큰 1개의 가치는 **모델마다, 토큰 종류(입력·출력·캐시)마다, 시간대마다** 다릅니다.
+- 포인트는 이 차이를 실시간 가치평가로 맞춘 공통 지표입니다. 그래서 "심야에 경량 모델을 많이 공급한 사람"과 "업무 시간에 상위 모델을 조금 쓴 사람"을 같은 저울로 비교할 수 있습니다. (상세: [실시간 가치평가 메커니즘](valuation-mechanism.md))
 
-### 5.2 시시각각 변하는 토큰 가치와 실시간 환산 메커니즘
-`$SUT`의 시장 가격은 거래소 수요와 공급에 따라 유동적(Floating)으로 변동하지만, **LLM 서비스 이용 시에는 항상 공정한 가치가 보장**되도록 오라클 환산 메커니즘을 적용합니다.
-
-$$\text{지불해야 할 \$SUT 수량} = \frac{\text{LLM 호출 실제 비용 (USD)}}{\text{\$SUT 실시간 시장 가격 (USD)}}$$
-
-- **실시간 오라클 연동**: 스마트 컨트랙트 및 브로커는 DEX 유동성 풀의 실시간 TWAP(시간가중평균가격) 오라클을 참조하여 실시간 교환비를 산정.
-- **가치 보전 효과**: `$SUT` 시장 가격이 상승하면 더 적은 토큰으로 동일한 양의 LLM을 이용할 수 있어, 토큰 보유자의 구매력이 자동 보호됩니다.
+### 5.2 선순환을 만드는 3가지 장치
+1. **교차 사용 (품앗이)**: 내가 공급하는 모델(예: OpenAI API 모델)로 받은 포인트로, 다른 Peer가 공급하는 모델(Anthropic API 모델, 로컬 오픈 모델 등)을 구독 없이 사용합니다.
+2. **먼저 쓰고 나중에 기여**: 신규 참여자는 잔액 0에서 작은 신용 한도로 바로 사용할 수 있어, 첫 거래가 막히지 않습니다. 공급 이력이 쌓일수록 한도가 늘어납니다.
+3. **시간대별 가치평가**: 수요가 몰리는 시간대에 공급하면 포인트를 더 받고, 공급이 남는 시간대에 쓰면 덜 차감됩니다. 참여자들이 서로의 빈 시간을 자연스럽게 메워 줍니다.
 
 ---
 
 ## 6. 기대 효과 및 유즈케이스
 
-1. **API 키 보유 개발자 / 홈 GPU 보유자**: API 크레딧·예산의 여유분이나 유휴 GPU를 수익화하여 비용 절감.
-2. **학생 / 1회성 개발자**: 정기 구독이나 API 계정 개설 없이 과제나 테스트용으로 몇 백~몇 천 토큰만 소액 결제로 사용.
-3. **분산형 AI 인프라**: 거대 빅테크 단일 게이트웨이에 종속되지 않는 탈중앙화된 P2P LLM 마켓플레이스 생태계 구축.
+1. **API 키 보유 개발자 / 홈 GPU 보유자**: API 한도의 여유분이나 유휴 GPU를 공유하고, 받은 포인트로 자신이 없는 다른 모델을 사용.
+2. **학생 / 1회성 개발자**: 정기 구독이나 API 계정 개설 없이 신용 한도 안에서 필요한 만큼 먼저 사용하고, 이후 공유로 기여.
+3. **분산형 AI 인프라**: 단일 게이트웨이에 종속되지 않고 참여자끼리 LLM 자원을 순환시키는 P2P 공유 생태계 구축.
 
 ---
 
@@ -242,22 +237,22 @@ share-ur-tokens/
 ├── docs/
 │   ├── system-overview.md             # 본 문서 (시스템 개념 및 전체 아키텍처)
 │   ├── hackathon-proposal.md          # 해커톤 참가 신청서 (1~7 문항 기획서)
-│   ├── pricing-mechanism.md           # 자동 가격 결정 알고리즘 (ADPM)
+│   ├── valuation-mechanism.md         # 실시간 가치평가 메커니즘 (토큰 → 포인트)
 │   ├── p2p-and-identity.md            # P2P 통신, 상호 은닉, DID 및 브로커 구조
-│   ├── ledger-and-settlement.md       # 분산 원장 보관 및 상태 채널 정산 아키텍처
+│   ├── ledger-and-settlement.md       # 포인트 원장(허가형 블록체인) 및 정산 아키텍처
 │   ├── feasibility-and-tos-strategy.md# 기술 실현 가능성 및 P2P ToS 회피 전략
 │   ├── market-analysis-and-competitors.md # 시장 유사 서비스 분석 및 경쟁력 비교
 │   ├── privacy-and-tool-calling.md    # 로컬 마스킹 및 안전한 툴 콜링(Tool Calling)
 │   ├── dynamic-peer-switching.md      # 턴 단위 동적 피어 스위칭 및 장애 복구(Failover)
-│   ├── dispute-and-indemnity.md       # 정책 위반 분쟁 해결 및 구상권(Slashing) 배상
+│   ├── dispute-and-indemnity.md       # 정책 위반 분쟁 해결 및 공급자 보호
 │   └── protocol-spec.md               # 통신 프로토콜 및 메시지 포맷 (추후 작성)
 ├── agent/                        # SUT Agent 소스코드 (Go / Rust / Node.js)
 │   ├── proxy/                    # LLM API Reverse Proxy & Tokenizer
 │   ├── p2p/                      # P2P 연결 (libp2p, WebRTC)
-│   └── ledger/                   # 블록체인/정산 인터페이스
-├── broker/                       # SUT Broker 소스코드 (분산 노드 디스커버리)
-│   ├── discovery/                # DHT / Kademlia / Gossip 노드 검색
-│   └── matching/                 # 조건 기반 공급자-소비자 매칭 엔진
-└── contracts/                    # 에스크로 및 토큰 결제용 스마트 컨트랙트
+│   └── ledger/                   # 영수증 서명 및 원장 연동
+└── broker/                       # SUT Broker 소스코드 (분산 노드 디스커버리)
+    ├── discovery/                # DHT / Kademlia / Gossip 노드 검색
+    ├── matching/                 # 조건 기반 공급자-소비자 매칭 엔진
+    └── ledger/                   # 허가형 블록체인 원장 노드 (합의·복제)
 ```
 

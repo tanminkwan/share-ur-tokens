@@ -13,7 +13,7 @@ SUT 시스템은 완전히 새로운 미지의 기술을 개발하는 것이 아
 | **Cursor / IDE 로컬 연동** | **LiteLLM, Ollama, LocalAI, Jan.ai**<br>- `localhost:8080/v1` 로컬 엔드포인트를 통해 이미 수십만 개발자가 Cursor, Continue, Cline과 완벽 연동 사용 중 | **100%**<br>(수십 줄의 프록시 코드로 구현 가능) |
 | **유휴 컴퓨팅/대역폭 DePIN** | **Grass (getgrass.io), Bittensor (TAO)**<br>- 개인 PC/노트북의 유휴 자원을 공유하고 토큰으로 정산하는 분산 네트워크 (유저 수백만 명) | **100%**<br>(입증된 비즈니스 & 분산 아키텍처) |
 | **P2P 은닉 및 NAT 트래버설** | **libp2p, Tor, NKN, Mysterium Network**<br>- 일반 가정용 공유기(NAT/방화벽) 뒤에서도 99% P2P 홀펀칭 및 Blind 중계 통신 검증 | **100%** |
-| **초소액 스트리밍 정산** | **Bitcoin Lightning Network, Connext, Yellow Network**<br>- 토큰 스트리밍 도중 가스비 없이 밀리초 단위로 마이크로 서명을 교환하는 오프체인 상태 채널 | **100%** |
+| **스트리밍 사용량 정산** | **Bitcoin Lightning Network(상태 채널), Hyperledger Fabric(허가형 블록체인)**<br>- 스트리밍 도중 누적 사용량에 마이크로 서명을 교환하고, 최종 영수증을 참여 노드 합의형 원장에 기록 | **100%** |
 
 ---
 
@@ -75,13 +75,13 @@ OpenAI의 AI 기반 이상 패턴 감지(예: 한 계정이 24시간 내내 쉬�
 ```mermaid
 flowchart LR
     Phase1["Phase 1: Local & P2P MVP (3주)\n- Go/Rust 로컬 프록시 데몬\n- Cursor (localhost:8080) 연동\n- 2대 PC 간 libp2p 터널 검증"]
-    --> Phase2["Phase 2: Broker & Testnet (4주)\n- Kademlia DHT 브로커 매칭\n- L2 테스트넷 상태 채널 정산\n- 알파 테스터 트래픽 분산 검증"]
-    --> Phase3["Phase 3: Mainnet DePIN (지속)\n- W3C DID 신원 & Blind Relay\n- 메인넷 스마트 컨트랙트 ($SUT)\n- DEX 토큰 유동성 풀 가동"]
+    --> Phase2["Phase 2: Broker & Point Ledger (4주)\n- Kademlia DHT 브로커 매칭\n- 실시간 가치평가 + 포인트 원장\n- 알파 테스터 트래픽 분산 검증"]
+    --> Phase3["Phase 3: Network Expansion (지속)\n- W3C DID 신원 & Blind Relay\n- Broker 합의형 블록체인 원장 확장\n- 오픈소스 공개 및 참여 노드 확대"]
 ```
 
 1. **Phase 1 (P2P 프록시 및 Cursor 연동 검증)**:
    - 복잡한 블록체인은 제외하고, Cursor에서 발생한 요청이 P2P를 통해 친구 PC의 SUT Agent(OpenAI Key 보유)로 릴레이되는 코어 엔진 개발.
-2. **Phase 2 (브로커 매칭 및 L2 테스트넷)**:
-   - 분산 브로커를 통한 노드 탐색 및 Base/Arbitrum 테스트넷 기반 100토큰 단위 마이크로 티켓 정산 연동.
-3. **Phase 3 (메인넷 런칭 및 오픈소스 공개)**:
-   - 완전한 익명성 보장을 위한 Blind Relay, 메인넷 `$SUT` 토큰 컨트랙트 배포, 글로벌 DePIN 생태계 확장.
+2. **Phase 2 (브로커 매칭 및 포인트 원장)**:
+   - 분산 브로커를 통한 노드 탐색, 실시간 가치평가 기반 포인트 계산, 양측 서명 영수증의 원장 기록 연동.
+3. **Phase 3 (네트워크 확장 및 오픈소스 공개)**:
+   - 완전한 익명성 보장을 위한 Blind Relay, Broker 합의형 블록체인 원장의 참여 노드 확대, 오픈소스 공개.
