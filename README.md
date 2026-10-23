@@ -13,7 +13,7 @@
 - 💎 **[실시간 가치평가 메커니즘](docs/valuation-mechanism.md)**: 제공한 서비스를 모델·토큰 종류·시간대별 수요·공급, 소멸 위험(선불 크레딧 만료·유휴 GPU), 노드 품질로 가치평가해 포인트로 돌려주는 공식
 - 🌐 **[P2P 네트워크 및 DID 구조](docs/p2p-and-identity.md)**: libp2p, 상호 은닉(Blind Relay), DID 자급 발급, 분산 브로커 운영 보상
 - ⛓️ **[포인트 원장 및 정산](docs/ledger-and-settlement.md)**: 상호신용(공급 +P, 사용 -P, 합계 0) 정산과 Broker 합의형 블록체인 원장
-- 🛡️ **[기술 실현 가능성 및 ToS 회피 전략](docs/feasibility-and-tos-strategy.md)**: 기술적 타당성 검증 및 빅테크 이용약관(ToS) 단속 무력화 방안
+- 🛡️ **[기술 실현 가능성 및 이용 조건 준수 구조](docs/feasibility-and-compliance.md)**: 기술적 타당성 검증, 모든 공급이 공급원의 이용 조건(업체 약관, 모델 라이선스, 조직 정책)을 따르도록 하는 공급 정책 프로파일 구조
 - 📊 **[시장 유사 서비스 분석 및 경쟁력](docs/market-analysis-and-competitors.md)**: One-API, Morpheus, Grass 등 기존 서비스 대비 독창적 블루오션 포지셔닝
 - 🔒 **[로컬 프라이버시 및 안전한 툴 콜링](docs/privacy-and-tool-calling.md)**: 초경량 로컬 마스킹 파이프라인 및 안전한 금융/상거래 툴 콜링 격리 실행
 - 🔄 **[동적 턴 단위 피어 스위칭](docs/dynamic-peer-switching.md)**: 세션 친화(Sticky) 라우팅으로 캐시 효율 확보, 장애 시 무상태 Fallback 및 KV 캐시 전달안 검토 결과
