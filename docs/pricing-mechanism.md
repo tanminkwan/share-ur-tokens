@@ -51,7 +51,7 @@ $$\text{단, } P_{\text{floor}} \le P_t(i) \le P_{\text{ceiling}} \quad (P_{\tex
 
 ## 4. 시나리오별 실시간 가격 예시
 
-> 기준: `gpt-4o` 공식 가격 = **\$2.50 / 1M Input Tokens** ($P_{\text{official}}$)
+> 기준: 공식 입력 단가가 **\$2.50 / 1M Input Tokens**인 가상의 모델 ($P_{\text{official}}$). 실제 운영 시에는 각 사 공식 가격표를 Oracle로 연동합니다.
 
 | 상황 | 가동률 ($U_t$) | 만료 잔여 ($\Delta t_i$) | 노드 품질 ($Q_i$) | 최종 단가 (1M 토큰당) | 공식가 대비 |
 | :--- | :---: | :---: | :---: | :---: | :---: |

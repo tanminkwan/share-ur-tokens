@@ -6,7 +6,7 @@
 
 ## 1. 프라이버시 보호 핵심 원칙: "로컬 경비견과 원격 슈퍼두뇌"
 
-복잡한 코딩과 고난도 추론은 원격 Peer의 거대 LLM(GPT-4o, Claude 3.5 Sonnet)을 빌려 쓰지만, **민감 정보 감지 및 마스킹은 사용자 로컬 PC의 50MB 초경량 엔진(경비견)이 전담**합니다.
+복잡한 코딩과 고난도 추론은 원격 Peer의 거대 LLM(OpenAI, Anthropic 등의 상용 API 모델)을 빌려 쓰지만, **민감 정보 감지 및 마스킹은 사용자 로컬 PC의 50MB 초경량 엔진(경비견)이 전담**합니다.
 
 ```mermaid
 flowchart LR
@@ -20,7 +20,7 @@ flowchart LR
     end
 
     subgraph Remote_LLM["원격 AI 인프라 (슈퍼두뇌)"]
-        Peer --> OpenAI["OpenAI GPT-4o / Claude 3.5\n(수백 GB 거대 모델의 추론력)"]
+        Peer --> OpenAI["상용 LLM API (OpenAI / Anthropic)\n(대규모 모델의 추론력)"]
     end
 ```
 
@@ -33,7 +33,7 @@ flowchart LR
 | 구분 | 로컬 SUT Agent (마스킹 경비견) | 원격 공급자 Peer (AI 슈퍼두뇌) |
 | :--- | :--- | :--- |
 | **수행 작업** | 이미 쓰여진 텍스트에서 민감 정보 밑줄 긋기 | 논리 추론, 코드 생성, 심층 분석 창작 |
-| **필요 모델 크기** | **50MB ~ 100MB (규칙 + 초경량 NER)** | **수백 GB (GPT-4o, Claude 3.5 Sonnet)** |
+| **필요 모델 크기** | **50MB ~ 100MB (규칙 + 초경량 NER)** | **대규모 (상용 모델은 크기 비공개, 데이터센터 GPU에서 서빙)** |
 | **요구 하드웨어** | 일반 사무용 노트북 CPU (RAM 100MB) | 수천만 원대 데이터센터 GPU |
 | **소요 시간** | **0.01초 미만 (체감 불가)** | 수 초 단위 스트리밍 |
 
