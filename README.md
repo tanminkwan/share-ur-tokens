@@ -11,7 +11,7 @@
 - 📌 **[시스템 개요 및 아키텍처](docs/system-overview.md)**: 전체 시스템 비전, 아키텍처, 포인트 순환 구조 및 오픈 에이전트(Cursor 등) 연동
 - 🏆 **[해커톤 참가 기획서](docs/hackathon-proposal.md)**: 해커톤 참가용 1~7 문항 기획서 및 2일간의 MVP 구현 계획
 - 💎 **[실시간 가치평가 메커니즘](docs/valuation-mechanism.md)**: 제공한 서비스를 모델·토큰 종류·시간대별 수요·공급, 소멸 위험(선불 크레딧 만료·유휴 GPU), 노드 품질로 가치평가해 포인트로 돌려주는 공식
-- 🌐 **[P2P 네트워크 및 DID 구조](docs/p2p-and-identity.md)**: libp2p, 상호 은닉(Blind Relay), DID 자급 발급, 분산 브로커 운영 보상
+- 🌐 **[P2P 네트워크 및 DID 구조](docs/p2p-and-identity.md)**: libp2p, Blind Relay, DID 자급 발급과 가명성의 범위(파생 DID), 분산 브로커 운영 보상
 - ⛓️ **[포인트 원장 및 정산](docs/ledger-and-settlement.md)**: 상호신용(공급 +P, 사용 -P, 합계 0) 정산과 Broker 합의형 블록체인 원장
 - 🛡️ **[기술 실현 가능성 및 이용 조건 준수 구조](docs/feasibility-and-compliance.md)**: 기술적 타당성 검증, 모든 공급이 공급원의 이용 조건(업체 약관, 모델 라이선스, 조직 정책)을 따르도록 하는 공급 정책 프로파일 구조
 - 📊 **[시장 유사 서비스 분석 및 경쟁력](docs/market-analysis-and-competitors.md)**: One-API, Morpheus, Grass 등 기존 서비스 대비 독창적 블루오션 포지셔닝
