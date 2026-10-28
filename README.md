@@ -5,7 +5,7 @@
 
 ## 한 줄 요약
 
-임직원의 AI 에이전트들이 **가명**으로 서로 찾고(broker), 연결하고(p2p), 대화로 일을 풀며(a2a), 그 거래·공유가 **서명된 원장**에 증명으로 남아 선등록자는 보호되고 아이디어는 사내 자산으로 쌓이는 네트워크. 시연 peer와 역할은 **하나의 예시**일 뿐 고정이 아니다.
+임직원의 AI 에이전트들이 **가명**으로 서로 찾고(broker), 연결하고(p2p), 대화로 일을 풀며(a2a), 그 거래·공유가 **서명된 원장**에 증명으로 남아 먼저 등록한 사람는 보호되고 아이디어는 사내 자산으로 쌓이는 네트워크. 시연 peer와 역할은 **하나의 예시**일 뿐 고정이 아니다.
 
 ## 구조
 
@@ -24,7 +24,7 @@ flowchart LR
 
 ## 시연 시나리오
 
-심사 peer가 작업 영역(심사 원칙)을 요약한 자기소개를 공개해 둔다 → 이벤트 peer(나)가 broker에서 심사자를 발견해 **위촉 계약**(원장)을 맺는다 → **아이디어 공모**를 올린다 → broker가 맥락으로 응모자 peer를 골라 알린다 → 각 peer의 비서가 사원(페르소나)에게 전달할지 판단 → 사원이 낸 아이디어가 p2p로 나에게 온다 → 마감 뒤 나의 비서가 도구를 골라 계약한 심사자에게 심사를 맡기고 채택한다 → 경험이 쌓인 peer는 자기소개를 스스로 갱신한다 → 전 과정이 원장에 남고 절대자 peer가 통계를 낸다.
+심사 peer가 작업 영역(심사 원칙)을 요약한 자기소개를 공개해 둔다 → 이벤트 peer(나)가 broker에서 심사자를 발견해 **역할 계약**(원장)을 맺는다 → **아이디어 공모**를 올린다 → broker가 맥락으로 응모자 peer를 골라 알린다 → 각 peer의 비서가 사원(페르소나)에게 전달할지 판단 → 사원이 낸 아이디어가 p2p로 나에게 온다 → 마감 뒤 나의 비서가 도구를 골라 계약한 심사자에게 심사를 맡기고 채택한다 → 경험이 쌓인 peer는 자기소개를 스스로 갱신한다 → 전 과정이 원장에 남고 절대자 peer가 통계를 낸다.
 
 ## 실행
 
@@ -46,7 +46,7 @@ export ANTHROPIC_API_KEY=...                       # 또는 Claude API
 | [docs/system-overview.md](docs/system-overview.md) | **기술 설계**: 구성, 원장, 흐름, 스택, 검증 현황 |
 | [docs/broker-and-discovery.md](docs/broker-and-discovery.md) | broker의 맥락 기반 DB화, 검색, broker 간 질의 |
 | [docs/a2a-transaction.md](docs/a2a-transaction.md) | p2p 연결과 a2a 이용 조건 협상 |
-| [docs/trust-and-security.md](docs/trust-and-security.md) | 가명·재식별, 원장의 보장 한계, 사내 보안 |
+| [docs/trust-and-security.md](docs/trust-and-security.md) | 가명·실명 확인, 원장의 보장 한계, 사내 보안 |
 | [app/](app/) | **동작하는 데모 코드** (노드, 원장, Claude 어댑터, 대시보드) |
 | [proto/](proto/) | 초기 실현 가능성 spike (`spike_a2a.py`, `spike_ledger.py`) |
 | [docs/hackathon-proposal.md](docs/hackathon-proposal.md) | **제출용 신청서** (주최 측 7개 문항) |

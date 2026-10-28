@@ -1,4 +1,5 @@
-"""Hash-chained, signed provenance ledger. Content never goes on-chain, only hashes + pseudonyms + signatures.
+"""Hash-chained, signed provenance ledger kept by a peer in the "record" role. Content never goes on-chain,
+only hashes + pseudonyms + signatures. Each sealed entry also carries the recorder's own signature over its hash.
 
 Entry types
   contract signers: issuer + contractor   -> a role (e.g. reviewer) granted for one event; later reviews depend on it
@@ -17,8 +18,8 @@ MAX_SKEW = 300  # seconds a sequencer timestamp may differ from the validator's 
 
 
 class Collector:
-    def __init__(self, name: str):
-        self.name, self.chain = name, []
+    def __init__(self, name: str, identity=None):
+        self.name, self.chain, self.identity = name, [], identity  # identity: the recorder peer's key (seals entries)
 
     def head(self) -> str:
         return self.chain[-1]["hash"] if self.chain else "0" * 64
@@ -51,8 +52,12 @@ class Collector:
             return "unknown content"
         if e["type"] in ("share", "contract") and any(x["type"] == e["type"] and x["payload"].get("nonce") == p.get("nonce") for x in self.chain):
             return "replay (nonce already used)"
-        if e["type"] == "contract" and p.get("role") != "review":
+        if e["type"] == "contract" and p.get("role") not in ("review", "record"):
             return "unsupported role"
+        if e["type"] == "feedback" and any(
+                x["type"] == "feedback" and x["payload"]["evaluator"] == p["evaluator"] and x["payload"]["content_hash"] == ch
+                and x["payload"].get("verdict") == p.get("verdict") for x in self.chain):
+            return "duplicate feedback (one verdict per evaluator per content)"
         if e["type"] == "feedback" and p.get("verdict") == "review" and not any(
                 x["type"] == "contract" and x["payload"]["call_id"] == p.get("call_id") and x["payload"]["contractor"] == p["evaluator"]
                 for x in self.chain):
@@ -64,8 +69,10 @@ class Collector:
         return None
 
     def _seal(self, e):
-        body = copy.deepcopy({k: e[k] for k in BODY})  # each collector owns its copy
+        body = copy.deepcopy({k: e[k] for k in BODY})
         e = dict(body, seq=len(self.chain), hash=h(canon(body)))
+        if self.identity:  # recorder's seal: proves which recorder sealed this entry
+            e["seal"] = {"pub": self.identity.pub, "sig": self.identity.sign(e["hash"])}
         self.chain.append(e)
         return e
 
@@ -94,18 +101,24 @@ def audit_chain(chain) -> str:
             return f"TAMPERED at seq {i} (hash chain)"
         if any(not s or not verify(s, e["payload"], e["sigs"].get(s, "")) for s in Collector.signers(e)):
             return f"TAMPERED at seq {i} (signature)"
+        if "seal" in e and not verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"]):
+            return f"TAMPERED at seq {i} (recorder seal)"
         prev = e["hash"]
     return "ok"
 
 
 def contribution(chain) -> dict:
-    """per author: distinct consumers who received their content, and how many of their contents were adopted"""
+    """per pseudonym: distinct consumers who received their content, adopted contents, and roles served (contracts).
+    Role service counts too: discovery/recording/reviewing are contributions and the basis for rewards."""
     author = {x["payload"]["content_hash"]: x["payload"]["author"] for x in chain if x["type"] == "publish"}
-    got, adopted = defaultdict(set), defaultdict(int)
+    got, adopted, roles = defaultdict(set), defaultdict(int), defaultdict(int)
     for e in chain:
         p = e["payload"]
         if e["type"] == "share" and author.get(p["content_hash"]) != p["consumer"]:
             got[author[p["content_hash"]]].add(p["consumer"])
         if e["type"] == "feedback" and p.get("verdict") == "adopt":
             adopted[author[p["content_hash"]]] += 1
-    return {a: {"received_by": len(got[a]), "adopted": adopted[a]} for a in set(got) | set(adopted) | set(author.values())}
+        if e["type"] == "contract":
+            roles[p["contractor"]] += 1
+    everyone = set(got) | set(adopted) | set(author.values()) | set(roles)
+    return {a: {"received_by": len(got[a]), "adopted": adopted[a], "roles": roles[a]} for a in everyone}
