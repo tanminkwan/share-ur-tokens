@@ -14,6 +14,7 @@ from .personas import PERSONAS, ask_owner_system, decision_system, judge_system,
 IDEA_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["title", "idea", "first_step", "risk"],
                "properties": {"title": {"type": "string"}, "idea": {"type": "string"},
                               "first_step": {"type": "string"}, "risk": {"type": "string"}}}
+RELEVANCE_MIN = 0.5  # below this BM25 score a notice is skipped without calling the LLM
 SELECT_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["selected"],
                  "properties": {"selected": {"type": "array", "items": {
                      "type": "object", "additionalProperties": False, "required": ["pub", "reason"],
@@ -91,6 +92,10 @@ class Broker:
                     except Exception:
                         pass
             return {"ok": True, "profiles": mine}
+        if op in ("list_notices", "search_notices") and not (
+                r.get("pub") in self.ads and abs(time.time() - r.get("ts", 0)) < 60
+                and verify(r["pub"], {"op": op, "ts": r["ts"]}, r.get("sig", ""))):
+            return {"ok": False, "error": "signed request from a registered profile required"}
         if op == "list_notices":  # what this viewer is allowed to see
             return {"ok": True, "notices": [n for n in self._active(self.notices) if self._visible(n, r.get("pub", ""))]}
         if op == "search_notices":  # BM25 over the notices this viewer is allowed to see
@@ -335,9 +340,10 @@ class PeerAgent:
     # ---- self-description: the secretary summarizes the working area and (re)publishes it ----
     async def advertise(self):
         me = alias(self.id.pub)
-        notes = "\n".join(f"- {n}" for n in self.workspace[-12:])
+        public = [n for n in self.workspace if not n.startswith(("[소유자 규칙]", "[상황]", "[판단]"))]  # private notes stay private
+        notes = "\n".join(f"- {n}" for n in public[-12:])
         d = await llm.ask_json(
-            actor=me, model=llm.AGENT_MODEL, user=f"[작업 노트]\n{notes}", fallback=lambda: {"summary": " ".join(dict.fromkeys(self.workspace[:1] + self.workspace[-2:]))},
+            actor=me, model=llm.AGENT_MODEL, user=f"[작업 노트]\n{notes}", fallback=lambda: {"summary": " ".join(dict.fromkeys(public[:1] + public[-2:]))},
             schema={"type": "object", "additionalProperties": False, "required": ["summary"], "properties": {"summary": {"type": "string"}}},
             system="당신은 사원의 비서 에이전트입니다. 사원의 작업 영역(지식과 경험 노트)을 읽고, 다른 peer들이 검색해서 연락할 수 있도록 이 사원의 정체와 할 수 있는 일을 "
                    "3문장 이내로 요약하세요. 노트에 없는 경력이나 능력은 만들지 말고, 실명은 쓰지 마세요. 심사 원칙처럼 일하는 방식이 있으면 포함하세요.")
@@ -364,13 +370,27 @@ class PeerAgent:
                 if "recommend" in self.can:
                     await self.recommend_round()
                     continue
-                res = await rpc(self.broker_url, {"op": "list_notices", "pub": self.id.pub})  # board: notices whose audience matches my labels
+                res = await rpc(self.broker_url, self.signed({"op": "list_notices"}))  # board: notices whose audience matches my labels
                 for n in res.get("notices", []):
                     if n["notice_id"] not in self.seen and n["issuer_pub"] != self.id.pub:
                         self.seen.add(n["notice_id"])
-                        asyncio.create_task(self.consider(n, hint=None, how="게시판(응모 대상 라벨 일치)"))
+                        rel = self.relevance(n)
+                        if rel < RELEVANCE_MIN and self.id.pub not in (n.get("recorder_pub"), n.get("reviewer_pub")):
+                            emit("decide", alias(self.id.pub), f"넘김 [{n['notice_id']}] - 내 작업 노트와 관련도 낮음({rel}), AI 판단 생략")
+                            self.skipped = getattr(self, "skipped", set()) | {n["notice_id"]}
+                            continue
+                        asyncio.create_task(self.consider(n, hint=None, how=f"게시판(응모 대상 라벨 일치, 관련도 {rel})"))
             except Exception as e:
                 emit("peer", alias(self.id.pub), f"게시판 확인 실패: {type(e).__name__}")
+
+    def signed(self, req):
+        ts = time.time()
+        return dict(req, pub=self.id.pub, ts=ts, sig=self.id.sign({"op": req["op"], "ts": ts}))
+
+    def relevance(self, n):
+        """BM25 score of the notice against my public notes: a cheap filter so only relevant notices reach the LLM"""
+        notes = " ".join(x for x in self.workspace if not x.startswith(("[소유자 규칙]", "[상황]")))
+        return rank(notes, [f"{n['title']} {n['text']}"])[0][1]
 
     async def consider(self, n, hint, how):
         me = alias(self.id.pub)
@@ -424,7 +444,7 @@ class PeerAgent:
     # ---- "recommend" role: uses its OWN AI on top of the broker's search ----
     async def recommend_round(self):
         me = alias(self.id.pub)
-        res = await rpc(self.broker_url, {"op": "list_notices", "pub": self.id.pub})
+        res = await rpc(self.broker_url, self.signed({"op": "list_notices"}))
         for n in res.get("notices", []):
             if n["notice_id"] in self.seen:
                 continue
@@ -451,11 +471,13 @@ class PeerAgent:
     async def handle(self, r):
         op = r["op"]
         if op == "recommend":
-            self.seen = getattr(self, "seen", set())
+            self.seen, self.skipped = getattr(self, "seen", set()), getattr(self, "skipped", set())
             n = r["notice"]
-            if n["notice_id"] not in self.seen and "recommend" not in self.can:
+            fresh = n["notice_id"] not in self.seen or n["notice_id"] in self.skipped  # a recommendation reopens what my filter skipped
+            if fresh and "recommend" not in self.can:
                 self.seen.add(n["notice_id"])
-                asyncio.create_task(self.consider(n, hint=r["reason"], how=f"{alias(r['from'])}의 추천"))
+                self.skipped.discard(n["notice_id"])
+                asyncio.create_task(self.consider(n, hint=r["reason"], how=f"{alias(r['from'])}의 추천(내 필터는 넘겼던 공지)" if n["notice_id"] in self.seen else f"{alias(r['from'])}의 추천"))
             return {"ok": True}
         if op == "evaluate_ideas":
             return await self.review(r)
@@ -563,7 +585,7 @@ class PeerAgent:
         if first.get("seal", {}).get("pub") != n.get("recorder_pub") or not verify(n["recorder_pub"], first["hash"], first["seal"]["sig"]):
             emit("peer", me, "기록자 서명이 공지에 적힌 기록자와 다릅니다 → 제출 중단")
             return
-        self.receipts = getattr(self, "receipts", []) + [first]  # signed by the recorder: proof that this entry was accepted
+        self.receipts = getattr(self, "receipts", []) + [dict(first, payload=pub_p)]  # recorder-signed hash + my own entry
         res = await rpc(n["issuer_url"], {"op": "submit_idea", "call_id": n["notice_id"], "idea": idea, "publish_payload": pub_p,
                                           "publish_sig": self.id.sign(pub_p), "share_payload": share_p})
         if not res.get("ok"):
@@ -574,7 +596,7 @@ class PeerAgent:
         if not b.get("ok"):
             emit("peer", me, f"공유 기록 실패: {b.get('error')}")
             return
-        self.receipts.append(b)
+        self.receipts.append(dict(b, payload=share_p))
         emit("peer", me, f"기록자 서명 영수증 2건 보관(#{first['seq']}, #{b['seq']}) - 나중에 누락되면 이것으로 증명")
         asyncio.create_task(self.learn(f"'{n['title'][:40]}' 공지에 아이디어 '{idea['title'][:40]}'를 제출했다."))
 
