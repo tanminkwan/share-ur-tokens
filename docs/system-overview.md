@@ -1,251 +1,154 @@
-# Share-Ur-Tokens (SUT) 시스템 개요 및 아키텍처
+# 시스템 개요 (기술 설계)
 
-> **탈중앙화 P2P LLM 토큰 공유 및 거래 네트워크**  
-> 사용하지 않는 개인의 LLM 구독/API 토큰을 공유·판매하고, 필요한 사용자는 구독 없이 필요한 만큼 종량제로 안전하게 구매할 수 있는 무신뢰(Trustless) 분산 플랫폼입니다.
+이 문서가 신청서와 나머지 근거 문서의 기준입니다. 용어는 [review/premises.md](../review/premises.md)를 따릅니다. 표의 **검증** 열은 2026-10-28에 실제로 실행해 확인한 것(✅), 문서·사양으로만 확인한 것(📄), 아직 확인하지 못한 것(❓)을 구분합니다.
 
----
+## 1. 한 장 요약
 
-## 1. 프로젝트 비전 및 배경
+| 질문 | 답 |
+|---|---|
+| peer와 broker는 무엇으로 만드는가 | 둘 다 **A2A 서버 + 클라이언트**를 가진 Python 프로세스다. broker는 "노출 접수·질의 응답"을 skill로 제공하는 A2A 에이전트다 |
+| "p2p"는 정확히 무엇인가 | **거래 단계에서 broker를 거치지 않고 peer끼리 A2A로 직접 호출**하는 것이다. 호출 대상 주소는 답변지에 들어 있다 |
+| 무엇이 분산이고 무엇이 아닌가 | 거래는 분산이다. 발견은 broker가 맡으며, broker는 domain별로 여러 개를 두고 서로 질의한다. **발견까지 탈중앙이라고 주장하지 않는다** |
+| AI는 어디에 쓰는가 | 노출·요청의 구조화, 의미 매칭, 일치 근거 생성, 협상 중 제안 해석·생성. 규칙으로 되는 일은 규칙으로 한다 |
+| LLM이 없어도 도는가 | 돈다. LLM 호출은 어댑터 뒤에 두고, 없으면 규칙 + TF-IDF 폴백으로 같은 흐름이 실행된다(품질은 낮아진다) |
 
-### 1.1 배경 및 문제 정의
-- **잔여 토큰 낭비**: 많은 사용자가 ChatGPT Plus, Claude Pro, OpenAI/Anthropic API 등 다양한 LLM 서비스를 월정액 또는 선불 크레딧으로 구독하지만, 매월 제공량을 전부 소진하지 못하고 버려지는 경우가 많습니다.
-- **높은 구독 진입 장벽**: 간헐적으로 고성능 LLM 모델(GPT-4o, Claude 3.5 Sonnet 등)이 필요한 사용자는 비싼 월 구독료를 지불하기 부담스럽습니다.
-- **중앙화 플랫폼의 한계**: 기존의 중앙화 중계 서비스는 마진 수수료, 개인정보(프롬프트) 검열, 중앙 서버 단일 장애점(SPOF), 그리고 API Key 유출 위험이 존재합니다.
+## 2. 기술 스택
 
-### 1.2 핵심 가치 (Value Proposition)
-- **공급자 (Provider/Seller)**: 쓰고 남은 유휴 LLM 토큰을 시장에 판매하여 비용을 회수하고 수익화.
-- **소비자 (Consumer/Buyer)**: 비싼 월 구독 없이, 원하는 모델을 필요한 토큰 단위로 저렴하게 이용.
-- **빅테크 추적 회피 (Anti-Tracking & Privacy Sovereignty)**: 실제 사용자는 빅테크(OpenAI 등) 입장에서 '유령'이 되며, 질문이 여러 공급자 노드로 분산되어 개인의 관심사·지적 활동이 빅데이터로 수집/프로파일링되는 것을 원천 차단 (DuckDuckGo/Tor 효과).
-- **P2P & 무신뢰(Trustless)**: 중앙 서버 없이 Broker 네트워크와 탈중앙 분산 원장(Decentralized Ledger)을 통해 완전 자동화된 매칭 및 정산 수행.
-- **P2P 한계를 무력화하는 무상태(Stateless) 내결함성**: 장시간 연결 유지가 필요한 기존 P2P와 달리, 단 3초 단위의 무상태 마이크로 태스크와 클라이언트 측 대화 기억(Context) 관리로 피어의 잦은 이탈(Churn)에도 100% 무중단 연속 대화 보장 (Zero-Downtime Failover).
-- **익명성 및 보안**: Peer 간에는 서로의 신원이나 원본 API Key를 알지 못한 채 안전한 백그라운드 터널링으로 통신.
+| 영역 | 선택 | 이유 | 검증 |
+|---|---|---|---|
+| 언어 | Python 3.11 | a2a-sdk가 3.10 이상 요구 | ✅ (이 PC의 기본 python3는 3.9라 3.11 가상환경 필요) |
+| 에이전트 간 통신 | **A2A 1.0**, JSON-RPC 바인딩, 공식 `a2a-sdk` 1.3.0 (`a2a-sdk[http-server]`) | 표준 프로토콜이라 Agent Card 발견, 작업 상태, 다회 대화가 SDK에 있음 | ✅ spike로 확인 |
+| 서버 | Starlette + uvicorn (SDK 의존) | A2A 라우트 헬퍼가 Starlette용 | ✅ |
+| 저장소 | SQLite(파일) | 설치가 필요 없고 broker마다 파일 하나 | ❓ 구현 시 확인 |
+| 검색 | 필드 필터(SQL) + 임베딩 코사인 유사도(NumPy). 임베딩이 없으면 TF-IDF | 외부 벡터 DB 없이 노출 수백 건 규모는 충분 | ❓ |
+| LLM | OpenAI 호환 HTTP 어댑터 1개(`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`). 사내 허용 LLM을 가리킨다 | 사내 LLM이 정해지지 않았으므로 교체 가능하게 | ❓ 사내 LLM 미정 |
+| 대시보드 | 단일 HTML + SSE (broker와 peer가 이벤트를 `/events`로 내보냄) | 별도 프론트엔드 빌드 없이 2일 안에 | ❓ |
 
----
+A2A 사양에서 확인한 사실(📄, a2a-protocol.org): 최신 릴리스 1.0.0, 바인딩은 JSON-RPC·gRPC·HTTP+JSON, 작업 상태에 `INPUT_REQUIRED`·`COMPLETED`·`REJECTED` 등이 있고, 인증 방식은 Agent Card의 `securitySchemes`로 선언한다. Agent Card 경로는 SDK 기준 `/.well-known/agent-card.json`이다(✅ 실제 응답 확인).
 
-## 2. 시스템 핵심 구성 요소 (Core Components)
+## 3. 구성 요소와 배치
 
-```mermaid
-flowchart TB
-    subgraph Client_App["Open AI Agents & IDEs (User Interface)"]
-        Cursor["Cursor / Cline / Continue / OpenWebUI"]
-    end
-
-    subgraph Consumer_Node["Consumer (Buyer) Local Environment"]
-        CA["SUT Agent (localhost:8080/v1 Gateway)"]
-    end
-
-    subgraph Broker_Network["SUT Broker Network (Distributed Overlay)"]
-        B1["SUT Broker A"] <--> B2["SUT Broker B"]
-    end
-
-    subgraph Provider_Node["Provider (Seller) SUT Agent"]
-        PA["SUT Agent (Reverse Proxy)"]
-        PA -->|"Private API Key"| LLM["Upstream LLM Service (OpenAI, Anthropic, etc.)"]
-    end
-
-    subgraph Ledger_Layer["Decentralized Ledger / Blockchain"]
-        SC["Smart Contract & Escrow / Token Settlement"]
-    end
-
-    Cursor -->|"Standard OpenAI API (Transparent)"| CA
-    PA -.->|"1. Register Profile & Capacity"| B1
-    CA -.->|"2. Lookup & Match Request"| B2
-    CA -->|"3. P2P Encrypted Proxy Request (Blind Tunnel)"| PA
-    PA -.->|"4. Report Usage & Proof"| SC
-    CA -.->|"4. Verify & Settle"| SC
+```
+         ┌──────────── 사내망 ────────────┐
+ peer F (제공자)  :9101   ─advertise─▶  broker-E (이벤트)  :9201 ◀─A2A 질의─▶ broker-G (물품)  :9202
+ peer H (제공자)  :9102   ─advertise─▶  broker-G                              (각자 SQLite)
+ peer C (소비자)  :9103   ─query────▶  broker-E                      
+        │                         ◀─answer_sheet(공급자 주소 포함)
+        └────── A2A 직접 호출(broker 미경유) ──────▶ peer F, peer H
 ```
 
-### 2.1 SUT Agent
-개인 사용자가 로컬 머신 또는 개인 서버에 설치하는 경량 백그라운드 데몬/클라이언트입니다. 특정 전용 UI에 종속된 폐쇄형 구조가 아니며, **로컬 HTTP 게이트웨이, 표준 입출력(stdin/stdout) IPC, 플러그인 확장** 등 다양한 방식으로 로컬의 모든 오픈형 AI 에이전트와 유연하게 결합됩니다.
+| 프로세스 | 하는 일 | A2A 서버 skill | A2A 클라이언트로 하는 일 |
+|---|---|---|---|
+| 제공자 peer | 노출 등록, 거래 단계에서 조건 판단·확정 | 거래 skill(예: `lend-projector`, `seat-reservation`) | broker에 `advertise` |
+| 소비자 peer | 요청 공개, 후보 선택, 협상 | (필요 시 알림 수신) | broker에 `query`, 공급자에 거래 메시지 |
+| broker | 노출 색인, 질의 처리, broker 간 질의 | `advertise`, `query`, `broker_query` | 다른 broker에 `broker_query` |
 
-- **다양한 로컬 프로세스 연동 인터페이스 (Multi-Interface Connectivity)**:
-  1. **HTTP/REST 게이트웨이 모드**:
-     - 로컬에 `http://localhost:8080/v1` (OpenAI/Anthropic 표준 호환) 엔드포인트 제공.
-     - **Cursor, Continue.dev, Cline, OpenWebUI** 등의 설정에서 Base URL만 변경하여 즉시 사용.
-  2. **표준 입출력 (stdin / stdout) IPC & MCP 모드**:
-     - 포트 충돌이나 네트워크 소켓 오버헤드 없이, 프로세스 간 파이프(Pipe)를 통해 고속 스트리밍 데이터 교환.
-     - **MCP (Model Context Protocol)** 지원: `stdio` 기반 JSON-RPC 통신을 통해 Claude Desktop, Cursor 등의 네이티브 Tool/Resource로 직접 플러그인 등록 가능.
-     - 터미널 CLI 파이프라인 지원 (`cat prompt.txt | sut-agent run --model gpt-4o | output.txt`).
-  3. **네이티브 플러그인 / 익스텐션 모드 (Plugin Mode)**:
-     - VS Code, Cursor 등의 Extension/Plugin 형태로 패키징되어, 별도 설치 없이 IDE 백그라운드 서브프로세스로 자동 실행 및 생명주기 관리.
+한 프로세스가 제공자와 소비자를 겸할 수 있습니다(서버와 클라이언트를 둘 다 가지므로).
 
-- **제공자 모드 (Provider Mode)**:
-  - 사용자가 업스트림 LLM 엔드포인트(예: OpenAI, Anthropic, Ollama 등)와 API Key를 로컬 환경설정에 등록.
-  - SUT Agent가 해당 엔드포인트의 유효성, 지원 모델(Context window, RPM/TPM 등)을 검증하여 **검증된 프로필(Verifiable Profile)** 자동 생성.
-  - 제공자는 판매할 최대 토큰 한도(Limit), 시간대, 허용 모델, 단가 등을 직접 지정.
-  - 외부로 API Key를 절대 유출하지 않고, 인입된 요청을 로컬에서 대신 호출해 주는 **Reverse Proxy** 역할 수행.
+## 4. A2A로의 매핑
 
-- **소비자 모드 (Consumer Mode)**:
-  - 로컬 포트(`localhost:8080`)로 들어오는 프롬프트 요청을 가로채, Broker 네트워크를 통해 조건(모델, 지연시간, 예산)에 맞는 최적의 공급자 Peer를 즉시 매칭하고 E2EE P2P 터널로 연결.
-  - **로컬 자동 마스킹 엔진 (Data Sanitizer)**: 프롬프트에 포함된 API Key나 개인정보(이메일, 전화번호 등)를 감지하여 네트워크 송출 전 가짜 플레이스홀더(`[MASKED_KEY]`)로 자동 치환하고, LLM 응답 수신 시 원래 값으로 자동 복원(De-masking).
+모든 통신이 A2A 메시지입니다. 별도 프로토콜을 만들지 않고, 메시지의 `data` 파트에 JSON을 싣습니다.
 
-- **보안 및 측정 모듈**:
-  - 입출력 토큰(Token Count)을 실시간 파싱 및 정량화.
-  - 암호학적 서명(Signed Attestation)을 생성하여 사용량 증명 발행.
+| 업무 개념 | A2A 구현 | 비고 |
+|---|---|---|
+| 노출 | broker에 `SendMessage`, data 파트 = `advertise` JSON | 즉시 응답(`COMPLETED`) |
+| 요청 | broker에 `SendMessage`, data 파트 = `query` JSON | 결과는 Artifact로 `answer_sheet` |
+| broker 간 질의 | broker → broker `SendMessage`, data 파트 = `broker_query` | 응답은 Artifact |
+| 연결(p2p) | 답변지의 공급자 URL에서 Agent Card를 읽고 클라이언트 생성 | broker 미경유 |
+| 제안 | 소비자 → 제공자 `SendMessage` (새 Task) | `TASK_STATE_WORKING` |
+| 반제안 | 제공자가 `TASK_STATE_INPUT_REQUIRED`로 응답, 메시지에 반제안 | 같은 task id로 소비자가 이어서 답한다 |
+| 수락·확정 | 소비자가 같은 task id로 수락 → 제공자가 Artifact(확정서) 발행 후 `COMPLETED` | |
+| 거절 | `TASK_STATE_REJECTED` | |
+| 권한 범위 초과 | 소비자 에이전트가 소유자 확인이 필요하다고 멈춤(소비자 측 상태) | 소유자 승인은 대시보드의 버튼 |
 
-### 2.2 SUT Broker Network
-P2P 디스커버리(Discovery) 및 매칭을 담당하는 분산형 브로커 노드 네트워크입니다.
-- **분산 오버레이 (Distributed DHT / Gossip)**:
-  - 중앙 서버 없이 분산된 복수의 SUT Broker가 상호 연결되어 노드 및 가용 리소스 풀을 동기화.
-  - Agent는 지연시간(RTT)이 가장 가까운 인접 브로커에 자동 연결 및 헬스체크 등록.
-- **프로필 레지스트리 (Service Registry)**:
-  - 각 Agent가 제공할 수 있는 LLM 스펙, 가용 토큰량, 신뢰도 점수(Reputation)를 인덱싱.
-  - Agent 스스로 프로필 스펙을 허위 조작할 수 없도록 초기 핑/검증 챌린지 프로토콜 적용.
-- **스마트 매칭 엔진**:
-  - 소비자의 요구 조건(모델 종류, 필요 토큰량, 예산)에 부합하는 최적의 단일 또는 복수(Multi-peer fallback) 공급자 Agent를 탐색하여 P2P 핸드셰이크 주선.
+데이터 구조(필수 필드만):
 
-### 2.3 탈중앙화 원장 (Decentralized Ledger & Settlement)
-신뢰 기관 없이도 사용량과 정산의 무결성을 보장하는 블록체인/레이어2 인프라입니다.
-- **에스크로(Escrow) 기반 마이크로페이먼트**:
-  - 소비자는 요청 전 일정 금액의 크레딧/토큰을 스마트 컨트랙트 또는 상태 채널(State Channels)에 에스크로 예치.
-  - 스트리밍 방식으로 청구되거나, 세션 완료 후 실제 소비된 토큰만큼 공급자에게 지급.
-- **사용량 기록 및 영수증 (Proof of Usage)**:
-  - 완료된 프롬프트/응답 토큰 수량을 상호 서명(Dual Signature)하여 원장에 기록.
-  - 분쟁(Dispute) 발생 시 챌린지 검증 로직 제공.
+```json
+// advertise
+{"peer_url": "http://host:9101", "summary": "...", "domain_hint": "equipment",
+ "fields": {"item": "projector", "quantity": 2, "available": ["2026-11-06T14:00/16:00"]},
+ "ttl_hours": 72, "owner": "dept-facilities"}
 
----
+// query
+{"text": "다음 주 금요일 오후에 쓸 프로젝터", "constraints": {"when": "2026-11-06"}, "hops_left": 1, "visited": []}
 
-## 3. 핵심 워크플로우 (Workflows)
-
-### 3.1 공급자 (Token Provider) 등록
-1. 사용자가 SUT Agent를 실행하고 OpenAI API Key 및 일일 판매 한도(예: 500,000 토큰)를 설정.
-2. SUT Agent가 자체 테스트 호출을 통해 모델 티어 및 응답성을 확인.
-3. 변조 불가능한 프로필 해시(Profile Digest)를 생성하여 인접 SUT Broker에 등록.
-4. Broker 네트워크 전역으로 프로필 메타데이터가 전파되어 대기 상태(Standby)로 전환.
-
-### 3.2 소비자 (Token Consumer) 매칭 및 연결
-1. 소비자는 SUT Agent에 원하는 조건(예: `gpt-4o`, 최대 10,000 토큰, max price)을 입력.
-2. 소비자 Agent가 Broker 네트워크를 통해 조건에 부합하는 공급자 Agent 후보군을 질의.
-3. Broker는 매칭된 공급자 노드의 P2P 연결 정보(ICE/STUN/TURN 기반 주소)를 전달.
-4. 양자 간에 직접 엔드투엔드 암호화 터널(E2EE P2P Tunnel)이 수립됨.
-
-### 3.3 백그라운드 트랜잭션 및 LLM 요청 처리
-1. 소비자의 프롬프트 요청이 암호화 터널을 통해 공급자의 SUT Agent로 전달.
-2. 공급자 Agent는 프롬프트를 자신의 업스트림 LLM(OpenAI 등)으로 포워딩.
-3. 응답 스트림이 소비자의 Agent로 실시간 릴레이.
-4. 요청 완료 후, 양측 Agent는 송수신된 실제 토큰 수를 계산하고 사용량 티켓에 서명.
-5. 오프체인 상태 채널 또는 롤업 레이어에 정산 트랜잭션이 제출되어 정산 완료.
-
----
-
-## 4. 프라이버시 및 실용주의적 보안 철학 (Pragmatic Security Philosophy)
-
-> **투명한 트레이드오프(Trade-off) 고지**:  
-> SUT는 불필요한 구독료 없이 저렴하게 LLM을 종량제로 쓰는 **실용성 중심 플랫폼**입니다. 전송 구간은 암호화되지만, **최종 프록시를 수행하는 공급자 PC 환경에 프롬프트가 노출될 수 있는 기술적 한계를 투명하게 인정**하고 이에 맞는 적합한 유즈케이스를 정의합니다.
-
-### 4.1 핵심 보안 및 보호 영역
-
-| 항목 | 보안 목표 | SUT 기술 메커니즘 |
-| :--- | :--- | :--- |
-| **API Key 보호** | 타인에게 API Key 노출 원천 차단 | 공급자 Agent 로컬 내부에만 암호화 보관되며, 프록시 요청만 처리 (외부 유출 불가) |
-| **P2P 전송 보안** | 제3자 및 ISP 도청 방지 | libp2p QUIC + Noise Protocol 기반 엔드투엔드(E2EE) 암호화 터널 적용 |
-| **토큰 카운트 부정** | 소비 토큰 과대/과소 청구 방지 | 표준 토크나이저(Tiktoken) 상호 검증 및 블록체인 상태 채널 서명 정산 |
-| **프로필 조작 방지** | 가짜 성능/모델 등록 시도 차단 | Broker의 핑/벤치마크 챌린지 및 신뢰도/스테이킹 메커니즘 |
-
-### 4.2 컨텍스트 노출에 대한 실용적 한계와 사용 가이드라인
-
-공급자는 자신의 PC에서 최고 권한(Root/Admin)을 가지므로, 소프트웨어적으로 프롬프트의 완전한 은닉은 불가능합니다. 그러나 **대부분의 일상적 AI 활용은 컨텍스트가 외부에 노출되어도 무방한 비민감 데이터**이므로 SUT의 실용적 가치는 매우 큽니다.
-
-- **권장 유즈케이스 (SUT 사용 최적)**:
-  - 개인 개발 공부, 오픈소스 알고리즘 질문, 에러 로그 디버깅
-  - 대량 외신/논문 번역, 웹 크롤링 데이터 요약
-  - 일회성 아이디어 브레인스토밍, 비실시간 대량 배치 작업
-- **비권장 유즈케이스 (공식 직접 구독 권장)**:
-  - 기업 비밀 소스코드, 미공개 특허/재무 데이터, 고객 개인정보(PII)
-  - *이러한 극비 데이터는 SUT가 아닌 OpenAI/Anthropic의 공식 유료 계정을 직접 결제하여 사용하는 것을 권장합니다.*
-
-### 4.3 로컬 자동 비밀키/개인정보(PII) 마스킹 파이프라인
-
-프롬프트가 네트워크로 송출되기 전, **소비자 Agent가 로컬에서 민감 정보를 가짜 토큰으로 자동 치환(Pre-masking)**하고, 응답을 받아왔을 때 **원래 값으로 자동 복원(Post-de-masking)**합니다.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant IDE as Cursor / 개발 도구
-    participant CA as 소비자 SUT Agent (로컬)
-    participant PA as 공급자 PC (스니핑 위험 구간)
-    participant LLM as OpenAI
-
-    IDE->>CA: 1. 원본 프롬프트 전달 ("API Key: sk-live-9999로 인증해줘")
-    Note over CA: 2. 로컬 마스킹 엔진 작동<br/>- sk-live-9999 ➔ [MASKED_KEY_1]<br/>- 원본 매핑 테이블은 로컬 메모리에만 보관
-    CA->>PA: 3. 마스킹된 프롬프트 송출 ("API Key: [MASKED_KEY_1]로 인증해줘")
-    Note over PA: 공급자가 패킷을 스니핑해도<br/>가짜 플레이스홀더만 보이므로 유출 불가! 🛡️
-    PA->>LLM: 4. OpenAI 호출
-    LLM-->>PA: 5. 응답 스트리밍 ("인증 성공: [MASKED_KEY_1]")
-    PA-->>CA: 6. 응답 전달
-    Note over CA: 7. 로컬 역마스킹 (De-masking)<br/>- [MASKED_KEY_1] ➔ sk-live-9999 복원
-    CA-->>IDE: 8. 완벽 복원된 최종 응답 제공 ("인증 성공: sk-live-9999")
+// answer_sheet (Artifact)
+{"candidates": [{"peer_url": "...", "summary": "...", "why": "item=projector, 금요일 14시 가능", "score": 0.82, "source_broker": "broker-G"}]}
 ```
 
-- **자동 감지 및 마스킹 대상**:
-  - API Keys 및 시크릿 토큰 (`sk-...`, AWS Key, GitHub Token, Private Key 등 정규식 탐지)
-  - 개인 식별 정보 (이메일, 주민번호/전화번호, IP 주소, 신용카드 번호 등)
-- **효과**: 공급자 PC가 트래픽을 가로채거나 로깅하더라도 **실제 비밀키와 개인정보는 애초에 네트워크에 실리지 않으므로 안전**합니다.
+SQLite 테이블: `ads(id, peer_url, owner, domain, summary, fields_json, embedding, created_at, expires_at)` 하나가 핵심입니다.
 
----
+## 5. 처리 흐름
 
-## 5. SUT 토큰 이코노미 및 유동성 (Tokenomics & Circulation)
+1. **노출**: 제공자 → broker. broker가 domain을 판정한다(자기 domain이 아니면 맞는 broker 주소를 응답에 담아 돌려보내고 제공자가 재전송). LLM이 `fields`를 추출·검증하고(없으면 제공자가 보낸 `fields`를 그대로 사용), 임베딩을 계산해 저장한다.
+2. **요청**: 소비자 → broker. `fields` 필터(시기, 물품)와 임베딩 유사도로 후보를 뽑는다. 후보가 `min_candidates`보다 적고 `hops_left > 0`이면 이웃 broker에 `broker_query`를 보낸다(`hops_left - 1`, `visited`에 자기 추가). 결과를 peer_url 기준으로 합치고 정렬한다.
+3. **답변지**: 후보마다 일치 근거를 만든다. 근거는 **저장된 필드 값에서 조립**하고(예: "item=projector, 14시 가능"), LLM은 문장을 다듬을 뿐 새 사실을 만들지 못하게 한다.
+4. **연결과 협상**: 소비자가 후보의 `peer_url`로 직접 `SendMessage`한다. 제공자는 자기 재고·일정에서 가능한 조건을 판단해 수락하거나 반제안한다. 협의는 최대 3회다.
+5. **확정**: 제공자가 자기 상태(예약표)를 갱신하고 확정서를 Artifact로 돌려준다. 양쪽이 각자 로그를 남긴다.
 
-공급자가 LLM 서비스를 제공하고 획득한 플랫폼 토큰(`$SUT`)은 단순한 정산 수단을 넘어, **교차 소비, 자유 양도, 시장 현금화가 가능한 유동적 자산**으로 기능합니다.
+## 6. 협상에 실제 내용을 넣는 방법
 
-```mermaid
-flowchart TD
-    Provider["공급자 (GPT-4o 제공)"] -->|"토큰 보상 (Earning)"| SUT["$SUT 토큰 확보"]
-    
-    SUT -->|"1. 교차 소비 (Cross-Consumption)"| Consumer["다른 Peer의 Claude/Llama 이용"]
-    SUT -->|"2. 자유 양도 (P2P Transfer)"| PeerB["동료/팀원/타인에게 자유 증여"]
-    SUT -->|"3. 시장 매매 (Liquidity & Cash-out)"| DEX["DEX/거래소에서 현금(USDT)화"]
-```
+무상·교환뿐이면 협상이 날짜 맞추기로 줄어듭니다. 그래서 MVP는 **제약이 서로 얽히는 거래**를 시나리오에 둡니다.
 
-### 5.1 3대 핵심 유틸리티
-1. **교차 소비 (LLM 바터/품앗이)**:
-   - 본인이 제공하는 모델(예: GPT-4o)을 통해 번 토큰으로, 다른 Peer가 제공하는 다양한 모델(Claude 3.5 Sonnet, Llama-3, DeepSeek 등)을 구독 없이 자유롭게 교차 이용.
-2. **P2P 자유 증여 및 양도 (Gifting & Transfer)**:
-   - 스마트 컨트랙트 기반 표준 토큰이므로, 제3자나 플랫폼의 제약 없이 친구, 연구팀, 커뮤니티에 자유롭게 전송 및 선물 가능.
-3. **탈중앙 시장(DEX) 매매 및 수익 실현**:
-   - Uniswap 등의 탈중앙 거래소 유동성 풀을 통해 스테이블코인(USDT/USDC)이나 법정화폐로 언제든지 환전 가능.
+| 변수 | 소비자의 제약 | 제공자의 제약 | 협상 |
+|---|---|---|---|
+| 시간 | 금요일 오후 2~4시 | 14시는 이미 예약, 15시 이후 가능 | 반제안 |
+| 수량 | 2대 | 2대 중 1대만 가능한 시간대 | 분할 또는 시간 이동 |
+| 묶음 | 세미나 좌석 + 프로젝터를 같은 날 | 두 제공자가 서로 다른 peer | 한쪽 확정 후 다른 쪽 조건에 맞춰 재협상 |
+| 교환 | 소비자도 노출한 정보가 있음 | 맞교환을 조건으로 제시 | 서로의 노출 가치를 비교 |
 
-### 5.2 시시각각 변하는 토큰 가치와 실시간 환산 메커니즘
-`$SUT`의 시장 가격은 거래소 수요와 공급에 따라 유동적(Floating)으로 변동하지만, **LLM 서비스 이용 시에는 항상 공정한 가치가 보장**되도록 오라클 환산 메커니즘을 적용합니다.
+제공자 에이전트의 판단은 코드가 가능 여부를 계산하고(`available` 필드와 예약표), LLM은 사람이 읽는 제안 문장과 소비자 측 선호 해석을 맡습니다. **가능 여부의 계산을 LLM에 맡기지 않습니다.** 환각으로 이중 예약이 나지 않게 하는 장치입니다.
 
-$$\text{지불해야 할 \$SUT 수량} = \frac{\text{LLM 호출 실제 비용 (USD)}}{\text{\$SUT 실시간 시장 가격 (USD)}}$$
+## 7. p2p와 사내망
 
-- **실시간 오라클 연동**: 스마트 컨트랙트 및 브로커는 DEX 유동성 풀의 실시간 TWAP(시간가중평균가격) 오라클을 참조하여 실시간 교환비를 산정.
-- **가치 보전 효과**: `$SUT` 시장 가격이 상승하면 더 적은 토큰으로 동일한 양의 LLM을 이용할 수 있어, 토큰 보유자의 구매력이 자동 보호됩니다.
+- peer 주소는 서버에서 호스팅하는 에이전트의 URL이다. 개인 PC에 인바운드 연결을 열 필요가 없도록, **에이전트는 사내 서버나 컨테이너에서 도는 것을 기본 배치로 한다**. 임직원은 소유자로서 설정만 한다.
+- 사내망의 서버 간 직접 호출 허용 여부는 ❓ 미확인이다. 허용되지 않을 때의 후퇴안은 broker가 메시지를 중계하는 것이다. 그때 "거래가 broker를 거치지 않는다"는 주장은 성립하지 않으므로, 신청서는 그 한계를 문항 7에 명시한다.
+- 인증은 Agent Card의 `securitySchemes`로 선언하고, MVP는 API 키 방식을 쓴다(SSO 연동은 범위 밖).
 
----
+## 8. AI 사용 지점과 폴백
 
-## 6. 기대 효과 및 유즈케이스
+| 지점 | LLM 사용 | 폴백(LLM 없음) |
+|---|---|---|
+| 노출의 필드 추출 | 자연어에서 `fields` 추출 | 제공자가 폼으로 입력한 `fields` 사용 |
+| 임베딩 | 임베딩 API | TF-IDF |
+| 일치 근거 | 필드 값으로 조립한 문장을 다듬음 | 템플릿 문장 |
+| 소비자 요청 해석 | 자연어 → `constraints` | 키워드·날짜 규칙 |
+| 협상 문장 | 제안·반제안 문장 생성 | 템플릿 |
 
-1. **개인 구독자**: 매월 남아도는 ChatGPT Plus/Team, API 잔여 토큰을 손쉽게 현금화하여 구독비 절감.
-2. **학생 / 1회성 개발자**: 정기 구독 결제 없이 과제나 테스트용으로 몇 백~몇 천 토큰만 소액 결제로 사용.
-3. **분산형 AI 인프라**: 거대 빅테크 단일 게이트웨이에 종속되지 않는 탈중앙화된 P2P LLM 마켓플레이스 생태계 구축.
+폴백을 두는 이유는 두 가지입니다. 시연 중 LLM이 지연되거나 실패해도 흐름이 멈추지 않게 하고, "AI 없이 되는 부분"과 "AI가 더하는 부분"을 비교 시연(LLM 켜기/끄기)으로 보여 줄 수 있게 합니다.
 
----
+## 9. 검증 현황
 
-## 7. 프로젝트 디렉토리 및 로드맵 제안
+| 항목 | 상태 | 근거 |
+|---|---|---|
+| A2A 서버·클라이언트가 같은 PC에서 직접 통신 | ✅ | `proto/spike_a2a.py` 실행 |
+| Agent Card 발견 (`/.well-known/agent-card.json`) | ✅ | 같은 spike, 이름과 skill 목록 확인 |
+| 다회 협상(`INPUT_REQUIRED` → 같은 task로 수락 → `COMPLETED` + Artifact) | ✅ | 같은 spike |
+| broker 2개 간 `broker_query` | ❓ | 미구현 |
+| LLM·임베딩 연동 | ❓ | 사내 LLM 미정 |
+| 서로 다른 PC·서버 간 직접 호출 | ❓ | 사내망 정책 미확인 |
+| 스트리밍(SSE) 표시 | ❓ | spike는 비스트리밍 |
 
-```text
-share-ur-tokens/
-├── docs/
-│   ├── system-overview.md             # 본 문서 (시스템 개념 및 전체 아키텍처)
-│   ├── hackathon-proposal.md          # 해커톤 참가 신청서 (1~7 문항 기획서)
-│   ├── pricing-mechanism.md           # 자동 가격 결정 알고리즘 (ADPM)
-│   ├── p2p-and-identity.md            # P2P 통신, 상호 은닉, DID 및 브로커 구조
-│   ├── ledger-and-settlement.md       # 분산 원장 보관 및 상태 채널 정산 아키텍처
-│   ├── feasibility-and-tos-strategy.md# 기술 실현 가능성 및 P2P ToS 회피 전략
-│   ├── market-analysis-and-competitors.md # 시장 유사 서비스 분석 및 경쟁력 비교
-│   ├── privacy-and-tool-calling.md    # 로컬 마스킹 및 안전한 툴 콜링(Tool Calling)
-│   ├── dynamic-peer-switching.md      # 턴 단위 동적 피어 스위칭 및 장애 복구(Failover)
-│   ├── dispute-and-indemnity.md       # 정책 위반 분쟁 해결 및 구상권(Slashing) 배상
-│   └── protocol-spec.md               # 통신 프로토콜 및 메시지 포맷 (추후 작성)
-├── agent/                        # SUT Agent 소스코드 (Go / Rust / Node.js)
-│   ├── proxy/                    # LLM API Reverse Proxy & Tokenizer
-│   ├── p2p/                      # P2P 연결 (libp2p, WebRTC)
-│   └── ledger/                   # 블록체인/정산 인터페이스
-├── broker/                       # SUT Broker 소스코드 (분산 노드 디스커버리)
-│   ├── discovery/                # DHT / Kademlia / Gossip 노드 검색
-│   └── matching/                 # 조건 기반 공급자-소비자 매칭 엔진
-└── contracts/                    # 에스크로 및 토큰 결제용 스마트 컨트랙트
-```
+spike 실행: `python3.11 -m venv .venv && .venv/bin/pip install "a2a-sdk[http-server]" && .venv/bin/python proto/spike_a2a.py`. 이 spike는 프로토콜 계층의 실현 가능성만 확인한 것으로, 규칙 기반이며 LLM을 쓰지 않습니다. 해커톤 규정이 사전 작성 코드를 제한하는지는 확인이 필요하며, 제한한다면 spike는 제출·재사용하지 않고 폐기합니다.
 
+## 10. 2일 구현 분해
+
+| 모듈 | 내용 | 의존 | 포기 기준 |
+|---|---|---|---|
+| M1 스키마·공통 | 위 JSON 스키마, LLM 어댑터와 폴백 | 없음 | 필수 |
+| M2 제공자 peer | 예약표, 가능 여부 계산, 반제안 | M1 | 필수 |
+| M3 broker | `advertise`/`query`, SQLite, 필터 + 유사도 | M1 | 필수 |
+| M4 소비자 peer | 요청, 후보 선택, 협상 루프, 권한 범위 | M2, M3 | 필수 |
+| M5 broker 간 질의 | `broker_query`, 홉 제한, 중복 제거 | M3 | 1일차 종료 시 미완이면 broker 1개로 시연하고 설명만 |
+| M6 대시보드 | 이벤트 SSE, 3패널 | M2~M4 | 터미널 로그로 대체 가능 |
+| M7 LLM 켜기/끄기 비교 | 같은 요청을 두 모드로 실행 | M1 | 시간이 남을 때 |
+
+## 11. 기존 방식과의 차이
+
+| 기존 방식 | 한계 | 이 구조 |
+|---|---|---|
+| 사내 게시판·메신저 공지 | 올린 사람이 대상을 알아야 하고, 필요한 사람이 우연히 봐야 한다 | 필요한 사람의 요청이 공급을 찾아간다 |
+| 사내 검색·지식 관리 | 문서를 찾지, 지금 줄 수 있는 주체와 연결하지 못한다 | 주체와 조건까지 연결한다 |
+| 중앙 마켓플레이스 | 운영자가 거래를 중개한다 | 발견만 broker, 거래는 peer 직접 |
+
+이 비교는 일반적인 도구 유형에 대한 서술이며, 이 회사의 실제 사내 도구 조사는 아직 하지 않았습니다([proposal-notes.md](proposal-notes.md) 미해결 과제).
