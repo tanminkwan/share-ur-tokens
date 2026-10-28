@@ -76,14 +76,19 @@ class Collector:
         return (None, err) if err else (self._seal(entry), None)
 
     def audit(self) -> str:
-        prev = "0" * 64
-        for i, e in enumerate(self.chain):
-            if e["prev"] != prev or e["hash"] != h(canon({k: e[k] for k in BODY})):
-                return f"TAMPERED at seq {i} (hash chain)"
-            if any(not s or not verify(s, e["payload"], e["sigs"].get(s, "")) for s in self.signers(e)):
-                return f"TAMPERED at seq {i} (signature)"
-            prev = e["hash"]
-        return "ok"
+        return audit_chain(self.chain)
+
+
+def audit_chain(chain) -> str:
+    """verify hashes and signatures of any chain copy (collectors and the overseer use the same check)"""
+    prev = "0" * 64
+    for i, e in enumerate(chain):
+        if e["prev"] != prev or e["hash"] != h(canon({k: e[k] for k in BODY})):
+            return f"TAMPERED at seq {i} (hash chain)"
+        if any(not s or not verify(s, e["payload"], e["sigs"].get(s, "")) for s in Collector.signers(e)):
+            return f"TAMPERED at seq {i} (signature)"
+        prev = e["hash"]
+    return "ok"
 
 
 def contribution(chain) -> dict:

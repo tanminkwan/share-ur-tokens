@@ -17,9 +17,10 @@ IDEA_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["ti
 class CollectorNode:
     """collector-1 sequences entries and replicates them to collector-2, which re-validates independently."""
 
-    def __init__(self, name, port, peer_url=None):
+    def __init__(self, name, port, peer_url=None, readers=()):
         self.col, self.port, self.peer_url, self.lock = Collector(name), port, peer_url, asyncio.Lock()
-        self.app = make_agent_app(name, "provenance ledger collector", port, ["record", "audit", "dump"], self.handle)
+        self.readers, self.access_log = set(readers), []  # only allow-listed keys may read the chain
+        self.app = make_agent_app(name, "provenance ledger collector", port, ["record", "audit", "read"], self.handle)
 
     async def handle(self, r):
         op = r["op"]
@@ -41,7 +42,13 @@ class CollectorNode:
             return {"ok": err is None, "error": err}
         if op == "audit":
             return {"ok": True, "status": self.col.audit(), "head": self.col.head(), "length": len(self.col.chain)}
-        if op == "dump":
+        if op == "read":  # privileged, read-only: signed request from an allow-listed reader key
+            ok = (r.get("reader") in self.readers and abs(time.time() - r.get("ts", 0)) < 60
+                  and verify(r["reader"], {"op": "read", "ts": r["ts"]}, r.get("sig", "")))
+            self.access_log = (self.access_log + [{"ts": time.time(), "reader": alias(r.get("reader", "?" * 6)), "granted": ok}])[-50:]
+            if not ok:
+                emit("ledger", self.col.name, f"원장 열람 거부: {alias(r.get('reader', '?' * 6))}")
+                return {"ok": False, "error": "not authorized"}
             return {"ok": True, "chain": self.col.chain}
         return {"ok": False, "error": "unknown op"}
 
@@ -236,16 +243,19 @@ class Requester:
                                 "sigs": {self.id.pub: self.id.sign(p), peer_pub: res["receipts"][k]}})
         out = []
         for rv in res["reviews"]:
+            if h(rv["comment"].encode()) != rv["payload"]["comment_hash"]:
+                continue  # comment does not match what the reviewer signed
             await rpc(self.c1, {"op": "record", "type": "feedback", "payload": rv["payload"], "sigs": {peer_pub: rv["sig"]}})
-            self.reviews[rv["payload"]["content_hash"]] = dict(score=rv["payload"]["score"], comment=rv["payload"]["comment"], judge=alias(peer_pub))
-            out.append(dict(id=rv["payload"]["content_hash"][:8], score=rv["payload"]["score"], comment=rv["payload"]["comment"]))
+            self.reviews[rv["payload"]["content_hash"]] = dict(score=rv["payload"]["score"], comment=rv["comment"], judge=alias(peer_pub))
+            out.append(dict(id=rv["payload"]["content_hash"][:8], score=rv["payload"]["score"], comment=rv["comment"]))
         emit("review", alias(peer_pub), f"심사 완료: " + ", ".join(f"{o['id']}={o['score']}" for o in out))
         return {"ok": True, "reviews": out}
 
     async def adopt(self, content_hash, reason="채택"):
         if content_hash in self.adopted or content_hash not in self.ideas:
             return False
-        p = {"evaluator": self.id.pub, "content_hash": content_hash, "verdict": "adopt", "reason": reason}
+        STORE[h(reason.encode())] = {"reason": reason}
+        p = {"evaluator": self.id.pub, "content_hash": content_hash, "verdict": "adopt", "reason_hash": h(reason.encode())}
         res = await rpc(self.c1, {"op": "record", "type": "feedback", "payload": p, "sigs": {self.id.pub: self.id.sign(p)}})
         if res.get("ok"):
             self.adopted.add(content_hash)
@@ -293,9 +303,11 @@ class PeerAgent:
         reviews = []
         for rv in d["reviews"]:
             if rv["id"] in full:
+                comment_hash = h(rv["comment"].encode())  # the comment text stays off the ledger
+                STORE[comment_hash] = {"comment": rv["comment"]}
                 payload = {"evaluator": self.id.pub, "content_hash": full[rv["id"]], "verdict": "review",
-                           "score": float(rv["score"]), "comment": rv["comment"]}
-                reviews.append({"payload": payload, "sig": self.id.sign(payload)})
+                           "score": float(rv["score"]), "comment_hash": comment_hash}
+                reviews.append({"payload": payload, "sig": self.id.sign(payload), "comment": rv["comment"]})
         return {"ok": True, "receipts": receipts, "reviews": reviews}
 
     async def work(self, r):
@@ -336,9 +348,13 @@ class PeerAgent:
 
 
 def build_all(base=9100):
-    c2 = CollectorNode("collector-2", base + 102)
-    c1 = CollectorNode("collector-1", base + 101, peer_url=f"http://127.0.0.1:{base + 102}")
+    from .overseer import Overseer
+    overseer = Overseer()
+    readers = [overseer.id.pub]
+    c2 = CollectorNode("collector-2", base + 102, readers=readers)
+    c1 = CollectorNode("collector-1", base + 101, peer_url=f"http://127.0.0.1:{base + 102}", readers=readers)
+    overseer.collector_urls = [f"http://127.0.0.1:{base + 101}", f"http://127.0.0.1:{base + 102}"]
     broker = Broker(base + 110)
     me = Requester(base + 200, f"http://127.0.0.1:{base + 110}", f"http://127.0.0.1:{base + 101}")
     peers = [PeerAgent(p, base + 1 + i, f"http://127.0.0.1:{base + 110}", f"http://127.0.0.1:{base + 101}") for i, p in enumerate(PERSONAS)]
-    return c1, c2, broker, me, peers
+    return c1, c2, broker, me, peers, overseer

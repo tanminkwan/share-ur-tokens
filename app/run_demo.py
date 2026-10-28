@@ -16,7 +16,7 @@ from .web import build_web
 
 
 async def main(args):
-    c1, c2, broker, me, peers = build_all()
+    c1, c2, broker, me, peers, overseer = build_all()
     for n in (c2, c1):
         await serve(n.app, n.port)
     await serve(broker.app, broker.port)
@@ -25,7 +25,7 @@ async def main(args):
         await serve(p.app, p.port)
     await asyncio.gather(*(p.advertise() for p in peers))
     emit("system", "demo", f"{len(peers)}명의 피어, broker 1, 수집가 2 기동. LLM={'Claude '+llm.AGENT_MODEL if llm.live() else '오프라인 템플릿'}")
-    await serve(build_web(c1, c2, broker, me, peers), args.port)
+    await serve(build_web(c1, c2, broker, me, peers, overseer), args.port)
     emit("system", "demo", f"대시보드: http://127.0.0.1:{args.port}")
 
     if not args.call:
@@ -46,8 +46,15 @@ async def main(args):
     for node in (c1, c2):
         a = await rpc(f"http://127.0.0.1:{node.port}", {"op": "audit"})
         print(f"audit {node.col.name}: {a['status']} ({a['length']}건) head={a['head'][:10]}")
+    from .common import Identity
+    print("권한 없는 peer의 원장 열람:", (await overseer.read(overseer.collector_urls[0], Identity()))["error"])
+    snap = await overseer.snapshot()
+    st = snap["stats"]
+    print("절대자 통계:", {k: st[k] for k in ("entries", "by_type", "pseudonyms", "ideas", "adopted", "adoption_rate", "avg_score", "score_hist")})
+    print("절대자 무결성:", snap["integrity"])
     c1.col.chain[1]["payload"]["tampered"] = True
-    print("변조 후 audit collector-1:", c1.col.audit(), "| collector-2:", c2.col.audit())
+    overseer._cache = (0, None)
+    print("변조 후 절대자 무결성:", (await overseer.snapshot())["integrity"])
 
 
 if __name__ == "__main__":
