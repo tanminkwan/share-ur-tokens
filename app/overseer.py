@@ -48,7 +48,9 @@ class Overseer:
             self._alerted = True
             emit("overseer", "절대자", f"원장 변조/불일치 탐지: {integrity}")
         chain = copies[0][1]
-        snap = {"integrity": integrity, "ledger": self.rows(chain), "stats": self.stats(chain)}
+        board = await rpc(self.broker_url, {"op": "list_profiles"})
+        snap = {"integrity": integrity, "ledger": self.rows(chain), "stats": self.stats(chain),
+                "peers": self.per_peer(chain, board.get("profiles", []))}
         self._cache = (time.time(), snap)
         return snap
 
@@ -56,6 +58,35 @@ class Overseer:
     def rows(chain):
         return [dict(seq=e["seq"], type=e["type"], hash=e["hash"][:10], sealed_by=alias(e["seal"]["pub"]) if "seal" in e else "-",
                      who=alias(e["payload"].get("author") or e["payload"].get("provider") or e["payload"].get("evaluator") or e["payload"].get("issuer"))) for e in chain]
+
+    @staticmethod
+    def per_peer(chain, profiles):
+        """strengths = the public self-description on the board; track record = what the ledger proves for that pseudonym"""
+        rec = {}
+        def r(pub):
+            return rec.setdefault(pub, {"ideas": 0, "received_by": set(), "adopted": 0, "reviews": 0, "roles": [], "sealed": 0})
+        author = {e["payload"]["content_hash"]: e["payload"]["author"] for e in chain if e["type"] == "publish"}
+        for e in chain:
+            p = e["payload"]
+            if e["type"] == "publish":
+                r(p["author"])["ideas"] += 1
+            elif e["type"] == "share" and author.get(p["content_hash"]) not in (None, p["consumer"]):
+                r(author[p["content_hash"]])["received_by"].add(p["consumer"])
+            elif e["type"] == "feedback" and p.get("verdict") == "adopt":
+                r(author[p["content_hash"]])["adopted"] += 1
+            elif e["type"] == "feedback" and p.get("verdict") == "review":
+                r(p["evaluator"])["reviews"] += 1
+            elif e["type"] == "contract":
+                r(p["contractor"])["roles"].append({"record": "기록", "review": "심사"}.get(p["role"], p["role"]))
+            if "seal" in e:
+                r(e["seal"]["pub"])["sealed"] += 1
+        out = []
+        for a in profiles:
+            t = rec.get(a["pub"], r(a["pub"]))
+            out.append(dict(who=alias(a["pub"]), broker=a.get("broker", ""), ver=a.get("ver", 1), offers=a.get("offers", []),
+                            strengths=a["summary"], ideas=t["ideas"], received_by=len(t["received_by"]), adopted=t["adopted"],
+                            reviews=t["reviews"], roles=", ".join(sorted(set(t["roles"]))), sealed=t["sealed"]))
+        return sorted(out, key=lambda x: (-x["adopted"], -x["received_by"], -len(x["roles"]), -x["reviews"], -x["ver"]))
 
     @staticmethod
     def stats(chain):

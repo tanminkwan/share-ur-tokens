@@ -82,6 +82,15 @@ class Broker:
                 await self._share(r)
                 return {"ok": True}
             return {"ok": False, "error": "not the issuer"}
+        if op == "list_profiles":  # the public profile board (profiles live on each peer's primary broker: ask the others too)
+            mine = [dict(a, broker=self.name) for a in self._active(self.ads)]
+            if not r.get("shared"):
+                for url in self.neighbors:
+                    try:
+                        mine += (await rpc(url, dict(r, shared=True), timeout=10)).get("profiles", [])
+                    except Exception:
+                        pass
+            return {"ok": True, "profiles": mine}
         if op == "list_notices":  # what this viewer is allowed to see
             return {"ok": True, "notices": [n for n in self._active(self.notices) if self._visible(n, r.get("pub", ""))]}
         if op == "search_notices":  # BM25 over the notices this viewer is allowed to see

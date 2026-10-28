@@ -36,7 +36,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}td,th{border-bottom:1px
 <section><h3>③ 도착한 아이디어 (p2p 직접 전달)</h3><div id=ideas></div></section>
 <section><h3>④ 증명 원장 <small>(기록자 역할 peer가 보관 · 내용 없이 해시·가명·서명 · 설계상 분산, 시연은 기록자 1명)</small></h3><div id=ledger style="max-height:260px;overflow:auto"></div></section>
 <section class=wide><h3>⑤ 절대자 peer의 통계 <small id=ovr></small> <small>(원장 열람 권한을 가진 읽기 전용 peer. 내용·실명은 못 봄)</small></h3><div id=stats></div></section>
-<section class=wide><h3>⑥ 피어의 자기소개 <small>(각 peer의 작업 영역을 비서가 자동 요약해 게시하고, 경험이 쌓이면 스스로 갱신. 사람이 편집할 수도 있으나 시연은 자동)</small></h3><div id=profiles style="max-height:220px;overflow:auto"></div></section>
+<section class=wide><h3>⑥ peer별 강점과 실적 <small>(절대자 peer가 봄 · 강점 = 작업 영역을 비서가 요약해 공개한 자기소개(경험이 쌓이면 자동 갱신) · 실적 = 원장이 서명으로 증명하는 기록)</small></h3><div id=profiles style="max-height:300px;overflow:auto"></div></section>
 <section><h3>⑦ 감사 · 접근 통제</h3><div id=contrib></div><hr>
 <button onclick="audit()">감사: 기록자 원장 검증</button>
 <button class=s onclick="intr()">권한 없는 peer의 열람 시도</button><div id=introut></div>
@@ -66,7 +66,7 @@ $('stats').innerHTML=`<table><tr><td>원장 항목 <b>${st.entries}</b> (${Objec
 <div><b>기여 상위</b> <small>(역할 수행도 기여)</small><table><tr><th>가명<th>받은 사람<th>채택<th>역할</tr>${st.contribution.slice(0,8).map(c=>`<tr><td class=mono>${c.who}<td>${c.received_by}<td>${c.adopted}<td>${c.roles}`).join('')}</table></div>
 <div><b>공유 흐름 상위</b><table>${st.top_flows.map(f=>`<tr><td class=mono>${f.frm} → ${f.to}<td>${f.n}`).join('')}</table></div>
 <div><b>무결성 (절대자가 직접 검증)</b><br>${(ig.recorders||[]).map(x=>'기록자 '+x.who+': '+x.status+' ('+x.length+'건)').join('<br>')}<br>${ig.agree?'✅ 해시 체인·서명·기록자 서명 정상':'⚠ 변조 또는 불일치'}</div></div>`}
-$('profiles').innerHTML='<table><tr><th>가명<th>기본 broker<th>v<th>역할<th>게시된 자기 요약</tr>'+(s.profiles||[]).map(p=>`<tr><td class=mono>${p.who}<td>${p.broker}<td>${p.ver}<td>${p.offers.join(',')}<td>${p.summary}`).join('')+'</table>';
+$('profiles').innerHTML='<table><tr><th>가명<th>broker<th>강점 (자기소개, v)<th>공개 역할<th>낸 아이디어<th>받은 사람<th>채택<th>심사<th>맡은 역할<th>기록</tr>'+(s.peer_view||[]).map(p=>`<tr><td class=mono>${p.who}<td>${p.broker}<td>${p.strengths} <small>(v${p.ver})</small><td>${p.offers.join(',')}<td>${p.ideas}<td>${p.received_by}<td>${p.adopted?'<b>'+p.adopted+'</b>':0}<td>${p.reviews}<td>${p.roles}<td>${p.sealed}`).join('')+'</table>';
 $('contrib').innerHTML=(s.access||[]).map(a=>`<div class=mono>${a.name}: ${a.reader} 열람 ${a.granted?'허용':'<b>거부</b>'}</div>`).join('')}
 setInterval(tick,1500);tick();
 </script>"""
@@ -91,7 +91,7 @@ def build_web(brokers, me, peers, overseer):
         return JSONResponse(dict(live=llm.live(), model=llm.describe(), peers=sum(len(b.ads) for b in brokers), ideas=ideas,
                                  ledger=snap.get("ledger", []), stats=snap.get("stats"), integrity=snap.get("integrity"),
                                  overseer=alias(overseer.id.pub), access=[dict(name=alias(c.id.pub), **a) for c in recorders for a in c.access_log[-3:]],
-                                 profiles=[dict(who=alias(a["pub"]), ver=a.get("ver", 1), summary=a["summary"], offers=a.get("offers", []), broker=b.name) for b in brokers for a in b.ads.values()],
+                                 peer_view=snap.get("peers", []),
                                  notices=[dict(id=n["notice_id"], title=n["title"], left=int(n["until"] - time.time())) for n in broker.notices.values()],
                                  brokers=[dict(name=b.name, profiles=len(b.ads), notices=len(b.notices)) for b in brokers],
                                  sheet=(call or {}).get("sheet", []), events=EVENTS[-120:]))
