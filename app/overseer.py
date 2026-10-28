@@ -50,7 +50,9 @@ class Overseer:
         chain = copies[0][1]
         profiles = []
         for url in getattr(self, "board_urls", [self.broker_url]):  # both peer groups
-            profiles += (await rpc(url, {"op": "list_profiles"})).get("profiles", [])
+            ts = time.time()
+            profiles += (await rpc(url, {"op": "list_profiles", "pub": self.id.pub, "ts": ts,
+                                         "sig": self.id.sign({"op": "list_profiles", "ts": ts})})).get("profiles", [])
         snap = {"integrity": integrity, "ledger": self.rows(chain), "stats": self.stats(chain),
                 "peers": self.per_peer(chain, profiles)}
         self._cache = (time.time(), snap)

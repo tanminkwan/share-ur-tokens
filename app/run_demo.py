@@ -15,13 +15,20 @@ from .web import build_web
 
 
 async def main(args):
-    brokers, me, peers, overseer = build_all()
+    brokers, me, peers, overseer, review_members = build_all()
     for b in brokers:
         await serve(b.app, b.port)
     await serve(me.app, me.port)
     for p in peers:
         await serve(p.app, p.port)
+    for m in review_members:  # the review group's owner (event peer) grants time-limited membership
+        g = {"pub": m.id.pub, "until": time.time() + 86400}
+        await rpc(me.review_broker_url, {"op": "grant", "grant": g, "sig": me.id.sign(g)})
     await asyncio.gather(*(p.advertise() for p in peers))
+    from .common import Identity
+    outsider, ts = Identity(), time.time()
+    res = await rpc(me.review_broker_url, {"op": "find", "text": "심사", "pub": outsider.pub, "ts": ts, "sig": outsider.sign({"op": "find", "ts": ts})})
+    emit("system", "demo", f"응모 그룹 쪽 peer가 심사 그룹 broker를 조회해 보면: {res.get('error') or '조회됨(문제)'}")
     for p in peers:  # every peer looks at the board on its own; the recommender peer also recommends
         asyncio.create_task(p.watch())
     emit("system", "demo", f"{len(peers)}명의 피어, peer 그룹 2개(응모 그룹: broker A·B·C 공지 공유, 심사 그룹: broker D) 기동. "

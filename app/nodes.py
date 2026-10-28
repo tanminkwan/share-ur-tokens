@@ -14,7 +14,7 @@ from .personas import PERSONAS, ask_owner_system, decision_system, judge_system,
 IDEA_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["title", "idea", "first_step", "risk"],
                "properties": {"title": {"type": "string"}, "idea": {"type": "string"},
                               "first_step": {"type": "string"}, "risk": {"type": "string"}}}
-RELEVANCE_MIN = 0.5  # below this BM25 score a notice is skipped without calling the LLM
+RELEVANCE_MIN = 0.3  # below this BM25 score a notice is skipped without calling the LLM (a recommendation reopens it)
 SELECT_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["selected"],
                  "properties": {"selected": {"type": "array", "items": {
                      "type": "object", "additionalProperties": False, "required": ["pub", "reason"],
@@ -27,9 +27,11 @@ class Broker:
     It never sees an idea or a ledger entry. Matching that needs judgement is done by a peer in the "recommend" role,
     using this search. It has its own key and signs nothing but what it returns."""
 
-    def __init__(self, port, name="broker"):
+    def __init__(self, port, name="broker", owner_pub=None):
         self.ads, self.notices, self.port, self.id, self.name = {}, {}, port, Identity(), name
         self.url, self.neighbors = f"http://127.0.0.1:{port}", []
+        # closed peer group: only keys holding an unexpired membership grant signed by the group owner may use this board
+        self.owner_pub, self.members = owner_pub, {}
         self.app = make_agent_app(name, "bulletin board and search (mechanical, no AI)", port,
                                   ["advertise", "post_notice", "close_notice", "search_notices", "list_notices", "find"], self.handle)
 
@@ -52,12 +54,32 @@ class Broker:
         labels = set(self.ads.get(pub, {}).get("labels", []))
         return all(f"{k}:{v}" in labels for k, v in notice.get("audience", {}).items())
 
+    def _member(self, pub):
+        return self.owner_pub is None or pub == self.owner_pub or self.members.get(pub, 0) > time.time()
+
+    def _signed_by_member(self, r):
+        return (self._member(r.get("pub", "")) and abs(time.time() - r.get("ts", 0)) < 60
+                and verify(r.get("pub", ""), {"op": r["op"], "ts": r.get("ts", 0)}, r.get("sig", "")))
+
     async def handle(self, r):
         op = r["op"]
+        if op == "grant":  # membership grant with expiry, signed by the group owner; no revocation, it just expires
+            g = r["grant"]
+            if self.owner_pub is None or not verify(self.owner_pub, g, r.get("sig", "")):
+                return {"ok": False, "error": "grant must be signed by the group owner"}
+            self.members[g["pub"]] = g["until"]
+            emit("broker", self.name, f"그룹 가입 허가: {alias(g['pub'])} (만기 {int(g['until'] - time.time())}초 후)")
+            return {"ok": True}
+        if self.owner_pub is not None and op in ("list_profiles", "find") and not self._signed_by_member(r):
+            emit("broker", self.name, f"그룹 밖 요청 거부: {op} ({alias(r.get('pub', '?' * 6))})")
+            return {"ok": False, "error": "members of this peer group only"}
         if op == "advertise":
             ad = r["ad"]
             if not verify(ad["pub"], ad["profile"], ad["sig"]):
                 return {"ok": False, "error": "bad signature"}
+            if not self._member(ad["pub"]):
+                emit("broker", self.name, f"그룹 밖 등록 거부: {alias(ad['pub'])}")
+                return {"ok": False, "error": "members of this peer group only"}
             known = ad["pub"] in self.ads
             self.ads[ad["pub"]] = dict(ad["profile"], pub=ad["pub"], url=ad["url"])
             emit("broker", self.name, f"{alias(ad['pub'])} 프로필 {'갱신' if known else '등록'}(v{ad['profile'].get('ver', 1)})"
@@ -143,7 +165,9 @@ class Requester:
         contracts until `count` accepted. Reviewers are searched in the review group; the recorder in the applicant group.
         The contract is recorded on the event's recorder; for the recorder role itself, on the newly contracted one."""
         broker = self.review_broker_url if role == "review" else self.broker_url
-        res = await rpc(broker, {"op": "find", "text": need, "role": role, "exclude": [self.id.pub], "k": count + 2})
+        ts = time.time()
+        res = await rpc(broker, {"op": "find", "text": need, "role": role, "exclude": [self.id.pub], "k": count + 2,
+                                 "pub": self.id.pub, "ts": ts, "sig": self.id.sign({"op": "find", "ts": ts})})
         label = {"record": "기록자", "review": "심사자"}[role]
         got = []
         for c in res.get("peers", []):
@@ -201,6 +225,8 @@ class Requester:
         pub_payload, share_payload = r["publish_payload"], r["share_payload"]
         if call["recorder"] and pub_payload["author"] == call["recorder"]["pub"]:
             return {"ok": False, "error": "이 공모의 기록자는 응모할 수 없습니다"}
+        if any(pub_payload["author"] == rv["pub"] for rv in call.get("reviewers", [])):
+            return {"ok": False, "error": "이 공모의 심사자는 응모할 수 없습니다"}
         if h(canon(r["idea"])) != pub_payload["content_hash"] or not verify(pub_payload["author"], pub_payload, r["publish_sig"]):
             return {"ok": False, "error": "content hash / author signature mismatch"}
         if share_payload["consumer"] != self.id.pub or share_payload["content_hash"] != pub_payload["content_hash"]:
@@ -636,8 +662,9 @@ def build_all(base=9100, n_brokers=3):
     brokers = [Broker(base + 110 + i, name=f"broker-{'ABC'[i]}") for i in range(n_brokers)]
     for b in brokers:
         b.neighbors = [o.url for o in brokers if o is not b]
-    review_broker = Broker(base + 110 + n_brokers, name="broker-D(심사 그룹)")
-    me = Requester(base + 200, brokers[0].url, review_broker.url)
+    me = Requester(base + 200, brokers[0].url)
+    review_broker = Broker(base + 110 + n_brokers, name="broker-D(심사 그룹)", owner_pub=me.id.pub)  # closed group, owner = event peer
+    me.review_broker_url = review_broker.url
     peers, i_app = [], 0
     for i, p in enumerate(PERSONAS):
         if "review" in p.get("can", []):
@@ -647,4 +674,5 @@ def build_all(base=9100, n_brokers=3):
         peers.append(PeerAgent(p, base + 1 + i, home, readers=[overseer.id.pub]))
     overseer.broker_url = brokers[-1].url
     overseer.board_urls = [brokers[-1].url, review_broker.url]  # the overseer may look at both groups' profile boards
-    return brokers + [review_broker], me, peers, overseer
+    review_members = [p for p in peers if "review" in p.can] + [overseer]
+    return brokers + [review_broker], me, peers, overseer, review_members
