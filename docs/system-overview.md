@@ -43,6 +43,33 @@ Claude API 사용 시 모델 선택·구조화 출력·거절 처리는 `app/llm
 
 ## 4. 구성 요소 (실행 시 포트)
 
+```mermaid
+flowchart LR
+    subgraph peers["peer ×11 (가명, 각자 작업 영역 + 비서 에이전트 + 페르소나)"]
+        P1["응모자 peer들"]
+        PR["심사 peer<br/>offers: review"]
+    end
+    ME["이벤트 peer (나)<br/>비서 에이전트"]
+    BR["broker<br/>자기소개 색인 · 맥락 매칭"]
+    subgraph ledger["원장"]
+        C1["collector-1<br/>순서 부여"]
+        C2["collector-2<br/>독립 재검증"]
+    end
+    OV["절대자 peer<br/>열람 키 · 읽기 전용"]
+    DB["대시보드"]
+
+    P1 & PR -- "자기소개 게시 (advertise)" --> BR
+    ME -- "find / call" --> BR
+    BR -- "call_for_ideas" --> P1
+    ME <-- "engage → contract" --> PR
+    P1 -- "submit_idea (p2p 직접)" --> ME
+    ME -- "evaluate_ideas (p2p 직접)" --> PR
+    P1 & ME -- "publish / share / contract / feedback" --> C1
+    C1 -- "replicate" --> C2
+    OV -- "read (서명)" --> C1 & C2
+    OV --> DB
+```
+
 | 프로세스 | 포트 | 하는 일 |
 |---|---|---|
 | peer 11개 | 9101~9111 | 각자 가명(키 쌍)과 Agent Card를 가진다. 비서 에이전트가 요청을 받아 판단하고, 필요하면 사원(페르소나)에게 전달한다 |
@@ -57,6 +84,37 @@ Claude API 사용 시 모델 선택·구조화 출력·거절 처리는 `app/llm
 11명이 같은 코드로 돌며 `app/personas.py`의 프로필만 다릅니다: 신입 마케터, 인프라 엔지니어, HR 담당, 영업 베테랑, 데이터 분석가, 신입 개발자, 총무, 보안 담당, 기획팀장, UX 디자이너, 그리고 `can: ["review"]`를 가진 심사 전문가 1명. `SUT_PERSONAS=파일.json`으로 구성원을 통째로 바꿀 수 있고, 시나리오가 달라져도 코드는 바뀌지 않습니다.
 
 ## 6. 흐름
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant R as 심사 peer
+    participant B as broker
+    participant E as 이벤트 peer (나)
+    participant A as 응모자 peer
+    participant L as 수집가 ×2
+
+    R->>B: advertise (작업 영역 요약, offers=review, until)
+    A->>B: advertise (작업 영역 요약)
+    E->>B: find("이 공모의 심사자")
+    B-->>E: 후보 (심사 peer)
+    E->>R: engage (p2p 직접)
+    R-->>E: 수락 + 계약 서명
+    E->>L: contract (양쪽 서명)
+    E->>B: call (공모)
+    B->>A: call_for_ideas
+    Note over A: 비서 판단 → 페르소나가 아이디어 작성
+    A->>L: publish (선등록)
+    A->>E: submit_idea (p2p 직접)
+    E-->>A: 영수증 (share 서명)
+    A->>L: share (양쪽 서명)
+    A->>B: advertise v2 (경험 반영)
+    Note over E: 마감: 비서가 도구를 골라 진행
+    E->>R: evaluate_ideas (작성자 없이)
+    R-->>E: 점수 · 의견 (서명)
+    E->>L: share + feedback(review)
+    E->>L: feedback(adopt)
+```
 
 | 단계 | 누가 | 무엇을 | 경유 |
 |---|---|---|---|

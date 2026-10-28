@@ -7,19 +7,37 @@
 
 임직원의 AI 에이전트들이 **가명**으로 서로 찾고(broker), 연결하고(p2p), 대화로 일을 풀며(a2a), 그 거래·공유가 **서명된 원장**에 증명으로 남아 선등록자는 보호되고 아이디어는 사내 자산으로 쌓이는 네트워크. 시연 peer와 역할은 **하나의 예시**일 뿐 고정이 아니다.
 
+## 구조
+
+```mermaid
+flowchart LR
+    P["peer들 (가명)<br/>작업 영역 → 비서가 자기소개 요약"] -- advertise --> B["broker<br/>발견만"]
+    E["이벤트 peer (나)"] -- "find / call" --> B
+    B -- call_for_ideas --> P
+    E <-- "engage → contract" --> R["심사 peer"]
+    P -- "submit_idea (p2p 직접)" --> E
+    E -- "evaluate_ideas (p2p 직접)" --> R
+    P & E -- "publish · share · contract · feedback" --> L["수집가 ×2<br/>서명된 해시 체인 원장"]
+    O["절대자 peer<br/>읽기 전용"] -- read --> L
+    O --> D["대시보드"]
+```
+
 ## 시연 시나리오
 
-요청자(나)가 **사내 아이디어 공모**를 올린다 → broker가 맥락으로 peer를 골라 알린다 → 각 peer의 비서가 사원(페르소나)에게 전달 → 사원이 낸 아이디어가 p2p로 나에게 온다 → 나의 비서가 **심사에 능한 peer를 스스로 찾아** 심사를 맡기고 채택한다 → 전 과정이 원장에 남는다.
+심사 peer가 작업 영역(심사 원칙)을 요약한 자기소개를 공개해 둔다 → 이벤트 peer(나)가 broker에서 심사자를 발견해 **위촉 계약**(원장)을 맺는다 → **아이디어 공모**를 올린다 → broker가 맥락으로 응모자 peer를 골라 알린다 → 각 peer의 비서가 사원(페르소나)에게 전달할지 판단 → 사원이 낸 아이디어가 p2p로 나에게 온다 → 마감 뒤 나의 비서가 도구를 골라 계약한 심사자에게 심사를 맡기고 채택한다 → 경험이 쌓인 peer는 자기소개를 스스로 갱신한다 → 전 과정이 원장에 남고 절대자 peer가 통계를 낸다.
 
 ## 실행
 
 ```
 python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
-export ANTHROPIC_API_KEY=...        # 없으면 오프라인 템플릿 모드
-.venv/bin/python -m app.run_demo    # 대시보드 http://127.0.0.1:8000
+# LLM: 둘 중 하나. 없으면 오프라인 템플릿 모드
+export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # OpenAI 호환 엔드포인트 (현재 사용)
+export ANTHROPIC_API_KEY=...                       # 또는 Claude API
+.venv/bin/python -m app.run_demo                   # 대시보드 http://127.0.0.1:8000
+.venv/bin/python -m app.run_demo --call "공모 내용" --quiet 40   # 한 번 실행하고 결과 출력
 ```
 
-상세는 [docs/system-overview.md](docs/system-overview.md) 9절. **Claude를 쓰는 경로는 API 키가 없어 아직 실행해 보지 못했다**(오프라인 모드는 전 흐름 실행 확인).
+상세는 [docs/system-overview.md](docs/system-overview.md) 10절. 실제 LLM(`gpt-oss-120b`)으로 전 흐름을 실행한 기록은 `review/evidence/live-run-gpt-oss-120b.txt`에 있다. Claude 경로는 키가 없어 미검증이다.
 
 ## 문서 구성
 
