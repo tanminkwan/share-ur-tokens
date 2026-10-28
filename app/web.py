@@ -20,7 +20,7 @@ h3{margin:0 0 6px;font-size:14px}textarea{width:100%;height:64px;box-sizing:bord
 button{background:#2d6cdf;color:#fff;border:0;border-radius:5px;padding:5px 12px;cursor:pointer;margin:2px}
 button.s{background:#6b7686}button.r{background:#c0392b}
 .ev{font:12px/1.4 ui-monospace,monospace;max-height:300px;overflow:auto}.ev div{border-bottom:1px solid #eef0f3;padding:2px 0}
-.k-p2p{color:#0a7d4b}.k-ledger{color:#7a3db8}.k-broker{color:#b26a00}.k-award{color:#c0392b;font-weight:600}.k-assist{color:#2d6cdf}.k-profile{color:#0a7d4b}.k-overseer{color:#c0392b;font-weight:600}.k-review{color:#8a6d00;font-weight:600}
+.k-p2p{color:#0a7d4b}.k-ledger{color:#7a3db8}.k-broker{color:#b26a00}.k-award{color:#c0392b;font-weight:600}.k-assist{color:#2d6cdf}.k-profile{color:#0a7d4b}.k-decide{color:#6b3fa0}.k-recommend{color:#b26a00}.k-overseer{color:#c0392b;font-weight:600}.k-review{color:#8a6d00;font-weight:600}
 .idea{border:1px solid #dde1e7;border-radius:6px;padding:6px 8px;margin:6px 0}.idea.ad{border-color:#c0392b;background:#fff6f5}
 table{border-collapse:collapse;width:100%;font-size:12px}td,th{border-bottom:1px solid #eef0f3;padding:2px 4px;text-align:left}
 .wide{grid-column:1/3}.mono{font-family:ui-monospace,monospace}
@@ -56,7 +56,7 @@ async function tick(){const s=await (await fetch('/api/state')).json();
 $('mode').textContent=s.live?'LLM: '+s.model:'오프라인(템플릿)';$('mode').className='tag'+(s.live?'':' off');
 $('cnt').textContent='피어 '+s.peers+'명 · 아이디어 '+s.ideas.length+'건 · 원장 '+s.ledger.length+'건';
 $('ev').innerHTML=s.events.map(e=>`<div class=k-${e.kind}>${new Date(e.ts*1000).toLocaleTimeString()} [${e.kind}] ${e.actor}: ${e.text}</div>`).join('');$('ev').scrollTop=1e9;
-$('sheet').innerHTML=s.sheet.length?' 전달된 피어 '+s.sheet.length+'명 (broker 답변지)':'';
+$('sheet').innerHTML=(s.notices||[]).map(n=>' 공지 '+n.id+(n.left>0?' (마감 '+n.left+'초 후)':' (마감됨)')).join('');
 $('ideas').innerHTML=s.ideas.map(i=>`<div class="idea ${i.adopted?'ad':''}"><b>${i.title}</b> <span class=mono>${i.author}</span>${i.adopted?' ★채택':''}${i.review?` <span class=tag>심사 ${i.review.score}점</span>`:''}<br>${i.idea}<br><small>첫 단계: ${i.first_step} / 위험: ${i.risk}</small>${i.review?'<br><small>심사 의견('+i.review.judge+'): '+i.review.comment+'</small>':''}${i.adopted?'<br><small>채택 이유: '+i.reason+'</small>':`<br><button class=s onclick="post('/api/adopt',{h:'${i.hash}'})">채택</button>`}</div>`).join('')||'아직 없음';
 $('ledger').innerHTML='<table><tr><th>#<th>종류<th>가명<th>해시<th>기록자 서명</tr>'+s.ledger.map(l=>`<tr><td>${l.seq}<td>${l.type}<td class=mono>${l.who}<td class=mono>${l.hash}<td class=mono>${l.sealed_by}`).join('')+'</table>';
 const st=s.stats,ig=s.integrity;$('ovr').textContent=s.overseer;
@@ -91,6 +91,7 @@ def build_web(broker, me, peers, overseer):
                                  ledger=snap.get("ledger", []), stats=snap.get("stats"), integrity=snap.get("integrity"),
                                  overseer=alias(overseer.id.pub), access=[dict(name=alias(c.id.pub), **a) for c in recorders for a in c.access_log[-3:]],
                                  profiles=[dict(who=alias(a["pub"]), ver=a.get("ver", 1), summary=a["summary"], offers=a.get("offers", [])) for a in broker.ads.values()],
+                                 notices=[dict(id=n["notice_id"], title=n["title"], left=int(n["until"] - time.time())) for n in broker.notices.values()],
                                  sheet=(call or {}).get("sheet", []), events=EVENTS[-120:]))
 
     async def body(r):
