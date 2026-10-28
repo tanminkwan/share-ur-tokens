@@ -373,7 +373,10 @@ class PeerAgent:
         trust = []
         for c in n.get("contracts", []):  # check the contracts the notice claims, on the recorder itself
             v = await rpc(n["recorder_url"], {"op": "verify", "hash": c["hash"]})
-            trust.append(f"{'기록자' if c['role'] == 'record' else '심사자'} 계약 {'원장에서 확인됨' if v.get('exists') and v.get('seal_ok') else '확인 안 됨'}")
+            who = n.get("recorder_pub") if c["role"] == "record" else n.get("reviewer_pub")
+            ok = (v.get("exists") and v.get("seal_ok") and v.get("type") == "contract" and v.get("role") == c["role"]
+                  and v.get("call_id") == n["notice_id"] and v.get("contractor") == who and v.get("issuer") == n["issuer_pub"])
+            trust.append(f"{'기록자' if c['role'] == 'record' else '심사자'} 계약 {'원장에서 확인됨(역할·공모·당사자 일치)' if ok else '확인 안 됨'}")
         notes = "\n".join(f"- {x}" for x in self.workspace[-14:])
         conds = "; ".join(f"{k}: {v}" for k, v in n.get("conditions", {}).items())
         d = await llm.ask_json(
@@ -389,13 +392,14 @@ class PeerAgent:
             fallback=lambda: {"decision": "apply" if self.p.get("auto") else "ask", "evidence": self.workspace[:1],
                               "fit": "오프라인 규칙", "rules": "", "benefit": "", "risk": "", "trust": ", ".join(trust)})
         decision = d.get("decision", "pass")
-        quoted = [q for q in d.get("evidence", []) if q.strip() and q.strip()[:12] in notes]
+        flat = " ".join(notes.split())
+        quoted = [q for q in d.get("evidence", []) if len(q.strip()) >= 8 and " ".join(q.strip().strip("'\"").split()) in flat]
         if decision == "apply" and not quoted:  # no grounding in my own notes: do not act alone
             decision = "ask"
         if decision == "ask":
             o = await llm.ask_json(
                 actor=me, model=llm.PERSONA_MODEL, system=ask_owner_system(self.p),
-                user=f"[비서] 이 공지에 응모할까요?\n{n['text']}\n조건: {conds}\n비서 의견: {d.get('fit', '')}",
+                user=f"[비서] 이 공지에 응모할까요?\n{n['text']}\n조건: {conds}\n비서 의견: {d.get('fit', '')}\n\n[당신의 작업 노트]\n{notes}\n노트에 있는 사정을 근거로 답하세요.",
                 schema={"type": "object", "additionalProperties": False, "required": ["yes", "why"],
                         "properties": {"yes": {"type": "boolean"}, "why": {"type": "string"}}},
                 fallback=lambda: {"yes": any(w.strip() and w.strip() in n["text"] for w in self.p["interests"].split(",")), "why": "관심 분야 포함 여부(오프라인)"})
@@ -467,8 +471,10 @@ class PeerAgent:
             return {"ok": True, "status": self.ledger.audit(), "head": self.ledger.head(), "length": len(self.ledger.chain)}
         if r["op"] == "verify":  # public: does an entry with this hash exist, and is it sealed by me? (no other content)
             e = next((x for x in self.ledger.chain if x["hash"] == r.get("hash")), None)
+            p = e["payload"] if e else {}
             return {"ok": True, "exists": bool(e), "type": e["type"] if e else None,
-                    "seal_ok": bool(e and verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"]))}
+                    "seal_ok": bool(e and verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"])),
+                    "role": p.get("role"), "call_id": p.get("call_id"), "contractor": p.get("contractor"), "issuer": p.get("issuer")}
         ok = (r.get("reader") in self.readers and abs(time.time() - r.get("ts", 0)) < 60
               and verify(r["reader"], {"op": "read", "ts": r["ts"]}, r.get("sig", "")))
         self.access_log = (self.access_log + [{"ts": time.time(), "reader": alias(r.get("reader", "?" * 6)), "granted": ok}])[-50:]
@@ -545,9 +551,10 @@ class PeerAgent:
         if not first.get("ok"):
             emit("peer", me, f"먼저 등록 실패: {first.get('error')}")
             return
-        if first.get("seal", {}).get("pub") != n.get("recorder_pub"):
+        if first.get("seal", {}).get("pub") != n.get("recorder_pub") or not verify(n["recorder_pub"], first["hash"], first["seal"]["sig"]):
             emit("peer", me, "기록자 서명이 공지에 적힌 기록자와 다릅니다 → 제출 중단")
             return
+        self.receipts = getattr(self, "receipts", []) + [first]  # signed by the recorder: proof that this entry was accepted
         res = await rpc(n["issuer_url"], {"op": "submit_idea", "call_id": n["notice_id"], "idea": idea, "publish_payload": pub_p,
                                           "publish_sig": self.id.sign(pub_p), "share_payload": share_p})
         if not res.get("ok"):
@@ -558,6 +565,8 @@ class PeerAgent:
         if not b.get("ok"):
             emit("peer", me, f"공유 기록 실패: {b.get('error')}")
             return
+        self.receipts.append(b)
+        emit("peer", me, f"기록자 서명 영수증 2건 보관(#{first['seq']}, #{b['seq']}) - 나중에 누락되면 이것으로 증명")
         asyncio.create_task(self.learn(f"'{n['title'][:40]}' 공지에 아이디어 '{idea['title'][:40]}'를 제출했다."))
 
 
