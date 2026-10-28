@@ -1,6 +1,7 @@
 """Hash-chained, signed provenance ledger. Content never goes on-chain, only hashes + pseudonyms + signatures.
 
 Entry types
+  contract signers: issuer + contractor   -> a role (e.g. reviewer) granted for one event; later reviews depend on it
   publish  signer: author               -> first publisher of a content hash wins (priority proof)
   share    signers: provider + consumer -> both agreed that this content changed hands (nonce prevents replay)
   feedback signer: evaluator            -> adopt/reject, only by someone who received that content
@@ -27,10 +28,10 @@ class Collector:
         p = e["type"], e["payload"]
         t, p = p
         return {"publish": [p.get("author")], "share": [p.get("provider"), p.get("consumer")],
-                "feedback": [p.get("evaluator")]}[t]
+                "feedback": [p.get("evaluator")], "contract": [p.get("issuer"), p.get("contractor")]}[t]
 
     def _check(self, e):
-        if e["type"] not in ("publish", "share", "feedback"):
+        if e["type"] not in ("publish", "share", "feedback", "contract"):
             return "unknown type"
         if e["prev"] != self.head():
             return "bad prev hash"
@@ -48,8 +49,14 @@ class Collector:
             return "content already published (first publisher wins)"
         if e["type"] in ("share", "feedback") and ch not in published:
             return "unknown content"
-        if e["type"] == "share" and any(x["type"] == "share" and x["payload"].get("nonce") == p.get("nonce") for x in self.chain):
+        if e["type"] in ("share", "contract") and any(x["type"] == e["type"] and x["payload"].get("nonce") == p.get("nonce") for x in self.chain):
             return "replay (nonce already used)"
+        if e["type"] == "contract" and p.get("role") != "review":
+            return "unsupported role"
+        if e["type"] == "feedback" and p.get("verdict") == "review" and not any(
+                x["type"] == "contract" and x["payload"]["call_id"] == p.get("call_id") and x["payload"]["contractor"] == p["evaluator"]
+                for x in self.chain):
+            return "no review contract for this call"
         if e["type"] == "feedback" and not any(
                 x["type"] == "share" and x["payload"]["content_hash"] == ch and x["payload"]["consumer"] == p["evaluator"]
                 for x in self.chain):

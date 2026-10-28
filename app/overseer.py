@@ -44,7 +44,7 @@ class Overseer:
     @staticmethod
     def rows(chain):
         return [dict(seq=e["seq"], type=e["type"], hash=e["hash"][:10],
-                     who=alias(e["payload"].get("author") or e["payload"].get("provider") or e["payload"].get("evaluator"))) for e in chain]
+                     who=alias(e["payload"].get("author") or e["payload"].get("provider") or e["payload"].get("evaluator") or e["payload"].get("issuer"))) for e in chain]
 
     @staticmethod
     def stats(chain):

@@ -79,14 +79,14 @@ class Broker:
         if r["op"] == "call":
             return await self.call(r)
         if r["op"] == "find":  # context-based lookup of peers, no notification
-            cands = [a for a in self.ads.values() if a["pub"] != r["requester_pub"]]
-            chosen = await self.select(r["text"], cands, 1, 3, "요청에 가장 잘 맞는 사람 1~3명만 고르세요.")
+            cands = [a for a in self.ads.values() if a["pub"] != r["requester_pub"] and a.get("until", 1e18) > time.time()]  # offers expire
+            chosen = await self.select(r["text"], cands, 1, 3, "요청에 가장 잘 맞는 사람 1~3명만 고르세요. 목록의 offers는 그 사람이 공개한 제공 역할입니다.")
             emit("broker", "broker", f"'{r['text'][:30]}' 탐색 → {', '.join(alias(s['pub']) for s in chosen)}")
             return {"ok": True, "peers": [dict(alias=alias(s["pub"]), pub=s["pub"], peer_url=self.ads[s["pub"]]["url"], reason=s["reason"]) for s in chosen]}
         return {"ok": False, "error": "unknown op"}
 
     async def select(self, text, cands, min_n, fb_n, instruction):
-        listing = "\n".join(f"- {a['pub']}: {a['summary']}" for a in cands)
+        listing = "\n".join(f"- {a['pub']}: {a['summary']}" + (f" (공개한 제공 역할: {','.join(a['offers'])})" if a.get("offers") else "") for a in cands)
 
         def fallback():  # character-bigram overlap between the request and each profile
             def bg(s): s = s.replace(" ", ""); return {s[i:i + 2] for i in range(len(s) - 1)}
@@ -124,10 +124,32 @@ class Requester:
         self.calls, self.ideas, self.adopted, self.reviews = {}, {}, set(), {}
         self.app = make_agent_app("requester-me", "the person who posts the idea contest", port, ["submit_idea"], self.handle)
 
+    async def recruit_reviewer(self, call_id, text):
+        """find a reviewer who publicly offers that role, contact them, and sign a role contract on the ledger"""
+        res = await rpc(self.broker_url, {"op": "find", "requester_pub": self.id.pub,
+                                          "text": f"이 공모의 심사자로 필요한 사람(심사 경험, 평가 기준 전문성). 공모: {text}"})
+        for c in res.get("peers", []):
+            p = {"call_id": call_id, "role": "review", "issuer": self.id.pub, "contractor": c["pub"],
+                 "nonce": h(f"{call_id}{c['pub']}{time.time()}".encode())[:12]}
+            emit("contract", "나", f"→ {c['alias']}: 심사자 위촉 제안 (p2p 직접 연결, 공개된 역할을 broker에서 발견)")
+            eng = await rpc(c["peer_url"], {"op": "engage", "call_id": call_id, "role": "review", "text": text, "contract": p}, timeout=120)
+            if not eng.get("ok"):
+                emit("contract", "나", f"{c['alias']} 거절: {str(eng.get('error'))[:60]}")
+                continue
+            rec = await rpc(self.c1, {"op": "record", "type": "contract", "payload": p, "sigs": {self.id.pub: self.id.sign(p), c["pub"]: eng["sig"]}})
+            if rec.get("ok"):
+                self.calls[call_id]["reviewer"] = c
+                emit("contract", "나", f"심사자 계약 체결: {c['alias']} (원장 #{rec['seq']}, 양쪽 서명)")
+                return c
+        emit("contract", "나", "심사자를 구하지 못했습니다")
+        return None
+
     async def post_call(self, text):
         call_id = "call-" + h(f"{text}{time.time()}".encode())[:6]
-        self.calls[call_id] = {"text": text, "ts": time.time(), "sheet": [], "closed": False}
-        emit("request", "나", f"공모 게시 [{call_id}]: {text[:60]}")
+        self.calls[call_id] = {"text": text, "ts": time.time(), "sheet": [], "closed": False, "reviewer": None}
+        emit("request", "나", f"공모 준비 [{call_id}]: {text[:60]}")
+        reviewer = await self.recruit_reviewer(call_id, text)
+        emit("request", "나", f"공모 게시 [{call_id}]" + (f" - 심사자 {reviewer['alias']} 확정" if reviewer else ""))
         res = await rpc(self.broker_url, {"op": "call", "call_id": call_id, "text": text,
                                           "requester_url": self.url, "requester_pub": self.id.pub}, timeout=180)
         self.calls[call_id]["sheet"] = res.get("answer_sheet", [])
@@ -194,10 +216,12 @@ class Requester:
     async def _llm_loop(self, call_id, tools, top):
         """The model picks the next action each step (JSON action protocol, works on any backend); code only executes it."""
         system = (f"당신은 이벤트 진행자(나)의 비서 에이전트입니다. 공모가 마감되었습니다. 목표는 가장 좋은 아이디어 최대 {top}개를 채택하는 것입니다. "
-                  "스스로 평가하지 말고, 먼저 도착한 아이디어를 확인한 뒤 broker를 통해 심사에 능한 peer를 찾아 심사를 요청하고, 그 심사 의견을 근거로 채택하세요. "
+                  "스스로 평가하지 말고, 먼저 도착한 아이디어를 확인한 뒤 이 공모의 계약된 심사자에게 심사를 요청하고(원장에 계약이 있는 심사자만 심사 결과가 기록됩니다), 그 심사 의견을 근거로 채택하세요. "
                   "필요하다고 판단하면 순서를 바꾸거나 다른 peer를 찾아도 됩니다. 한 번에 도구 하나만 고르세요. 쓰지 않는 인자는 빈 문자열로 두세요.\n\n"
                   f"[사용할 수 있는 도구]\n{self.TOOL_HELP}\n\naction에는 도구 이름 또는 finish를 쓰고, thought에 한 줄로 이유를 쓰세요.")
-        messages = [{"role": "user", "content": f"공모 내용: {self.calls[call_id]['text']}\n공모가 마감되었습니다. 시작하세요."}]
+        rv = self.calls[call_id].get("reviewer")
+        info = f"계약된 심사자: peer_url={rv['peer_url']}, peer_pub={rv['pub']}" if rv else "계약된 심사자가 없습니다. discover_peer로 찾으세요."
+        messages = [{"role": "user", "content": f"공모 내용: {self.calls[call_id]['text']}\n{info}\n공모가 마감되었습니다. 시작하세요."}]
         for _ in range(12):
             act = await llm.ask_json(actor="나의 비서", model=llm.AGENT_MODEL, system=system, messages=messages, schema=self.ACTION_SCHEMA,
                                      fallback=lambda: {"action": "finish", "thought": "LLM 응답 없음"}, effort="low")
@@ -216,7 +240,8 @@ class Requester:
     async def _scripted(self, call_id, tools, top):
         """offline stand-in for the agent loop: the same tools in a fixed order"""
         emit("assist", "나의 비서", "기본 절차(고정 순서)로 진행: 심사 peer 탐색 → 심사 요청 → 채택")
-        peers = await tools["discover_peer"]({"need": "공모 아이디어 심사에 능한 사람, 평가 기준과 선별 경험"})
+        rv = self.calls[call_id].get("reviewer")
+        peers = [rv] if rv else await tools["discover_peer"]({"need": "공모 아이디어 심사에 능한 사람, 평가 기준과 선별 경험"})
         if not peers:
             return
         res = await tools["request_review"]({"peer_url": peers[0]["peer_url"], "peer_pub": peers[0]["pub"]})
@@ -229,7 +254,7 @@ class Requester:
         shares = {k: {"provider": self.id.pub, "consumer": peer_pub, "content_hash": k, "terms": "review request",
                       "nonce": h(f"{k}{peer_pub}{time.time()}".encode())[:12]} for k, _ in mine}
         emit("p2p", "나", f"→ {alias(peer_pub)}: 아이디어 {len(mine)}건 심사 요청 (p2p 직접 연결)")
-        res = await rpc(peer_url, {"op": "evaluate_ideas", "call_text": self.calls[call_id]["text"],
+        res = await rpc(peer_url, {"op": "evaluate_ideas", "call_id": call_id, "call_text": self.calls[call_id]["text"],
                                    "ideas": [dict(id=k[:8], **{f: v["idea"][f] for f in ("title", "idea", "first_step", "risk")}) for k, v in mine],
                                    "share_payloads": shares}, timeout=240)
         if not res.get("ok"):
@@ -268,7 +293,8 @@ class PeerAgent:
         self.app = make_agent_app(f"peer-{alias(self.id.pub)}", f"pseudonymous peer {alias(self.id.pub)}", port, ["call_for_ideas"], self.handle)
 
     async def advertise(self):
-        profile = {"summary": f"{self.p['role']}. 관심: {self.p['interests']}", "domain": "ideas"}
+        profile = {"summary": f"{self.p['role']}. 관심: {self.p['interests']}", "domain": "ideas",
+                   "offers": self.p.get("can", []), "until": time.time() + 7 * 86400}  # an open, time-limited offer of roles
         await rpc(self.broker_url, {"op": "advertise", "ad": {"pub": self.id.pub, "url": self.url, "profile": profile,
                                                              "sig": self.id.sign(profile)}})
 
@@ -278,7 +304,24 @@ class PeerAgent:
             return {"ok": True, "ack": True}
         if r["op"] == "evaluate_ideas":
             return await self.review(r)
+        if r["op"] == "engage":
+            return await self.engage(r)
         return {"ok": False, "error": "unknown op"}
+
+    async def engage(self, r):
+        """an event peer asks this peer to take a role (e.g. reviewer) for one event; accepting means signing the contract"""
+        me = alias(self.id.pub)
+        if r["role"] not in self.p.get("can", []) or r["contract"].get("contractor") != self.id.pub:
+            return {"ok": False, "error": "이 역할은 제공하지 않습니다"}
+        d = await llm.ask_json(
+            actor=me, model=llm.AGENT_MODEL, schema={"type": "object", "additionalProperties": False, "required": ["accept", "reason"],
+                                                   "properties": {"accept": {"type": "boolean"}, "reason": {"type": "string"}}},
+            system=f"당신은 '{self.p['role']}'의 비서 에이전트입니다. 이 사원은 심사 역할을 공개적으로 제공하고 있습니다. 위촉 요청이 전문성({self.p['interests']})에 맞으면 수락하세요.",
+            user=f"[위촉 요청]\n역할: {r['role']}\n공모: {r['text']}", fallback=lambda: {"accept": True, "reason": "공개한 역할과 일치"})
+        if not d["accept"]:
+            emit("contract", me, f"위촉 거절: {d['reason'][:80]}")
+            return {"ok": False, "error": d["reason"]}
+        return {"ok": True, "sig": self.id.sign(r["contract"])}
 
     async def review(self, r):
         me = alias(self.id.pub)
@@ -301,7 +344,7 @@ class PeerAgent:
             if rv["id"] in full:
                 comment_hash = h(rv["comment"].encode())  # the comment text stays off the ledger
                 STORE[comment_hash] = {"comment": rv["comment"]}
-                payload = {"evaluator": self.id.pub, "content_hash": full[rv["id"]], "verdict": "review",
+                payload = {"evaluator": self.id.pub, "call_id": r["call_id"], "content_hash": full[rv["id"]], "verdict": "review",
                            "score": float(rv["score"]), "comment_hash": comment_hash}
                 reviews.append({"payload": payload, "sig": self.id.sign(payload), "comment": rv["comment"]})
         return {"ok": True, "receipts": receipts, "reviews": reviews}
@@ -330,17 +373,21 @@ class PeerAgent:
         pub_p = {"author": self.id.pub, "content_hash": content_hash, "call_id": r["call_id"]}
         share_p = {"provider": self.id.pub, "consumer": r["requester_pub"], "content_hash": content_hash,
                    "terms": "idea submission, credit to author", "nonce": h(f"{content_hash}{time.time()}".encode())[:12]}
+        # register priority FIRST: nobody who later sees the idea can be recorded as its first publisher
+        first = await rpc(self.c1, {"op": "record", "type": "publish", "payload": pub_p, "sigs": {self.id.pub: self.id.sign(pub_p)}})
+        if not first.get("ok"):
+            emit("peer", me, f"선등록 실패: {first.get('error')}")
+            return
         res = await rpc(r["requester_url"], {"op": "submit_idea", "call_id": r["call_id"], "idea": idea, "publish_payload": pub_p,
                                              "publish_sig": self.id.sign(pub_p), "share_payload": share_p})
         if not res.get("ok"):
             emit("peer", me, f"요청자가 거절: {res.get('error')}")
             return
-        # 4) prove it: publish (mine) + share (both signatures) on the ledger
-        a = await rpc(self.c1, {"op": "record", "type": "publish", "payload": pub_p, "sigs": {self.id.pub: self.id.sign(pub_p)}})
+        # 4) prove the hand-over: share (both signatures) on the ledger (publish was recorded before sending)
         b = await rpc(self.c1, {"op": "record", "type": "share", "payload": share_p,
                                 "sigs": {self.id.pub: self.id.sign(share_p), r["requester_pub"]: res["receipt_sig"]}})
-        if not (a.get("ok") and b.get("ok")):
-            emit("peer", me, f"원장 기록 실패: {a.get('error')} / {b.get('error')}")
+        if not b.get("ok"):
+            emit("peer", me, f"공유 기록 실패: {b.get('error')}")
 
 
 def build_all(base=9100):
