@@ -20,7 +20,7 @@ h3{margin:0 0 6px;font-size:14px}textarea{width:100%;height:64px;box-sizing:bord
 button{background:#2d6cdf;color:#fff;border:0;border-radius:5px;padding:5px 12px;cursor:pointer;margin:2px}
 button.s{background:#6b7686}button.r{background:#c0392b}
 .ev{font:12px/1.4 ui-monospace,monospace;max-height:300px;overflow:auto}.ev div{border-bottom:1px solid #eef0f3;padding:2px 0}
-.k-p2p{color:#0a7d4b}.k-ledger{color:#7a3db8}.k-broker{color:#b26a00}.k-award{color:#c0392b;font-weight:600}.k-assist{color:#2d6cdf}.k-overseer{color:#c0392b;font-weight:600}.k-review{color:#8a6d00;font-weight:600}
+.k-p2p{color:#0a7d4b}.k-ledger{color:#7a3db8}.k-broker{color:#b26a00}.k-award{color:#c0392b;font-weight:600}.k-assist{color:#2d6cdf}.k-profile{color:#0a7d4b}.k-overseer{color:#c0392b;font-weight:600}.k-review{color:#8a6d00;font-weight:600}
 .idea{border:1px solid #dde1e7;border-radius:6px;padding:6px 8px;margin:6px 0}.idea.ad{border-color:#c0392b;background:#fff6f5}
 table{border-collapse:collapse;width:100%;font-size:12px}td,th{border-bottom:1px solid #eef0f3;padding:2px 4px;text-align:left}
 .wide{grid-column:1/3}.mono{font-family:ui-monospace,monospace}
@@ -36,7 +36,8 @@ table{border-collapse:collapse;width:100%;font-size:12px}td,th{border-bottom:1px
 <section><h3>③ 도착한 아이디어 (p2p 직접 전달)</h3><div id=ideas></div></section>
 <section><h3>④ 증명 원장 (collector-1, 내용 없이 해시·가명·서명)</h3><div id=ledger style="max-height:260px;overflow:auto"></div></section>
 <section class=wide><h3>⑤ 절대자 peer의 통계 <small id=ovr></small> <small>(원장 열람 권한을 가진 읽기 전용 peer. 내용·실명은 못 봄)</small></h3><div id=stats></div></section>
-<section><h3>⑥ 감사 · 접근 통제</h3><div id=contrib></div><hr>
+<section class=wide><h3>⑥ 피어의 자기소개 <small>(각 peer의 작업 영역을 비서가 자동 요약해 게시하고, 경험이 쌓이면 스스로 갱신. 사람이 편집할 수도 있으나 시연은 자동)</small></h3><div id=profiles style="max-height:220px;overflow:auto"></div></section>
+<section><h3>⑦ 감사 · 접근 통제</h3><div id=contrib></div><hr>
 <button onclick="audit()">감사: 두 수집가 검증</button>
 <button class=s onclick="intr()">권한 없는 peer의 열람 시도</button><div id=introut></div>
 <button class=r onclick="tamper()">원장 변조 시연</button>
@@ -65,6 +66,7 @@ $('stats').innerHTML=`<table><tr><td>원장 항목 <b>${st.entries}</b> (${Objec
 <div><b>기여 상위</b><table><tr><th>가명<th>받은 사람<th>채택</tr>${st.contribution.slice(0,6).map(c=>`<tr><td class=mono>${c.who}<td>${c.received_by}<td>${c.adopted}`).join('')}</table></div>
 <div><b>공유 흐름 상위</b><table>${st.top_flows.map(f=>`<tr><td class=mono>${f.frm} → ${f.to}<td>${f.n}`).join('')}</table></div>
 <div><b>무결성</b><br>collector-1: ${ig.integrity?'':''}${ig['collector-1']}<br>collector-2: ${ig['collector-2']}<br>${ig.agree?'✅ 두 수집가 일치':'⚠ 불일치/변조 (diff seq '+ig.first_diff+')'}</div></div>`}
+$('profiles').innerHTML='<table><tr><th>가명<th>v<th>역할<th>게시된 자기 요약</tr>'+(s.profiles||[]).map(p=>`<tr><td class=mono>${p.who}<td>${p.ver}<td>${p.offers.join(',')}<td>${p.summary}`).join('')+'</table>';
 $('contrib').innerHTML=(s.access||[]).map(a=>`<div class=mono>${a.name}: ${a.reader} 열람 ${a.granted?'허용':'<b>거부</b>'}</div>`).join('')}
 setInterval(tick,1500);tick();
 </script>"""
@@ -87,6 +89,7 @@ def build_web(c1, c2, broker, me, peers, overseer):
         return JSONResponse(dict(live=llm.live(), model=llm.describe(), peers=len(broker.ads), ideas=ideas,
                                  ledger=snap.get("ledger", []), stats=snap.get("stats"), integrity=snap.get("integrity"),
                                  overseer=alias(overseer.id.pub), access=[dict(c.col.name and {"name": c.col.name}, **a) for c in (c1, c2) for a in c.access_log[-3:]],
+                                 profiles=[dict(who=alias(a["pub"]), ver=a.get("ver", 1), summary=a["summary"], offers=a.get("offers", [])) for a in broker.ads.values()],
                                  sheet=(call or {}).get("sheet", []), events=EVENTS[-120:]))
 
     async def body(r):

@@ -73,8 +73,9 @@ class Broker:
             ad = r["ad"]
             if not verify(ad["pub"], ad["profile"], ad["sig"]):
                 return {"ok": False, "error": "bad signature"}
+            known = ad["pub"] in self.ads
             self.ads[ad["pub"]] = dict(ad["profile"], pub=ad["pub"], url=ad["url"])
-            emit("broker", "broker", f"{alias(ad['pub'])} 노출 등록: {ad['profile']['summary'][:50]}")
+            emit("broker", "broker", f"{alias(ad['pub'])} 프로필 {'갱신' if known else '등록'}(v{ad['profile'].get('ver', 1)})")
             return {"ok": True}
         if r["op"] == "call":
             return await self.call(r)
@@ -290,13 +291,34 @@ class PeerAgent:
     def __init__(self, persona, port, broker_url, c1_url):
         self.p, self.id, self.port, self.broker_url, self.c1 = persona, Identity(), port, broker_url, c1_url
         self.url = f"http://127.0.0.1:{port}"
+        self.workspace, self.version = list(persona["notes"]), 0  # working area: knowledge and experience that accumulate
         self.app = make_agent_app(f"peer-{alias(self.id.pub)}", f"pseudonymous peer {alias(self.id.pub)}", port, ["call_for_ideas"], self.handle)
 
     async def advertise(self):
-        profile = {"summary": f"{self.p['role']}. 관심: {self.p['interests']}", "domain": "ideas",
-                   "offers": self.p.get("can", []), "until": time.time() + 7 * 86400}  # an open, time-limited offer of roles
+        """the secretary summarizes the working area by itself and (re)publishes it to the broker; no human edits needed"""
+        me = alias(self.id.pub)
+        notes = "\n".join(f"- {n}" for n in self.workspace[-12:])
+        d = await llm.ask_json(
+            actor=me, model=llm.AGENT_MODEL, user=f"[작업 노트]\n{notes}", fallback=lambda: {"summary": " ".join(dict.fromkeys(self.workspace[:1] + self.workspace[-2:]))},
+            schema={"type": "object", "additionalProperties": False, "required": ["summary"], "properties": {"summary": {"type": "string"}}},
+            system="당신은 사원의 비서 에이전트입니다. 사원의 작업 영역(지식과 경험 노트)을 읽고, 다른 peer들이 검색해서 연락할 수 있도록 이 사원의 정체와 할 수 있는 일을 "
+                   "3문장 이내로 요약하세요. 노트에 없는 경력이나 능력은 만들지 말고, 실명은 쓰지 마세요. 심사 원칙처럼 일하는 방식이 있으면 포함하세요.")
+        self.version += 1
+        profile = {"summary": d["summary"], "domain": "ideas", "offers": self.p.get("can", []),
+                   "until": time.time() + 7 * 86400, "ver": self.version}  # an open, time-limited offer of roles
+        emit("profile", me, f"자기 요약 게시(v{self.version}): {d['summary'][:100]}")
         await rpc(self.broker_url, {"op": "advertise", "ad": {"pub": self.id.pub, "url": self.url, "profile": profile,
                                                              "sig": self.id.sign(profile)}})
+
+    async def learn(self, event: str):
+        """experience becomes a note in the working area, then the public summary is refreshed automatically"""
+        d = await llm.ask_json(
+            actor=alias(self.id.pub), model=llm.AGENT_MODEL, user=f"[방금 있었던 일]\n{event}",
+            fallback=lambda: {"note": event},
+            schema={"type": "object", "additionalProperties": False, "required": ["note"], "properties": {"note": {"type": "string"}}},
+            system="당신은 사원의 비서 에이전트입니다. 방금 있었던 일에서 앞으로 도움이 될 경험이나 원칙을 사원의 작업 노트에 남길 한 줄로 정리하세요. 실명은 쓰지 마세요.")
+        self.workspace.append(d["note"])
+        await self.advertise()
 
     async def handle(self, r):
         if r["op"] == "call_for_ideas":
@@ -337,6 +359,10 @@ class PeerAgent:
                 "type": "object", "additionalProperties": False, "required": ["id", "score", "comment"],
                 "properties": {"id": {"type": "string"}, "score": {"type": "number"}, "comment": {"type": "string"}}}}}},
             fallback=lambda: offline_review(r["ideas"]))
+        scores = [float(x["score"]) for x in d["reviews"]]
+        if scores:
+            asyncio.create_task(self.learn(f"사내 공모('{r['call_text'][:40]}')의 심사자로 아이디어 {len(scores)}건을 심사했다. 점수 범위 {min(scores)}~{max(scores)}. "
+                                           "이번 심사에서 얻은 심사 원칙이나 교훈을 정리한다."))
         full = {k[:8]: k for k in r["share_payloads"]}
         receipts = {k: self.id.sign(p) for k, p in r["share_payloads"].items()}
         reviews = []
@@ -388,6 +414,8 @@ class PeerAgent:
                                 "sigs": {self.id.pub: self.id.sign(share_p), r["requester_pub"]: res["receipt_sig"]}})
         if not b.get("ok"):
             emit("peer", me, f"공유 기록 실패: {b.get('error')}")
+            return
+        asyncio.create_task(self.learn(f"사내 공모('{r['text'][:40]}')에 아이디어 '{idea['title'][:40]}'를 제출했다."))
 
 
 def build_all(base=9100):
