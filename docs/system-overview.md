@@ -92,7 +92,7 @@ sequenceDiagram
     participant B as broker
     participant E as 이벤트 peer (나)
     participant A as 응모자 peer
-    participant L as 수집가 ×2
+    participant L as 기록자 peer (recorder)
 
     R->>B: advertise (작업 영역 요약, offers=review, until)
     A->>B: advertise (작업 영역 요약)
