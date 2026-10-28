@@ -26,10 +26,21 @@ class Broker:
     It never sees an idea or a ledger entry. Matching that needs judgement is done by a peer in the "recommend" role,
     using this search. It has its own key and signs nothing but what it returns."""
 
-    def __init__(self, port):
-        self.ads, self.notices, self.port, self.id = {}, {}, port, Identity()
-        self.app = make_agent_app("broker", "bulletin board and search (mechanical, seed address)", port,
+    def __init__(self, port, name="broker"):
+        self.ads, self.notices, self.port, self.id, self.name = {}, {}, port, Identity(), name
+        self.url, self.neighbors = f"http://127.0.0.1:{port}", []
+        self.app = make_agent_app(name, "bulletin board and search (mechanical, no AI)", port,
                                   ["advertise", "post_notice", "close_notice", "search_notices", "list_notices", "find"], self.handle)
+
+    async def _share(self, r):
+        """pass a signed notice post/close to the other brokers once; they verify the signature themselves"""
+        if r.get("shared"):
+            return
+        for url in self.neighbors:
+            try:
+                await rpc(url, dict(r, shared=True), timeout=10)
+            except Exception:
+                emit("broker", self.name, f"{url} 공유 실패 (그 broker가 멈춰도 나머지는 계속 동작)")
 
     def _active(self, coll):
         now = time.time()
@@ -48,7 +59,7 @@ class Broker:
                 return {"ok": False, "error": "bad signature"}
             known = ad["pub"] in self.ads
             self.ads[ad["pub"]] = dict(ad["profile"], pub=ad["pub"], url=ad["url"])
-            emit("broker", "broker", f"{alias(ad['pub'])} 프로필 {'갱신' if known else '등록'}(v{ad['profile'].get('ver', 1)})"
+            emit("broker", self.name, f"{alias(ad['pub'])} 프로필 {'갱신' if known else '등록'}(v{ad['profile'].get('ver', 1)})"
                  + (f" 역할 공개: {','.join(ad['profile']['offers'])}" if ad["profile"].get("offers") else ""))
             return {"ok": True}
         if op == "post_notice":
@@ -58,13 +69,17 @@ class Broker:
             self.notices[n["notice_id"]] = n
             target = ", ".join(f"{k}:{v}" for k, v in n.get("audience", {}).items()) or "전체"
             seen_by = sum(self._visible(n, p) for p in self.ads)
-            emit("broker", "broker", f"공지 게시 [{n['notice_id']}] '{n['title'][:30]}' 대상 [{target}] → 라벨이 맞는 프로필 {seen_by}명에게 보임 (마감 {int(n['until'] - time.time())}초 후)")
+            emit("broker", self.name, (f"공지 공유 받음 [{n['notice_id']}]" if r.get("shared") else f"공지 게시 [{n['notice_id']}] '{n['title'][:30]}'")
+                 + f" 대상 [{target}] → 이 broker의 peer 중 라벨이 맞는 {seen_by}명에게 보임")
+            await self._share(r)
             return {"ok": True}
         if op == "close_notice":
             n = self.notices.get(r["notice_id"])
             if n and verify(n["issuer_pub"], {"close": r["notice_id"]}, r["sig"]):
                 n["until"] = time.time()
-                emit("broker", "broker", f"공지 마감 [{r['notice_id']}]")
+                if not r.get("shared"):
+                    emit("broker", self.name, f"공지 마감 [{r['notice_id']}] → 다른 broker에 공유")
+                await self._share(r)
                 return {"ok": True}
             return {"ok": False, "error": "not the issuer"}
         if op == "list_notices":  # what this viewer is allowed to see
@@ -80,8 +95,18 @@ class Broker:
                      and all(f"{k}:{v}" in a.get("labels", []) for k, v in aud.items())]
             hits = rank(r["text"], [f"{a['summary']} {' '.join(a.get('offers', []))}" for a in cands])
             peers = [dict(alias=alias(cands[i]["pub"]), pub=cands[i]["pub"], peer_url=cands[i]["url"], offers=cands[i].get("offers", []),
-                          summary=cands[i]["summary"], score=sc) for i, sc in hits[:r.get("k", 3)]]
-            emit("broker", "broker", f"검색 '{r['text'][:24]}'{' (역할 ' + r['role'] + ')' if r.get('role') else ''} → {', '.join(p['alias'] for p in peers) or '없음'}")
+                          summary=cands[i]["summary"], score=sc, broker=self.name) for i, sc in hits[:r.get("k", 3)]]
+            if not r.get("shared"):  # profiles live on each peer's primary broker: ask the others too, merge by score
+                for url in self.neighbors:
+                    try:
+                        peers += (await rpc(url, dict(r, shared=True), timeout=10)).get("peers", [])
+                    except Exception:
+                        pass
+                peers = sorted(peers, key=lambda p: -p["score"])[:r.get("k", 3)]
+            else:
+                return {"ok": True, "peers": peers}
+            emit("broker", self.name, f"검색 '{r['text'][:24]}'{' (역할 ' + r['role'] + ')' if r.get('role') else ''} → 3곳에 물어 합침: "
+                 + (", ".join(f"{p['alias']}@{p['broker']}" for p in peers) or "없음"))
             return {"ok": True, "peers": peers}
         return {"ok": False, "error": "unknown op"}
 
@@ -536,12 +561,15 @@ class PeerAgent:
         asyncio.create_task(self.learn(f"'{n['title'][:40]}' 공지에 아이디어 '{idea['title'][:40]}'를 제출했다."))
 
 
-def build_all(base=9100):
+def build_all(base=9100, n_brokers=3):
+    """three independent brokers; every peer has one primary broker (3~4 peers each). Notices are shared between
+    brokers, profiles stay on the primary broker and searches ask all brokers."""
     from .overseer import Overseer
     overseer = Overseer()
-    broker = Broker(base + 110)
-    broker_url = f"http://127.0.0.1:{base + 110}"
-    me = Requester(base + 200, broker_url)
-    peers = [PeerAgent(p, base + 1 + i, broker_url, readers=[overseer.id.pub]) for i, p in enumerate(PERSONAS)]
-    overseer.broker_url = broker_url
-    return broker, me, peers, overseer
+    brokers = [Broker(base + 110 + i, name=f"broker-{'ABC'[i]}") for i in range(n_brokers)]
+    for b in brokers:
+        b.neighbors = [o.url for o in brokers if o is not b]
+    me = Requester(base + 200, brokers[0].url)
+    peers = [PeerAgent(p, base + 1 + i, brokers[i % n_brokers].url, readers=[overseer.id.pub]) for i, p in enumerate(PERSONAS)]
+    overseer.broker_url = brokers[-1].url
+    return brokers, me, peers, overseer

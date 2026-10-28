@@ -54,7 +54,7 @@ async function tamper(){await post('/api/tamper',{});audit()}
 async function reid(){const r=await (await fetch('/api/reidentify?reason='+encodeURIComponent($('reason').value))).json();$('reidout').innerHTML=r.error?r.error:r.map(x=>x.alias+' = '+x.name).join('<br>')}
 async function tick(){const s=await (await fetch('/api/state')).json();
 $('mode').textContent=s.live?'LLM: '+s.model:'오프라인(템플릿)';$('mode').className='tag'+(s.live?'':' off');
-$('cnt').textContent='피어 '+s.peers+'명 · 아이디어 '+s.ideas.length+'건 · 원장 '+s.ledger.length+'건';
+$('cnt').textContent='피어 '+s.peers+'명 · '+(s.brokers||[]).map(b=>b.name+'(peer '+b.profiles+', 공지 '+b.notices+')').join(' · ')+' · 아이디어 '+s.ideas.length+'건 · 원장 '+s.ledger.length+'건';
 $('ev').innerHTML=s.events.map(e=>`<div class=k-${e.kind}>${new Date(e.ts*1000).toLocaleTimeString()} [${e.kind}] ${e.actor}: ${e.text}</div>`).join('');$('ev').scrollTop=1e9;
 $('sheet').innerHTML=(s.notices||[]).map(n=>' 공지 '+n.id+(n.left>0?' (마감 '+n.left+'초 후)':' (마감됨)')).join('');
 $('ideas').innerHTML=s.ideas.map(i=>`<div class="idea ${i.adopted?'ad':''}"><b>${i.title}</b> <span class=mono>${i.author}</span>${i.adopted?' ★채택':''}${i.review?` <span class=tag>심사 ${i.review.score}점</span>`:''}<br>${i.idea}<br><small>첫 단계: ${i.first_step} / 위험: ${i.risk}</small>${i.review?'<br><small>심사 의견('+i.review.judge+'): '+i.review.comment+'</small>':''}${i.adopted?'<br><small>채택 이유: '+i.reason+'</small>':`<br><button class=s onclick="post('/api/adopt',{h:'${i.hash}'})">채택</button>`}</div>`).join('')||'아직 없음';
@@ -66,13 +66,14 @@ $('stats').innerHTML=`<table><tr><td>원장 항목 <b>${st.entries}</b> (${Objec
 <div><b>기여 상위</b> <small>(역할 수행도 기여)</small><table><tr><th>가명<th>받은 사람<th>채택<th>역할</tr>${st.contribution.slice(0,8).map(c=>`<tr><td class=mono>${c.who}<td>${c.received_by}<td>${c.adopted}<td>${c.roles}`).join('')}</table></div>
 <div><b>공유 흐름 상위</b><table>${st.top_flows.map(f=>`<tr><td class=mono>${f.frm} → ${f.to}<td>${f.n}`).join('')}</table></div>
 <div><b>무결성 (절대자가 직접 검증)</b><br>${(ig.recorders||[]).map(x=>'기록자 '+x.who+': '+x.status+' ('+x.length+'건)').join('<br>')}<br>${ig.agree?'✅ 해시 체인·서명·기록자 서명 정상':'⚠ 변조 또는 불일치'}</div></div>`}
-$('profiles').innerHTML='<table><tr><th>가명<th>v<th>역할<th>게시된 자기 요약</tr>'+(s.profiles||[]).map(p=>`<tr><td class=mono>${p.who}<td>${p.ver}<td>${p.offers.join(',')}<td>${p.summary}`).join('')+'</table>';
+$('profiles').innerHTML='<table><tr><th>가명<th>기본 broker<th>v<th>역할<th>게시된 자기 요약</tr>'+(s.profiles||[]).map(p=>`<tr><td class=mono>${p.who}<td>${p.broker}<td>${p.ver}<td>${p.offers.join(',')}<td>${p.summary}`).join('')+'</table>';
 $('contrib').innerHTML=(s.access||[]).map(a=>`<div class=mono>${a.name}: ${a.reader} 열람 ${a.granted?'허용':'<b>거부</b>'}</div>`).join('')}
 setInterval(tick,1500);tick();
 </script>"""
 
 
-def build_web(broker, me, peers, overseer):
+def build_web(brokers, me, peers, overseer):
+    broker = brokers[0]
     recorders = [p for p in peers if "record" in p.can]
     reid_log = []
     names = {p.id.pub: p.p["name"] for p in peers}
@@ -87,11 +88,12 @@ def build_web(broker, me, peers, overseer):
                       review=me.reviews.get(k))
                  for k, v in me.ideas.items() if v["call_id"] == cid]
         snap = await overseer.snapshot()  # the dashboard sees the ledger only through the overseer peer
-        return JSONResponse(dict(live=llm.live(), model=llm.describe(), peers=len(broker.ads), ideas=ideas,
+        return JSONResponse(dict(live=llm.live(), model=llm.describe(), peers=sum(len(b.ads) for b in brokers), ideas=ideas,
                                  ledger=snap.get("ledger", []), stats=snap.get("stats"), integrity=snap.get("integrity"),
                                  overseer=alias(overseer.id.pub), access=[dict(name=alias(c.id.pub), **a) for c in recorders for a in c.access_log[-3:]],
-                                 profiles=[dict(who=alias(a["pub"]), ver=a.get("ver", 1), summary=a["summary"], offers=a.get("offers", [])) for a in broker.ads.values()],
+                                 profiles=[dict(who=alias(a["pub"]), ver=a.get("ver", 1), summary=a["summary"], offers=a.get("offers", []), broker=b.name) for b in brokers for a in b.ads.values()],
                                  notices=[dict(id=n["notice_id"], title=n["title"], left=int(n["until"] - time.time())) for n in broker.notices.values()],
+                                 brokers=[dict(name=b.name, profiles=len(b.ads), notices=len(b.notices)) for b in brokers],
                                  sheet=(call or {}).get("sheet", []), events=EVENTS[-120:]))
 
     async def body(r):
