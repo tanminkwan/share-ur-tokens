@@ -151,6 +151,16 @@ class Requester:
         return {"ok": True, "receipt_sig": self.id.sign(share_payload)}
 
     # ---- the requester's assistant: an agent that decides the post-deadline flow itself ----
+    TOOL_HELP = (
+        "- list_ideas: 도착한 아이디어 목록(작성자 정보 없음)을 본다.\n"
+        "- discover_peer(need): broker에게 맥락으로 peer를 찾아 달라고 한다. 예: need='공모 아이디어 심사에 능한 사람'. peer_url, pub이 담긴 후보를 돌려준다.\n"
+        "- request_review(peer_url, peer_pub): 찾은 peer에게 도착한 모든 아이디어의 심사를 p2p로 요청한다. 점수와 의견을 돌려준다.\n"
+        "- adopt(id, reason): 아이디어 하나를 채택하고 원장에 기록한다. id는 list_ideas의 id.\n"
+        "- finish: 모든 일을 마쳤을 때.")
+    ACTION_SCHEMA = {"type": "object", "additionalProperties": False,
+                     "required": ["thought", "action", "need", "peer_url", "peer_pub", "id", "reason"],
+                     "properties": {k: {"type": "string"} for k in ("thought", "action", "need", "peer_url", "peer_pub", "id", "reason")}}
+
     def tools(self, call_id):
         mine = lambda: [(k, v) for k, v in self.ideas.items() if v["call_id"] == call_id]
 
@@ -170,19 +180,6 @@ class Requester:
 
         return {"list_ideas": list_ideas, "discover_peer": discover_peer, "request_review": request_review, "adopt": adopt}
 
-    TOOL_DEFS = [
-        {"name": "list_ideas", "description": "이번 공모에 도착한 아이디어 목록(작성자 정보 없음)을 본다.",
-         "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
-        {"name": "discover_peer", "description": "broker에게 맥락으로 peer를 찾아 달라고 요청한다. 예: '공모 아이디어 심사에 능한 사람'. peer_url, pub이 담긴 후보를 돌려준다.",
-         "input_schema": {"type": "object", "properties": {"need": {"type": "string"}}, "required": ["need"], "additionalProperties": False}},
-        {"name": "request_review", "description": "찾은 peer에게 도착한 모든 아이디어의 심사를 p2p로 요청한다. 점수와 심사 의견을 돌려준다.",
-         "input_schema": {"type": "object", "properties": {"peer_url": {"type": "string"}, "peer_pub": {"type": "string"}},
-                          "required": ["peer_url", "peer_pub"], "additionalProperties": False}},
-        {"name": "adopt", "description": "아이디어 하나를 채택하고 원장에 기록한다. id는 list_ideas의 id.",
-         "input_schema": {"type": "object", "properties": {"id": {"type": "string"}, "reason": {"type": "string"}},
-                          "required": ["id", "reason"], "additionalProperties": False}},
-    ]
-
     async def agent_run(self, call_id, top=3):
         self.calls[call_id]["closed"] = True
         tools = self.tools(call_id)
@@ -195,31 +192,30 @@ class Requester:
             await self._scripted(call_id, tools, top)
 
     async def _llm_loop(self, call_id, tools, top):
-        client = llm._get_client()
-        text = self.calls[call_id]["text"]
-        messages = [{"role": "user", "content": f"공모를 마감했습니다. 공모 내용: {text}"}]
+        """The model picks the next action each step (JSON action protocol, works on any backend); code only executes it."""
         system = (f"당신은 이벤트 진행자(나)의 비서 에이전트입니다. 공모가 마감되었습니다. 목표는 가장 좋은 아이디어 최대 {top}개를 채택하는 것입니다. "
                   "스스로 평가하지 말고, 먼저 도착한 아이디어를 확인한 뒤 broker를 통해 심사에 능한 peer를 찾아 심사를 요청하고, 그 심사 의견을 근거로 채택하세요. "
-                  "필요하다고 판단하면 순서를 바꾸거나 다른 peer를 찾아도 됩니다. 끝나면 한 문단으로 결과를 요약하세요.")
+                  "필요하다고 판단하면 순서를 바꾸거나 다른 peer를 찾아도 됩니다. 한 번에 도구 하나만 고르세요. 쓰지 않는 인자는 빈 문자열로 두세요.\n\n"
+                  f"[사용할 수 있는 도구]\n{self.TOOL_HELP}\n\naction에는 도구 이름 또는 finish를 쓰고, thought에 한 줄로 이유를 쓰세요.")
+        messages = [{"role": "user", "content": f"공모 내용: {self.calls[call_id]['text']}\n공모가 마감되었습니다. 시작하세요."}]
         for _ in range(12):
-            resp = await client.messages.create(model=llm.AGENT_MODEL, max_tokens=8000, system=system, tools=self.TOOL_DEFS,
-                                                messages=messages, output_config={"effort": "low"})
-            messages.append({"role": "assistant", "content": resp.content})
-            if resp.stop_reason != "tool_use":
-                summary = "".join(b.text for b in resp.content if b.type == "text")
-                emit("assist", "나의 비서", f"완료: {summary[:200]}")
+            act = await llm.ask_json(actor="나의 비서", model=llm.AGENT_MODEL, system=system, messages=messages, schema=self.ACTION_SCHEMA,
+                                     fallback=lambda: {"action": "finish", "thought": "LLM 응답 없음"}, effort="low")
+            name = act.get("action", "finish")
+            messages.append({"role": "assistant", "content": json.dumps(act, ensure_ascii=False)})
+            if name == "finish" or name not in tools:
+                emit("assist", "나의 비서", f"종료: {act.get('thought', '')[:120]}")
                 return
-            results = []
-            for b in resp.content:
-                if b.type == "tool_use":
-                    emit("assist", "나의 비서", f"도구 호출 {b.name}({json.dumps(b.input, ensure_ascii=False)[:80]})")
-                    out = await tools[b.name](b.input)
-                    results.append({"type": "tool_result", "tool_use_id": b.id, "content": json.dumps(out, ensure_ascii=False)})
-            messages.append({"role": "user", "content": results})
+            emit("assist", "나의 비서", f"{name} - {act.get('thought', '')[:90]}")
+            try:
+                out = await tools[name](act)
+            except Exception as e:
+                out = {"error": f"{type(e).__name__}: {e}"}
+            messages.append({"role": "user", "content": "[도구 결과] " + json.dumps(out, ensure_ascii=False)[:6000]})
 
     async def _scripted(self, call_id, tools, top):
         """offline stand-in for the agent loop: the same tools in a fixed order"""
-        emit("assist", "나의 비서", "(오프라인) 기본 절차: 심사 peer 탐색 → 심사 요청 → 채택")
+        emit("assist", "나의 비서", "기본 절차(고정 순서)로 진행: 심사 peer 탐색 → 심사 요청 → 채택")
         peers = await tools["discover_peer"]({"need": "공모 아이디어 심사에 능한 사람, 평가 기준과 선별 경험"})
         if not peers:
             return

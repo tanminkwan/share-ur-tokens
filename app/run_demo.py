@@ -24,7 +24,7 @@ async def main(args):
     for p in peers:
         await serve(p.app, p.port)
     await asyncio.gather(*(p.advertise() for p in peers))
-    emit("system", "demo", f"{len(peers)}명의 피어, broker 1, 수집가 2 기동. LLM={'Claude '+llm.AGENT_MODEL if llm.live() else '오프라인 템플릿'}")
+    emit("system", "demo", f"{len(peers)}명의 피어, broker 1, 수집가 2 기동. LLM={llm.describe()}")
     await serve(build_web(c1, c2, broker, me, peers, overseer), args.port)
     emit("system", "demo", f"대시보드: http://127.0.0.1:{args.port}")
 

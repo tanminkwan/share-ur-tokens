@@ -32,7 +32,7 @@
 | 영역 | 선택 | 검증 |
 |---|---|---|
 | 에이전트 통신 | A2A 1.0, JSON-RPC, `a2a-sdk[http-server]` 1.3.0. 모든 노드가 Agent Card(`/.well-known/agent-card.json`)를 공개하고 서로 직접 호출 | ✅ |
-| LLM | Claude API(`anthropic`). 에이전트용 `SUT_AGENT_MODEL`, 사원 페르소나용 `SUT_PERSONA_MODEL`, 기본값 `claude-opus-5-5`(더 빠르고 싼 `claude-haiku-5-5` 등으로 교체 가능). 구조화 출력(JSON 스키마)과 요청자 비서의 도구 호출 루프 사용 | ❓ **API 키 없이 작성해 실제 호출은 미검증** |
+| LLM | 두 백엔드를 환경변수로 선택: **OpenAI 호환 엔드포인트**(`SUT_LLM_BASE_URL`, `SUT_LLM_API_KEY`; 현재 삼성SDS클라우드 Simple AI Inference, 기본 모델 `openai/gpt-oss-120b`) 또는 **Claude API**(`ANTHROPIC_API_KEY`, 기본 `claude-opus-5-5`). 에이전트용 `SUT_AGENT_MODEL`, 사원 페르소나용 `SUT_PERSONA_MODEL`. JSON 스키마 출력, 요청자 비서는 "다음 행동을 JSON으로 고르는" 루프(어느 백엔드에서나 동작) | ✅ 호환 엔드포인트(`gpt-oss-120b`)로 실행 확인. Claude 경로는 ❓ 키가 없어 미검증 |
 | 서명·해시 | `cryptography` ed25519, SHA-256 | ✅ |
 | 원장 | 해시 체인 append-only. collector-1이 순서를 매기고, collector-2가 같은 항목을 독립 검증해 따로 저장 | ✅ (메모리. 영속화 ❓) |
 | 대시보드 | Starlette 단일 페이지(1.5초 폴링) | ✅ API 스모크 테스트, 화면 육안 확인은 ❓ |
@@ -132,6 +132,7 @@ SUT_OFFLINE=1 ...                                             # 키가 있어도
 | 선등록(중복 발행 거절), 재전송 거절, 서명 재검증 감사 | ✅ | `proto/spike_ledger.py` |
 | 웹 API(게시, 마감, 감사, 재식별 거부) | ✅ | curl 스모크 테스트 |
 | 절대자 peer: 허용된 키만 열람, 권한 없는 열람 거부·기록, 통계, 변조 시 무결성 경고 | ✅ | 실행과 API 테스트 |
-| **Claude를 쓰는 경로**(페르소나 아이디어, 비서 판단, broker 매칭, 요청자 비서의 도구 호출 루프, 구조화 출력) | ❓ | API 키 없이 작성. 실패하면 오프라인 폴백으로 대체되지만 실제 호출은 한 번도 실행하지 못함 |
-| 대시보드 화면 육안 확인, 11개 동시 LLM 호출의 지연·한도 | ❓ | |
+| **실제 LLM(`gpt-oss-120b`)으로 전 흐름**: broker 매칭(7명 선택), 비서 판단(4명 거름), 페르소나 아이디어 3건, 심사 peer 점수, 채택 3건, 원장 15건 일치, 절대자 통계 | ✅ | 1회 실행, 약 52초 |
+| **요청자 비서의 자율 행동 루프** | ⚠ 불안정 | 실제 LLM에서 첫 행동을 고르지 못하고 종료 → 고정 순서로 대체되어 완료. 프롬프트·모델 조정 필요 |
+| Claude 경로(키 없음), 대시보드 화면 육안 확인, 여러 번 반복 실행의 안정성 | ❓ | |
 | 서로 다른 PC·서버 간 호출, 원장 영속화, 항목 삭제·절단 탐지 | ❓ | |

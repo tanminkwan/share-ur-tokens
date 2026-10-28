@@ -52,7 +52,7 @@ async function intr(){const r=await (await fetch('/api/intruder',{method:'POST'}
 async function tamper(){await post('/api/tamper',{});audit()}
 async function reid(){const r=await (await fetch('/api/reidentify?reason='+encodeURIComponent($('reason').value))).json();$('reidout').innerHTML=r.error?r.error:r.map(x=>x.alias+' = '+x.name).join('<br>')}
 async function tick(){const s=await (await fetch('/api/state')).json();
-$('mode').textContent=s.live?'Claude 연결: '+s.model:'오프라인(템플릿)';$('mode').className='tag'+(s.live?'':' off');
+$('mode').textContent=s.live?'LLM: '+s.model:'오프라인(템플릿)';$('mode').className='tag'+(s.live?'':' off');
 $('cnt').textContent='피어 '+s.peers+'명 · 아이디어 '+s.ideas.length+'건 · 원장 '+s.ledger.length+'건';
 $('ev').innerHTML=s.events.map(e=>`<div class=k-${e.kind}>${new Date(e.ts*1000).toLocaleTimeString()} [${e.kind}] ${e.actor}: ${e.text}</div>`).join('');$('ev').scrollTop=1e9;
 $('sheet').innerHTML=s.sheet.length?' 전달된 피어 '+s.sheet.length+'명 (broker 답변지)':'';
@@ -84,7 +84,7 @@ def build_web(c1, c2, broker, me, peers, overseer):
                       review=me.reviews.get(k))
                  for k, v in me.ideas.items() if v["call_id"] == cid]
         snap = await overseer.snapshot()  # the dashboard sees the ledger only through the overseer peer
-        return JSONResponse(dict(live=llm.live(), model=llm.AGENT_MODEL, peers=len(broker.ads), ideas=ideas,
+        return JSONResponse(dict(live=llm.live(), model=llm.describe(), peers=len(broker.ads), ideas=ideas,
                                  ledger=snap.get("ledger", []), stats=snap.get("stats"), integrity=snap.get("integrity"),
                                  overseer=alias(overseer.id.pub), access=[dict(c.col.name and {"name": c.col.name}, **a) for c in (c1, c2) for a in c.access_log[-3:]],
                                  sheet=(call or {}).get("sheet", []), events=EVENTS[-120:]))
