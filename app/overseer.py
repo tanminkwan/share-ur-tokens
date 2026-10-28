@@ -48,9 +48,11 @@ class Overseer:
             self._alerted = True
             emit("overseer", "절대자", f"원장 변조/불일치 탐지: {integrity}")
         chain = copies[0][1]
-        board = await rpc(self.broker_url, {"op": "list_profiles"})
+        profiles = []
+        for url in getattr(self, "board_urls", [self.broker_url]):  # both peer groups
+            profiles += (await rpc(url, {"op": "list_profiles"})).get("profiles", [])
         snap = {"integrity": integrity, "ledger": self.rows(chain), "stats": self.stats(chain),
-                "peers": self.per_peer(chain, board.get("profiles", []))}
+                "peers": self.per_peer(chain, profiles)}
         self._cache = (time.time(), snap)
         return snap
 

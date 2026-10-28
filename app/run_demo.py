@@ -24,7 +24,7 @@ async def main(args):
     await asyncio.gather(*(p.advertise() for p in peers))
     for p in peers:  # every peer looks at the board on its own; the recommender peer also recommends
         asyncio.create_task(p.watch())
-    emit("system", "demo", f"{len(peers)}명의 피어, broker {len(brokers)}곳(AI 없음, 공지 공유) 기동. "
+    emit("system", "demo", f"{len(peers)}명의 피어, peer 그룹 2개(응모 그룹: broker A·B·C 공지 공유, 심사 그룹: broker D) 기동. "
          + ", ".join(f"{b.name}: 기본 peer {len(b.ads)}명" for b in brokers) + f". LLM={llm.describe()}")
     await serve(build_web(brokers, me, peers, overseer), args.port)
     emit("system", "demo", f"대시보드: http://127.0.0.1:{args.port}")

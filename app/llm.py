@@ -37,7 +37,7 @@ def describe() -> str:
 
 def _parse(text: str) -> dict:
     """first JSON object in the text (models sometimes add trailing text or a second object)"""
-    return json.JSONDecoder().raw_decode(text[text.find("{"):])[0]
+    return json.JSONDecoder(strict=False).raw_decode(text[text.find("{"):])[0]  # tolerate raw newlines/tabs inside strings
 
 
 async def _ask_compat(model, messages, schema, effort, max_tokens):

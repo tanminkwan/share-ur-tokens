@@ -119,7 +119,7 @@ class Broker:
                 peers = sorted(peers, key=lambda p: -p["score"])[:r.get("k", 3)]
             else:
                 return {"ok": True, "peers": peers}
-            emit("broker", self.name, f"검색 '{r['text'][:24]}'{' (역할 ' + r['role'] + ')' if r.get('role') else ''} → 3곳에 물어 합침: "
+            emit("broker", self.name, f"검색 '{r['text'][:24]}'{' (역할 ' + r['role'] + ')' if r.get('role') else ''} → 같은 그룹 broker {1 + len(self.neighbors)}곳에 물어 합침: "
                  + (", ".join(f"{p['alias']}@{p['broker']}" for p in peers) or "없음"))
             return {"ok": True, "peers": peers}
         return {"ok": False, "error": "unknown op"}
@@ -127,8 +127,10 @@ class Broker:
 
 # ---------------- event peer ("나", the requester) ----------------
 class Requester:
-    def __init__(self, port, broker_url):
+    def __init__(self, port, broker_url, review_broker_url=None):
+        """the event peer belongs to two peer groups: the applicant group (broker_url) and the review group (review_broker_url)"""
         self.id, self.port, self.broker_url = Identity(), port, broker_url
+        self.review_broker_url = review_broker_url or broker_url
         self.url = f"http://127.0.0.1:{port}"
         self.calls, self.ideas, self.adopted, self.reviews = {}, {}, set(), {}
         self.app = make_agent_app("requester-me", "the person who posts the idea contest", port, ["submit_idea"], self.handle)
@@ -136,12 +138,17 @@ class Requester:
     def ledger_url(self, call_id):
         return self.calls[call_id]["recorder"]["peer_url"]
 
-    async def recruit(self, call_id, text, role, need):
-        """search the broker for peers that publicly offer `role`, contact them directly in rank order, sign a role contract.
+    async def recruit(self, call_id, text, role, need, count=1):
+        """search a peer group's broker for peers that publicly offer `role`, contact them directly in rank order, sign role
+        contracts until `count` accepted. Reviewers are searched in the review group; the recorder in the applicant group.
         The contract is recorded on the event's recorder; for the recorder role itself, on the newly contracted one."""
-        res = await rpc(self.broker_url, {"op": "find", "text": need, "role": role, "exclude": [self.id.pub], "k": 3})
+        broker = self.review_broker_url if role == "review" else self.broker_url
+        res = await rpc(broker, {"op": "find", "text": need, "role": role, "exclude": [self.id.pub], "k": count + 2})
         label = {"record": "기록자", "review": "심사자"}[role]
+        got = []
         for c in res.get("peers", []):
+            if len(got) >= count:
+                break
             p = {"call_id": call_id, "role": role, "issuer": self.id.pub, "contractor": c["pub"],
                  "nonce": h(f"{call_id}{role}{c['pub']}{time.time()}".encode())[:12]}
             emit("contract", "나", f"→ {c['alias']}: {label} 역할 계약 제안 (broker 검색으로 발견, p2p 직접 연결)")
@@ -152,21 +159,25 @@ class Requester:
             ledger = c["peer_url"] if role == "record" else self.ledger_url(call_id)
             rec = await rpc(ledger, {"op": "record", "type": "contract", "payload": p, "sigs": {self.id.pub: self.id.sign(p), c["pub"]: eng["sig"]}})
             if rec.get("ok"):
-                self.calls[call_id][{"record": "recorder", "review": "reviewer"}[role]] = c
+                if role == "record":
+                    self.calls[call_id]["recorder"] = c
+                else:
+                    self.calls[call_id]["reviewers"].append(c)
                 self.calls[call_id]["contracts"].append({"role": role, "hash": rec["hash"]})
                 emit("contract", "나", f"{label} 계약 체결: {c['alias']} (원장 #{rec['seq']}, 양쪽 서명)")
-                return c
-        emit("contract", "나", f"{label}를 구하지 못했습니다")
-        return None
+                got.append(c)
+        if len(got) < count:
+            emit("contract", "나", f"{label}를 {count}명 구하지 못했습니다({len(got)}명)")
+        return got
 
     async def post_call(self, text, minutes=10):
         call_id = "call-" + h(f"{text}{time.time()}".encode())[:6]
-        self.calls[call_id] = {"text": text, "ts": time.time(), "sheet": [], "closed": False, "recorder": None, "reviewer": None, "contracts": []}
+        self.calls[call_id] = {"text": text, "ts": time.time(), "sheet": [], "closed": False, "recorder": None, "reviewers": [], "contracts": []}
         emit("request", "나", f"공모 준비 [{call_id}]: {text[:60]}")
         if not await self.recruit(call_id, text, "record", "원장 기록 역할 기록 보관 접근 통제 감사"):
             emit("request", "나", "기록자가 없어 공모를 열 수 없습니다")
             return call_id
-        reviewer = await self.recruit(call_id, text, "review", f"공모 아이디어 심사 평가 기준 심사위원 경험 {text}")
+        reviewers = await self.recruit(call_id, text, "review", f"공모 아이디어 심사 평가 기준 심사위원 경험 {text}", count=2)
         c = self.calls[call_id]
         notice = {"notice_id": call_id, "kind": "아이디어 공모", "title": text[:40], "text": text, "until": time.time() + minutes * 60,
                   "audience": {"소속": "삼성SDS"},  # 응모 대상: 삼성SDS 전사원
@@ -174,11 +185,11 @@ class Requester:
                                  "보상": "채택되면 원장의 기여 집계에 반영된다", "공개 범위": "사내"},
                   "issuer_pub": self.id.pub, "issuer_url": self.url,
                   "recorder_pub": c["recorder"]["pub"], "recorder_url": c["recorder"]["peer_url"],
-                  "reviewer_pub": reviewer["pub"] if reviewer else "", "contracts": c["contracts"]}
+                  "reviewer_count": len(reviewers), "contracts": c["contracts"]}  # reviewers live in another peer group: no names here
         c["notice"] = notice
         await rpc(self.broker_url, {"op": "post_notice", "notice": notice, "sig": self.id.sign(notice)})
-        emit("request", "나", f"공지 게시 [{call_id}] - 기록자 {c['recorder']['alias']}" + (f", 심사자 {reviewer['alias']}" if reviewer else "")
-             + ". 누가 응모할지는 각 peer가 스스로 정한다")
+        emit("request", "나", f"공지 게시 [{call_id}] (응모 그룹) - 기록자 {c['recorder']['alias']}, 심사자 {len(reviewers)}명은 심사 그룹에 있어 응모자에게 보이지 않음."
+             " 누가 응모할지는 각 peer가 스스로 정한다")
         return call_id
 
     async def handle(self, r):
@@ -248,11 +259,11 @@ class Requester:
     async def _llm_loop(self, call_id, tools, top):
         """The model picks the next action each step (JSON action protocol, works on any backend); code only executes it."""
         system = (f"당신은 이벤트 진행자(나)의 비서 에이전트입니다. 공모가 마감되었습니다. 목표는 가장 좋은 아이디어 최대 {top}개를 채택하는 것입니다. "
-                  "스스로 평가하지 말고, 먼저 도착한 아이디어를 확인한 뒤 이 공모의 계약된 심사자에게 심사를 요청하고(원장에 계약이 있는 심사자만 심사 결과가 기록됩니다), 그 심사 의견을 근거로 채택하세요. "
+                  "스스로 평가하지 말고, 먼저 도착한 아이디어를 확인한 뒤 이 공모의 계약된 심사자 **각각에게** 심사를 요청하고(원장에 계약이 있는 심사자만 심사 결과가 기록됩니다), 심사자들의 점수를 종합해 채택하세요. "
                   "필요하다고 판단하면 순서를 바꾸거나 다른 peer를 찾아도 됩니다. 한 번에 도구 하나만 고르세요. 쓰지 않는 인자는 빈 문자열로 두세요.\n\n"
                   f"[사용할 수 있는 도구]\n{self.TOOL_HELP}\n\naction에는 도구 이름 또는 finish를 쓰고, thought에 한 줄로 이유를 쓰세요.")
-        rv = self.calls[call_id].get("reviewer")
-        info = f"계약된 심사자: peer_url={rv['peer_url']} , peer_pub={rv['pub']}" if rv else "계약된 심사자가 없습니다. discover_peer로 찾으세요."
+        rvs = self.calls[call_id].get("reviewers", [])
+        info = ("계약된 심사자(심사 그룹):\n" + "\n".join(f"- peer_url={rv['peer_url']} , peer_pub={rv['pub']}" for rv in rvs)) if rvs else "계약된 심사자가 없습니다. discover_peer로 찾으세요."
         messages = [{"role": "user", "content": f"공모 내용: {self.calls[call_id]['text']}\n{info}\n공모가 마감되었습니다. 시작하세요."}]
         for _ in range(12):
             act = await llm.ask_json(actor="나의 비서", model=llm.AGENT_MODEL, system=system, messages=messages, schema=self.ACTION_SCHEMA,
@@ -271,15 +282,26 @@ class Requester:
 
     async def _scripted(self, call_id, tools, top):
         """offline stand-in for the agent loop: the same tools in a fixed order"""
-        emit("assist", "나의 비서", "기본 절차(고정 순서)로 진행: 계약된 심사자에게 심사 요청 → 점수순 채택")
-        rv = self.calls[call_id].get("reviewer")
-        peers = [rv] if rv else await tools["discover_peer"]({"need": "공모 아이디어 심사에 능한 사람, 평가 기준과 선별 경험"})
+        emit("assist", "나의 비서", "기본 절차(고정 순서)로 진행: 계약된 심사자 각각에게 심사 요청 → 평균 점수순 채택")
+        peers = self.calls[call_id].get("reviewers") or await tools["discover_peer"]({"need": "공모 아이디어 심사에 능한 사람, 평가 기준과 선별 경험"})
         if not peers:
             return
-        res = await tools["request_review"]({"peer_url": peers[0]["peer_url"], "peer_pub": peers[0]["pub"]})
-        ranked = sorted(res.get("reviews", []), key=lambda r: -r["score"])
-        for r in ranked[:top]:
-            await tools["adopt"]({"id": r["id"], "reason": f"심사 점수 {r['score']}: {r['comment'][:40]}"})
+        for p in peers:
+            await tools["request_review"]({"peer_url": p["peer_url"], "peer_pub": p["pub"]})
+        mine = [k for k, v in self.ideas.items() if v["call_id"] == call_id and k in self.reviews]
+        ranked = sorted(mine, key=lambda k: -self.review_summary(k)["score"])
+        for k in ranked[:top]:
+            sm = self.review_summary(k)
+            await tools["adopt"]({"id": k[:8], "reason": f"심사자 {sm['n']}명 평균 {sm['score']}점"})
+
+    def review_summary(self, k):
+        """aggregate the reviews of one idea across reviewers"""
+        rs = self.reviews.get(k, {})
+        if not rs:
+            return None
+        return {"score": round(sum(r["score"] for r in rs.values()) / len(rs), 2), "n": len(rs),
+                "judge": ", ".join(r["judge"] for r in rs.values()),
+                "comment": " / ".join(f"{r['judge']}: {r['comment']}" for r in rs.values())}
 
     async def request_review(self, call_id, peer_url, peer_pub):
         call = self.calls[call_id]
@@ -304,7 +326,7 @@ class Requester:
             rec = await rpc(ledger, {"op": "record", "type": "feedback", "payload": rv["payload"], "sigs": {peer_pub: rv["sig"]}})
             if not rec.get("ok"):
                 continue
-            self.reviews[rv["payload"]["content_hash"]] = dict(score=rv["payload"]["score"], comment=rv["comment"], judge=alias(peer_pub))
+            self.reviews.setdefault(rv["payload"]["content_hash"], {})[peer_pub] = dict(score=rv["payload"]["score"], comment=rv["comment"], judge=alias(peer_pub))
             out.append(dict(id=rv["payload"]["content_hash"][:8], score=rv["payload"]["score"], comment=rv["comment"]))
         call["reviewed_by"][peer_pub] = out
         emit("review", alias(peer_pub), "심사 완료: " + ", ".join(f"{o['id']}={o['score']}" for o in out))
@@ -375,7 +397,7 @@ class PeerAgent:
                     if n["notice_id"] not in self.seen and n["issuer_pub"] != self.id.pub:
                         self.seen.add(n["notice_id"])
                         rel = self.relevance(n)
-                        if rel < RELEVANCE_MIN and self.id.pub not in (n.get("recorder_pub"), n.get("reviewer_pub")):
+                        if rel < RELEVANCE_MIN and self.id.pub != n.get("recorder_pub"):
                             emit("decide", alias(self.id.pub), f"넘김 [{n['notice_id']}] - 내 작업 노트와 관련도 낮음({rel}), AI 판단 생략")
                             self.skipped = getattr(self, "skipped", set()) | {n["notice_id"]}
                             continue
@@ -396,16 +418,16 @@ class PeerAgent:
         me = alias(self.id.pub)
         if n.get("until", 0) < time.time():
             return
-        if self.id.pub in (n.get("recorder_pub"), n.get("reviewer_pub")):  # code-enforced role conflict
-            emit("decide", me, f"넘김 [{n['notice_id']}] - 이 공지의 {'기록자' if self.id.pub == n.get('recorder_pub') else '심사자'}라 응모할 수 없음 (규칙)")
+        if self.id.pub == n.get("recorder_pub"):  # code-enforced role conflict (reviewers are in another peer group)
+            emit("decide", me, f"넘김 [{n['notice_id']}] - 이 공지의 기록자라 응모할 수 없음 (규칙)")
             return
         trust = []
         for c in n.get("contracts", []):  # check the contracts the notice claims, on the recorder itself
             v = await rpc(n["recorder_url"], {"op": "verify", "hash": c["hash"]})
-            who = n.get("recorder_pub") if c["role"] == "record" else n.get("reviewer_pub")
             ok = (v.get("exists") and v.get("seal_ok") and v.get("type") == "contract" and v.get("role") == c["role"]
-                  and v.get("call_id") == n["notice_id"] and v.get("contractor") == who and v.get("issuer") == n["issuer_pub"])
-            trust.append(f"{'기록자' if c['role'] == 'record' else '심사자'} 계약 {'원장에서 확인됨(역할·공모·당사자 일치)' if ok else '확인 안 됨'}")
+                  and v.get("call_id") == n["notice_id"] and v.get("issuer") == n["issuer_pub"]
+                  and (c["role"] != "record" or v.get("contractor") == n.get("recorder_pub")))  # reviewers stay unnamed
+            trust.append(f"{'기록자' if c['role'] == 'record' else '심사자'} 계약 {'원장에서 확인됨(역할·공모·발행자 일치)' if ok else '확인 안 됨'}")
         notes = "\n".join(f"- {x}" for x in self.workspace[-14:])
         conds = "; ".join(f"{k}: {v}" for k, v in n.get("conditions", {}).items())
         d = await llm.ask_json(
@@ -449,7 +471,7 @@ class PeerAgent:
             if n["notice_id"] in self.seen:
                 continue
             self.seen.add(n["notice_id"])
-            exclude = [self.id.pub, n["issuer_pub"], n.get("recorder_pub", ""), n.get("reviewer_pub", "")]
+            exclude = [self.id.pub, n["issuer_pub"], n.get("recorder_pub", "")]
             found = await rpc(self.broker_url, {"op": "find", "text": f"{n['title']} {n['text']}", "exclude": exclude,
                                                 "audience": n.get("audience", {}), "k": 10})
             cands = found.get("peers", [])
@@ -505,7 +527,8 @@ class PeerAgent:
             p = e["payload"] if e else {}
             return {"ok": True, "exists": bool(e), "type": e["type"] if e else None,
                     "seal_ok": bool(e and verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"])),
-                    "role": p.get("role"), "call_id": p.get("call_id"), "contractor": p.get("contractor"), "issuer": p.get("issuer")}
+                    "role": p.get("role"), "call_id": p.get("call_id"), "issuer": p.get("issuer"),
+                    "contractor": p.get("contractor") if p.get("role") == "record" else None}  # reviewers stay unnamed to applicants
         ok = (r.get("reader") in self.readers and abs(time.time() - r.get("ts", 0)) < 60
               and verify(r["reader"], {"op": "read", "ts": r["ts"]}, r.get("sig", "")))
         self.access_log = (self.access_log + [{"ts": time.time(), "reader": alias(r.get("reader", "?" * 6)), "granted": ok}])[-50:]
@@ -526,7 +549,10 @@ class PeerAgent:
             system=f"당신은 '{self.p['role']}'의 비서 에이전트입니다. 이 사원은 '{r['role']}' 역할(review=심사, record=원장 기록)을 공개적으로 제공하고 있습니다. "
                    "판단 기준은 공모 주제가 아니라 그 역할 자체입니다: 사원이 이 역할을 맡을 자격과 여력이 있으면 수락하세요. 공모 주제가 사원의 관심 분야와 달라도 역할 수행에는 문제가 없습니다. "
                    "거절은 이해 충돌(예: 자기가 응모하려는 공모의 심사)이나 여력 부족일 때만 하세요.",
-            user=f"[역할 계약 요청]\n역할: {r['role']}\n이벤트(공모): {r['text']}", fallback=lambda: {"accept": True, "reason": "공개한 역할과 일치"})
+            user=(f"[역할 계약 요청]\n역할: {r['role']}\n이벤트(공모): {r['text']}\n"
+                  f"[사실] 이 사원은 이 공모에 응모하지 않았고, " + ("심사 그룹에만 속해 있어 이 공모를 볼 수도 응모할 수도 없습니다." if "review" in self.can else "기록자로 계약되면 이 공모에 응모할 수 없습니다(규칙).")
+                  + " 이해 충돌은 같은 공모에 응모한 경우에만 해당합니다."),
+            fallback=lambda: {"accept": True, "reason": "공개한 역할과 일치"})
         if not d["accept"]:
             emit("contract", me, f"역할 계약 거절: {d['reason'][:80]}")
             return {"ok": False, "error": d["reason"]}
@@ -602,14 +628,23 @@ class PeerAgent:
 
 
 def build_all(base=9100, n_brokers=3):
-    """three independent brokers; every peer has one primary broker (3~4 peers each). Notices are shared between
-    brokers, profiles stay on the primary broker and searches ask all brokers."""
+    """two peer groups. Applicant group: brokers A, B, C share notices with each other; applicants, the recorder and the
+    recommender each have one of them as primary broker. Review group: broker D, separate (shares nothing with A-C);
+    reviewers are registered only there. The event peer belongs to both groups."""
     from .overseer import Overseer
     overseer = Overseer()
     brokers = [Broker(base + 110 + i, name=f"broker-{'ABC'[i]}") for i in range(n_brokers)]
     for b in brokers:
         b.neighbors = [o.url for o in brokers if o is not b]
-    me = Requester(base + 200, brokers[0].url)
-    peers = [PeerAgent(p, base + 1 + i, brokers[i % n_brokers].url, readers=[overseer.id.pub]) for i, p in enumerate(PERSONAS)]
+    review_broker = Broker(base + 110 + n_brokers, name="broker-D(심사 그룹)")
+    me = Requester(base + 200, brokers[0].url, review_broker.url)
+    peers, i_app = [], 0
+    for i, p in enumerate(PERSONAS):
+        if "review" in p.get("can", []):
+            home = review_broker.url
+        else:
+            home, i_app = brokers[i_app % n_brokers].url, i_app + 1
+        peers.append(PeerAgent(p, base + 1 + i, home, readers=[overseer.id.pub]))
     overseer.broker_url = brokers[-1].url
-    return brokers, me, peers, overseer
+    overseer.board_urls = [brokers[-1].url, review_broker.url]  # the overseer may look at both groups' profile boards
+    return brokers + [review_broker], me, peers, overseer

@@ -85,7 +85,7 @@ def build_web(brokers, me, peers, overseer):
         cid, call = last_call()
         ideas = [dict(hash=k, author=alias(v["author"]), title=v["idea"]["title"], idea=v["idea"]["idea"], first_step=v["idea"]["first_step"],
                       risk=v["idea"]["risk"], adopted=k in me.adopted, reason=v.get("reason", ""),
-                      review=me.reviews.get(k))
+                      review=me.review_summary(k))
                  for k, v in me.ideas.items() if v["call_id"] == cid]
         snap = await overseer.snapshot()  # the dashboard sees the ledger only through the overseer peer
         return JSONResponse(dict(live=llm.live(), model=llm.describe(), peers=sum(len(b.ads) for b in brokers), ideas=ideas,
