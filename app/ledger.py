@@ -48,6 +48,10 @@ class Collector:
         published = {x["payload"]["content_hash"] for x in self.chain if x["type"] == "publish"}
         if e["type"] == "publish" and ch in published:
             return "content already published (first publisher wins)"
+        if e["type"] == "publish" and any(
+                x["type"] == "contract" and x["payload"].get("call_id") == p.get("call_id") and x["payload"].get("contractor") == p.get("author")
+                for x in self.chain):
+            return "a contracted recorder/reviewer cannot submit to the same call"
         if e["type"] in ("share", "feedback") and ch not in published:
             return "unknown content"
         if e["type"] in ("share", "contract") and any(x["type"] == e["type"] and x["payload"].get("nonce") == p.get("nonce") for x in self.chain):

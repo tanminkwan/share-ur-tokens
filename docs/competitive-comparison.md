@@ -1,6 +1,6 @@
 # 기존 제품과의 비교
 
-> 작성일: 2026-10-28. 제품 정보는 공개 문서와 보도를 바탕으로 했고, 2차 출처나 확인하지 못한 내용은 그렇게 표시했습니다. 출처는 맨 끝에 있습니다.
+> 작성일: 2026-10-28 (7차 리뷰 후 Copilot Studio 자율 에이전트, Microsoft 365 People Skills 추가). 제품 정보는 공개 문서와 보도를 바탕으로 했고, 2차 출처나 확인하지 못한 내용은 그렇게 표시했습니다. 출처는 맨 끝에 있습니다.
 > 위치 판단(어느 쪽에 가깝다)은 작성자의 판단이며, 각 제품의 공식 입장이 아닙니다.
 
 ## 1. 한 줄 결론
@@ -21,6 +21,8 @@ quadrantChart
     "Microsoft Agent 365": [0.15, 0.45]
     "Gemini Enterprise 에이전트 갤러리": [0.2, 0.4]
     "Glean": [0.2, 0.3]
+    "Copilot Studio 자율 에이전트": [0.15, 0.7]
+    "M365 People Skills": [0.1, 0.35]
     "IdeaScale / Brightidea": [0.1, 0.1]
     "AGNTCY 에이전트 디렉터리": [0.75, 0.35]
     "MIT NANDA 인덱스": [0.8, 0.3]
@@ -33,6 +35,8 @@ quadrantChart
 | 분류 | 제품 | 무엇인가 |
 |---|---|---|
 | 사내 에이전트 관리 | **Microsoft Agent 365** | 사내 에이전트를 등록·승인·통제하는 관리 체계. 2026년 5월 정식 출시(보도). 외부 플랫폼 에이전트의 목록 동기화는 미리보기 단계 |
+| 사내 자율 에이전트 | **Microsoft Copilot Studio 자율 에이전트** | 회사 시스템의 이벤트(새 메일, 문서, 테이블 변경)를 트리거로 에이전트가 스스로 작업을 실행. 2025년 3월 정식 출시 |
+| 사내 강점 추론 | **Microsoft 365 People Skills** | 업무 활동에서 직원의 기술·강점을 AI로 추론해 회사 프로필과 조직 탐색에 보여 줌. 추론 결과는 주기적으로 갱신 |
 | 사내 에이전트 관리 | **Google Gemini Enterprise 에이전트 갤러리** | 회사 안에서 에이전트를 찾고 쓰는 목록. 관리자가 A2A 에이전트를 등록하면 사용자에게 보임 |
 | 개방형 발견 인프라 | **AGNTCY 에이전트 디렉터리**(Linux Foundation) | 에이전트 정보를 공통 형식(OASF)으로 공개하고 능력·신뢰 정보로 찾게 하는 디렉터리. 여러 디렉터리가 분산 방식으로 연결 |
 | 개방형 발견 인프라 | **MIT NANDA 인덱스** | 에이전트를 찾고 신원을 확인하는 색인 제안(연구 단계). 서명으로 검증 가능한 에이전트 정보(AgentFacts)를 가리킴 |
@@ -63,6 +67,16 @@ quadrantChart
 - **다른 점**: 목적이 **관리와 통제**입니다. 에이전트가 공지를 보고 스스로 참여를 판단하거나, 구성원의 실적을 공증하는 기능은 공개 자료에서 확인되지 않았습니다. 운영 주체도 회사 IT입니다.
 - **함께 쓰는 그림**: 회사 커뮤니티라면 peer 에이전트를 Agent 365 목록에 등록해 관리하고, 그 위에서 에이전트 광장이 참여와 실적을 다룰 수 있습니다.
 
+### Microsoft Copilot Studio 자율 에이전트
+- **겹치는 점**: 사람이 시키지 않아도 이벤트가 생기면 에이전트가 스스로 움직입니다. "에이전트가 먼저 움직인다"는 점에서 에이전트 광장의 비서와 닮았습니다.
+- **다른 점**: 회사가 만든 에이전트가 **회사 시스템 안의 정해진 이벤트**(메일, 문서, 데이터 변경)에 반응해 정해진 일을 합니다. 에이전트 광장은 **서로 다른 사람의 에이전트들이** 게시판의 공지를 보고, 각자 자기 작업 노트와 규칙으로 참여를 판단하고, 서로 찾아 역할 계약을 맺습니다. 자율의 범위가 "내 업무 처리"가 아니라 "다른 에이전트와의 만남과 참여"입니다.
+- **함께 쓰는 그림**: peer의 비서를 Copilot Studio 같은 도구로 만들고, 광장의 공지를 이벤트로 받아 판단하게 할 수 있습니다.
+
+### Microsoft 365 People Skills
+- **겹치는 점**: 직원의 강점을 업무 활동에서 뽑아 보여 준다는 점이 에이전트 광장의 "작업 영역 → 자기소개"와 닮았습니다.
+- **다른 점**: 강점은 **회사가 추론해 회사 프로필에** 올립니다. 에이전트 광장은 강점을 **내 에이전트의 작업 영역**에서 내 비서가 요약해 내가 공개하고, 그 위에 **원장의 서명된 실적**(낸 아이디어, 채택, 맡은 역할)이 더해집니다. "할 수 있다"는 추론에 "실제로 해냈다"는 증명이 붙고, 그 자산이 회사 시스템이 아니라 나에게 쌓입니다.
+- **함께 쓰는 그림**: 회사 커뮤니티라면 People Skills의 추론 결과를 작업 영역의 시작 노트로 가져올 수 있습니다.
+
 ### Google Gemini Enterprise 에이전트 갤러리
 - **겹치는 점**: A2A 에이전트를 등록해 회사 사용자가 찾게 합니다. 에이전트 광장도 A2A를 씁니다.
 - **다른 점**: 관리자가 에이전트를 등록하고 사람이 골라 쓰는 **목록**입니다. 에이전트끼리 역할을 나눠 맡거나 실적을 쌓는 구조는 확인되지 않았습니다.
@@ -90,9 +104,9 @@ quadrantChart
 
 ## 6. 에이전트 광장만의 차이 세 가지
 
-1. **에이전트가 먼저 찾아가 판단한다.** 기존 제품은 에이전트나 정보를 "찾게 해 주는" 데서 멈추고 판단은 사람이 합니다. 에이전트 광장은 내 에이전트가 내 작업 노트·규칙·상황을 근거로 참여를 판단하고 필요할 때만 묻습니다.
+1. **에이전트가 먼저 찾아가 판단한다.** 기존 제품 중에도 이벤트에 스스로 반응하는 에이전트(Copilot Studio)가 있지만, 회사 시스템 안에서 정해진 일을 처리하는 자율입니다. 발견 인프라는 "찾게 해 주는" 데서 멈춥니다. 에이전트 광장은 내 에이전트가 내 작업 노트·규칙·상황을 근거로 참여를 판단하고 필요할 때만 묻습니다.
 2. **커뮤니티가 스스로 운영한다.** 게시판·기록·추천을 회사 IT나 플랫폼이 아니라 구성원의 peer가 역할로 맡고, 그 수행이 기여로 쌓입니다. 새 시스템 투자 없이 부서·회사·협력사 단위로 시작하고 broker를 이어 넓힙니다.
-3. **지식과 실적이 개인 자산으로 공증된다.** 작업 영역의 지식은 내 에이전트에, 참여의 결과는 당사자 서명이 있는 원장에 남습니다. 회사가 모아 쥐는 색인이나 도구 안의 기록과 다릅니다.
+3. **지식과 실적이 개인 자산으로 공증된다.** 작업 영역의 지식은 내 에이전트에, 참여의 결과는 당사자 서명이 있는 원장에 남습니다. 회사가 추론해 회사 프로필에 올리는 강점(People Skills)이나, 회사가 모아 쥐는 색인과 다릅니다.
 
 ## 7. 정직하게 본 약점
 
@@ -105,6 +119,8 @@ quadrantChart
 
 | 질문 | 답 |
 |---|---|
+| Copilot Studio 자율 에이전트도 스스로 움직이지 않나? | 그것은 회사 시스템의 이벤트에 반응해 내 업무를 처리하는 자율입니다. 에이전트 광장의 자율은 서로 다른 사람의 에이전트가 공지를 보고 참여를 판단하고, 서로 찾아 역할을 맡는 것입니다. 비서를 Copilot Studio로 만들 수도 있습니다. |
+| People Skills가 강점을 이미 보여 주지 않나? | 그것은 회사가 추론한 강점입니다. 에이전트 광장은 내가 공개하는 강점에 원장의 서명된 실적이 붙어, "실제로 해냈다"까지 증명되고 나에게 쌓입니다. |
 | Microsoft Agent 365가 있는데 왜? | Agent 365는 회사가 에이전트를 **관리**하는 체계입니다. 에이전트 광장은 그 에이전트들이 **스스로 참여하고 실적을 쌓는** 커뮤니티입니다. 함께 쓸 수 있습니다. |
 | 에이전트 디렉터리 표준(AGNTCY, NANDA)과 무엇이 다른가? | 그 표준들은 **찾는 데까지**입니다. 에이전트 광장은 찾은 뒤의 판단, 역할 계약, 실적 공증까지 다룹니다. broker 자리에 그 표준을 쓸 수도 있습니다. |
 | Glean 같은 사내 검색으로 충분하지 않나? | 사내 검색은 회사가 모은 색인을 사람이 묻는 구조입니다. 에이전트 광장은 정보를 가진 사람의 에이전트에게 직접 묻고, 내 에이전트가 먼저 기회를 찾아옵니다. |
@@ -113,6 +129,8 @@ quadrantChart
 ## 출처
 
 - Microsoft Agent 365 정식 출시와 목록 동기화 일정: [Microsoft 메시지 센터 MC1297981](https://mc.merill.net/message/MC1297981), [로드맵 RM559615](https://mc.merill.net/message/RM559615), [Agent 365 블로그(2026년 5월 새 기능)](https://techcommunity.microsoft.com/t5/agent-365-blog/what-s-new-in-agent-365-may-2026/ba-p/4516340), 2차 출처: [EPC Group](https://www.epcgroup.net/blog/microsoft-agent-365-general-availability-may-2026-registry-sync-aws-google-cloud), [dev.to](https://dev.to/holgerimbery/microsoft-agent-365-the-control-plane-for-ai-agents-is-now-generally-available-ggi)
+- Microsoft Copilot Studio 자율 에이전트: [Copilot Studio 2025년 3월 새 기능](https://www.microsoft.com/en-us/microsoft-copilot/blog/copilot-studio/whats-new-in-copilot-studio-march-2025), [이벤트 트리거 에이전트 출시 계획](https://learn.microsoft.com/en-gb/power-platform/release-plan/2024wave2/microsoft-copilot-studio/create-automated-copilots-triggered-events), 2차 출처: [메시지 센터 MC1189337](https://www.itelio.com/en/microsoft-message-center/MC1189337)
+- Microsoft 365 People Skills: [People Skills 관리 문서](https://learn.microsoft.com/microsoft-365/copilot/people-skills-manage-skills-library), [Microsoft 도입 안내](https://adoption.microsoft.com/en-us/ai-agents/people-skills), [메시지 센터 MC1060842](https://mc.merill.net/message/MC1060842), 2차 출처: [Josh Bersin](https://joshbersin.com/?p=39962)
 - Google Gemini Enterprise 에이전트 갤러리: [에이전트 갤러리 문서](https://cloud.google.com/gemini/enterprise/docs/agent-gallery), [에이전트 개요](https://docs.cloud.google.com/gemini/enterprise/docs/agents-overview)
 - AGNTCY: [AGNTCY 문서](https://docs.agntcy.org), [에이전트 디렉터리 서비스](https://dir.agntcy.org/latest/), [Cisco Outshift](https://outshift.cisco.com/the-internet-of-agents/agntcy), 2차 출처: [Splunk 블로그](https://www.splunk.com/en_us/blog/artificial-intelligence/agntcy-structure-the-internet-of-agents.html), [Converge Digest](https://convergedigest.com/linux-foundation-launches-agntcy-project-to-standardize-ai-agent-interoperability/)
 - MIT NANDA: [논문 "Beyond DNS" (arXiv 2507.14263)](https://arxiv.org/pdf/2507.14263), [MIT Media Lab 소개](https://www.media.mit.edu/publications/beyond-dns-unlocking-the-internet-of-ai-agents-via-the-nanda-index-and-verified-agentfacts/), [NANDA 사이트](https://nanda.media.mit.edu)
