@@ -1,0 +1,344 @@
+"""A2A nodes: collectors, broker, requester, peer agents. Every hop between them is a real A2A call over localhost HTTP."""
+import asyncio
+import json
+import time
+
+from . import llm
+from .common import STORE, Identity, alias, canon, emit, h, make_agent_app, rpc, verify
+from .ledger import Collector, contribution
+from .personas import PERSONAS, judge_system, offline_idea, offline_review, persona_system, secretary_system
+
+IDEA_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["title", "idea", "first_step", "risk"],
+               "properties": {"title": {"type": "string"}, "idea": {"type": "string"},
+                              "first_step": {"type": "string"}, "risk": {"type": "string"}}}
+
+
+# ---------------- collectors ----------------
+class CollectorNode:
+    """collector-1 sequences entries and replicates them to collector-2, which re-validates independently."""
+
+    def __init__(self, name, port, peer_url=None):
+        self.col, self.port, self.peer_url, self.lock = Collector(name), port, peer_url, asyncio.Lock()
+        self.app = make_agent_app(name, "provenance ledger collector", port, ["record", "audit", "dump"], self.handle)
+
+    async def handle(self, r):
+        op = r["op"]
+        if op == "record":  # sequencer path (collector-1 only)
+            async with self.lock:
+                entry, err = self.col.propose(r["type"], r["payload"], r["sigs"])
+                if err:
+                    emit("ledger", self.col.name, f"거절: {r['type']} - {err}")
+                    return {"ok": False, "error": err}
+                rep = await rpc(self.peer_url, {"op": "replicate", "entry": entry})
+                if not rep.get("ok"):
+                    self.col.chain.pop()
+                    emit("ledger", self.col.name, f"collector-2가 거절 → 롤백: {rep.get('error')}")
+                    return {"ok": False, "error": "replica rejected: " + str(rep.get("error"))}
+            emit("ledger", self.col.name, f"#{entry['seq']} {entry['type']} 기록 (두 수집가가 각자 검증)")
+            return {"ok": True, "seq": entry["seq"], "hash": entry["hash"]}
+        if op == "replicate":
+            _, err = self.col.accept(r["entry"])
+            return {"ok": err is None, "error": err}
+        if op == "audit":
+            return {"ok": True, "status": self.col.audit(), "head": self.col.head(), "length": len(self.col.chain)}
+        if op == "dump":
+            return {"ok": True, "chain": self.col.chain}
+        return {"ok": False, "error": "unknown op"}
+
+
+# ---------------- broker ----------------
+SELECT_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["selected"],
+                 "properties": {"selected": {"type": "array", "items": {
+                     "type": "object", "additionalProperties": False, "required": ["pub", "reason"],
+                     "properties": {"pub": {"type": "string"}, "reason": {"type": "string"}}}}}}
+
+
+class Broker:
+    """Discovery only: stores advertised peer profiles, matches a call to relevant peers, notifies them.
+    It never sees an idea: ideas travel peer -> requester directly."""
+
+    def __init__(self, port):
+        self.ads, self.port = {}, port
+        self.app = make_agent_app("broker-ideas", "context-based discovery for idea contests", port, ["advertise", "call"], self.handle)
+
+    async def handle(self, r):
+        if r["op"] == "advertise":
+            ad = r["ad"]
+            if not verify(ad["pub"], ad["profile"], ad["sig"]):
+                return {"ok": False, "error": "bad signature"}
+            self.ads[ad["pub"]] = dict(ad["profile"], pub=ad["pub"], url=ad["url"])
+            emit("broker", "broker", f"{alias(ad['pub'])} 노출 등록: {ad['profile']['summary'][:50]}")
+            return {"ok": True}
+        if r["op"] == "call":
+            return await self.call(r)
+        if r["op"] == "find":  # context-based lookup of peers, no notification
+            cands = [a for a in self.ads.values() if a["pub"] != r["requester_pub"]]
+            chosen = await self.select(r["text"], cands, 1, 3, "요청에 가장 잘 맞는 사람 1~3명만 고르세요.")
+            emit("broker", "broker", f"'{r['text'][:30]}' 탐색 → {', '.join(alias(s['pub']) for s in chosen)}")
+            return {"ok": True, "peers": [dict(alias=alias(s["pub"]), pub=s["pub"], peer_url=self.ads[s["pub"]]["url"], reason=s["reason"]) for s in chosen]}
+        return {"ok": False, "error": "unknown op"}
+
+    async def select(self, text, cands, min_n, fb_n, instruction):
+        listing = "\n".join(f"- {a['pub']}: {a['summary']}" for a in cands)
+
+        def fallback():  # character-bigram overlap between the request and each profile
+            def bg(s): s = s.replace(" ", ""); return {s[i:i + 2] for i in range(len(s) - 1)}
+            q = bg(text)
+            scored = sorted(cands, key=lambda a: -len(q & bg(a["summary"])) / (len(bg(a["summary"])) or 1))
+            return {"selected": [{"pub": a["pub"], "reason": "관심 분야 키워드 유사(오프라인 매칭)"} for a in scored[:fb_n]]}
+
+        sel = await llm.ask_json(
+            actor="broker", model=llm.AGENT_MODEL, schema=SELECT_SCHEMA, fallback=fallback,
+            system=f"당신은 사내 중개 broker입니다. 요청과 맥락상 맞는 사람을 목록에서 고릅니다. {instruction} 이유는 한 줄로 쓰세요. pub 값은 목록의 값을 그대로 쓰세요.",
+            user=f"[요청]\n{text}\n\n[후보]\n{listing}")
+        return [s for s in sel["selected"] if s["pub"] in self.ads and any(s["pub"] == c["pub"] for c in cands)]
+
+    async def call(self, r):
+        cands = [a for a in self.ads.values() if a["pub"] != r["requester_pub"]]
+        chosen = await self.select(r["text"], cands, 6, max(6, len(cands) * 2 // 3),
+                                   "공모 내용과 맥락상 의견을 줄 만한 사람을 고르세요. 관련성이 조금이라도 있으면 포함하고, 서로 다른 관점이 모이도록 최소 6명 이상 고르세요.")
+        emit("broker", "broker", f"공모 {r['call_id']} → {len(chosen)}명에게 전달 (맥락 매칭)")
+
+        async def notify(s):
+            a = self.ads[s["pub"]]
+            await rpc(a["url"], {"op": "call_for_ideas", "call_id": r["call_id"], "text": r["text"],
+                                 "requester_url": r["requester_url"], "requester_pub": r["requester_pub"]})
+            return {"alias": alias(a["pub"]), "peer_url": a["url"], "reason": s["reason"]}
+
+        sheet = await asyncio.gather(*(notify(s) for s in chosen))
+        return {"ok": True, "answer_sheet": sheet}
+
+
+# ---------------- requester ("나") ----------------
+class Requester:
+    def __init__(self, port, broker_url, c1_url):
+        self.id, self.port, self.broker_url, self.c1 = Identity(), port, broker_url, c1_url
+        self.url = f"http://127.0.0.1:{port}"
+        self.calls, self.ideas, self.adopted, self.reviews = {}, {}, set(), {}
+        self.app = make_agent_app("requester-me", "the person who posts the idea contest", port, ["submit_idea"], self.handle)
+
+    async def post_call(self, text):
+        call_id = "call-" + h(f"{text}{time.time()}".encode())[:6]
+        self.calls[call_id] = {"text": text, "ts": time.time(), "sheet": [], "closed": False}
+        emit("request", "나", f"공모 게시 [{call_id}]: {text[:60]}")
+        res = await rpc(self.broker_url, {"op": "call", "call_id": call_id, "text": text,
+                                          "requester_url": self.url, "requester_pub": self.id.pub}, timeout=180)
+        self.calls[call_id]["sheet"] = res.get("answer_sheet", [])
+        return call_id
+
+    async def handle(self, r):
+        if r["op"] != "submit_idea":
+            return {"ok": False, "error": "unknown op"}
+        call = self.calls.get(r["call_id"])
+        if not call or call["closed"]:
+            return {"ok": False, "error": "unknown or closed call"}
+        pub_payload, share_payload = r["publish_payload"], r["share_payload"]
+        if h(canon(r["idea"])) != pub_payload["content_hash"] or not verify(pub_payload["author"], pub_payload, r["publish_sig"]):
+            return {"ok": False, "error": "content hash / author signature mismatch"}
+        if share_payload["consumer"] != self.id.pub or share_payload["content_hash"] != pub_payload["content_hash"]:
+            return {"ok": False, "error": "share payload does not match"}
+        if any(i["author"] == pub_payload["author"] and i["call_id"] == r["call_id"] for i in self.ideas.values()):
+            return {"ok": False, "error": "one idea per peer per call"}
+        self.ideas[pub_payload["content_hash"]] = dict(author=pub_payload["author"], call_id=r["call_id"], idea=r["idea"], ts=time.time())
+        emit("p2p", alias(pub_payload["author"]), f"→ 나: 아이디어 도착 '{r['idea']['title'][:40]}' (p2p 직접 연결, broker 미경유)")
+        return {"ok": True, "receipt_sig": self.id.sign(share_payload)}
+
+    # ---- the requester's assistant: an agent that decides the post-deadline flow itself ----
+    def tools(self, call_id):
+        mine = lambda: [(k, v) for k, v in self.ideas.items() if v["call_id"] == call_id]
+
+        async def list_ideas(_):
+            return [dict(id=k[:8], **{f: v["idea"][f] for f in ("title", "idea", "first_step", "risk")}) for k, v in mine()]
+
+        async def discover_peer(a):
+            res = await rpc(self.broker_url, {"op": "find", "text": a["need"], "requester_pub": self.id.pub})
+            return res.get("peers", [])
+
+        async def request_review(a):
+            return await self.request_review(call_id, a["peer_url"], a["peer_pub"])
+
+        async def adopt(a):
+            full = next((k for k, _ in mine() if k.startswith(a["id"])), None)
+            return {"ok": bool(full and await self.adopt(full, a["reason"]))}
+
+        return {"list_ideas": list_ideas, "discover_peer": discover_peer, "request_review": request_review, "adopt": adopt}
+
+    TOOL_DEFS = [
+        {"name": "list_ideas", "description": "이번 공모에 도착한 아이디어 목록(작성자 정보 없음)을 본다.",
+         "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
+        {"name": "discover_peer", "description": "broker에게 맥락으로 peer를 찾아 달라고 요청한다. 예: '공모 아이디어 심사에 능한 사람'. peer_url, pub이 담긴 후보를 돌려준다.",
+         "input_schema": {"type": "object", "properties": {"need": {"type": "string"}}, "required": ["need"], "additionalProperties": False}},
+        {"name": "request_review", "description": "찾은 peer에게 도착한 모든 아이디어의 심사를 p2p로 요청한다. 점수와 심사 의견을 돌려준다.",
+         "input_schema": {"type": "object", "properties": {"peer_url": {"type": "string"}, "peer_pub": {"type": "string"}},
+                          "required": ["peer_url", "peer_pub"], "additionalProperties": False}},
+        {"name": "adopt", "description": "아이디어 하나를 채택하고 원장에 기록한다. id는 list_ideas의 id.",
+         "input_schema": {"type": "object", "properties": {"id": {"type": "string"}, "reason": {"type": "string"}},
+                          "required": ["id", "reason"], "additionalProperties": False}},
+    ]
+
+    async def agent_run(self, call_id, top=3):
+        self.calls[call_id]["closed"] = True
+        tools = self.tools(call_id)
+        if llm.live():
+            try:
+                await self._llm_loop(call_id, tools, top)
+            except Exception as e:
+                emit("assist", "나의 비서", f"에이전트 루프 실패({type(e).__name__}: {str(e)[:80]}) → 기본 절차로 대체")
+        if not self.adopted:  # offline mode, or the model stopped without adopting anything
+            await self._scripted(call_id, tools, top)
+
+    async def _llm_loop(self, call_id, tools, top):
+        client = llm._get_client()
+        text = self.calls[call_id]["text"]
+        messages = [{"role": "user", "content": f"공모를 마감했습니다. 공모 내용: {text}"}]
+        system = (f"당신은 이벤트 진행자(나)의 비서 에이전트입니다. 공모가 마감되었습니다. 목표는 가장 좋은 아이디어 최대 {top}개를 채택하는 것입니다. "
+                  "스스로 평가하지 말고, 먼저 도착한 아이디어를 확인한 뒤 broker를 통해 심사에 능한 peer를 찾아 심사를 요청하고, 그 심사 의견을 근거로 채택하세요. "
+                  "필요하다고 판단하면 순서를 바꾸거나 다른 peer를 찾아도 됩니다. 끝나면 한 문단으로 결과를 요약하세요.")
+        for _ in range(12):
+            resp = await client.messages.create(model=llm.AGENT_MODEL, max_tokens=8000, system=system, tools=self.TOOL_DEFS,
+                                                messages=messages, output_config={"effort": "low"})
+            messages.append({"role": "assistant", "content": resp.content})
+            if resp.stop_reason != "tool_use":
+                summary = "".join(b.text for b in resp.content if b.type == "text")
+                emit("assist", "나의 비서", f"완료: {summary[:200]}")
+                return
+            results = []
+            for b in resp.content:
+                if b.type == "tool_use":
+                    emit("assist", "나의 비서", f"도구 호출 {b.name}({json.dumps(b.input, ensure_ascii=False)[:80]})")
+                    out = await tools[b.name](b.input)
+                    results.append({"type": "tool_result", "tool_use_id": b.id, "content": json.dumps(out, ensure_ascii=False)})
+            messages.append({"role": "user", "content": results})
+
+    async def _scripted(self, call_id, tools, top):
+        """offline stand-in for the agent loop: the same tools in a fixed order"""
+        emit("assist", "나의 비서", "(오프라인) 기본 절차: 심사 peer 탐색 → 심사 요청 → 채택")
+        peers = await tools["discover_peer"]({"need": "공모 아이디어 심사에 능한 사람, 평가 기준과 선별 경험"})
+        if not peers:
+            return
+        res = await tools["request_review"]({"peer_url": peers[0]["peer_url"], "peer_pub": peers[0]["pub"]})
+        ranked = sorted(res.get("reviews", []), key=lambda r: -r["score"])
+        for r in ranked[:top]:
+            await tools["adopt"]({"id": r["id"], "reason": f"심사 점수 {r['score']}: {r['comment'][:40]}"})
+
+    async def request_review(self, call_id, peer_url, peer_pub):
+        mine = [(k, v) for k, v in self.ideas.items() if v["call_id"] == call_id]
+        shares = {k: {"provider": self.id.pub, "consumer": peer_pub, "content_hash": k, "terms": "review request",
+                      "nonce": h(f"{k}{peer_pub}{time.time()}".encode())[:12]} for k, _ in mine}
+        emit("p2p", "나", f"→ {alias(peer_pub)}: 아이디어 {len(mine)}건 심사 요청 (p2p 직접 연결)")
+        res = await rpc(peer_url, {"op": "evaluate_ideas", "call_text": self.calls[call_id]["text"],
+                                   "ideas": [dict(id=k[:8], **{f: v["idea"][f] for f in ("title", "idea", "first_step", "risk")}) for k, v in mine],
+                                   "share_payloads": shares}, timeout=240)
+        if not res.get("ok"):
+            return {"ok": False, "error": res.get("error")}
+        for k, p in shares.items():  # proof that the requester handed these ideas to the reviewer
+            await rpc(self.c1, {"op": "record", "type": "share", "payload": p,
+                                "sigs": {self.id.pub: self.id.sign(p), peer_pub: res["receipts"][k]}})
+        out = []
+        for rv in res["reviews"]:
+            await rpc(self.c1, {"op": "record", "type": "feedback", "payload": rv["payload"], "sigs": {peer_pub: rv["sig"]}})
+            self.reviews[rv["payload"]["content_hash"]] = dict(score=rv["payload"]["score"], comment=rv["payload"]["comment"], judge=alias(peer_pub))
+            out.append(dict(id=rv["payload"]["content_hash"][:8], score=rv["payload"]["score"], comment=rv["payload"]["comment"]))
+        emit("review", alias(peer_pub), f"심사 완료: " + ", ".join(f"{o['id']}={o['score']}" for o in out))
+        return {"ok": True, "reviews": out}
+
+    async def adopt(self, content_hash, reason="채택"):
+        if content_hash in self.adopted or content_hash not in self.ideas:
+            return False
+        p = {"evaluator": self.id.pub, "content_hash": content_hash, "verdict": "adopt", "reason": reason}
+        res = await rpc(self.c1, {"op": "record", "type": "feedback", "payload": p, "sigs": {self.id.pub: self.id.sign(p)}})
+        if res.get("ok"):
+            self.adopted.add(content_hash)
+            self.ideas[content_hash]["reason"] = reason
+            emit("award", "나", f"채택: '{self.ideas[content_hash]['idea']['title'][:40]}' ({alias(self.ideas[content_hash]['author'])}) - {reason}")
+        return res.get("ok", False)
+
+
+# ---------------- peers (secretary agent + simulated human persona) ----------------
+class PeerAgent:
+    def __init__(self, persona, port, broker_url, c1_url):
+        self.p, self.id, self.port, self.broker_url, self.c1 = persona, Identity(), port, broker_url, c1_url
+        self.url = f"http://127.0.0.1:{port}"
+        self.app = make_agent_app(f"peer-{alias(self.id.pub)}", f"pseudonymous peer {alias(self.id.pub)}", port, ["call_for_ideas"], self.handle)
+
+    async def advertise(self):
+        profile = {"summary": f"{self.p['role']}. 관심: {self.p['interests']}", "domain": "ideas"}
+        await rpc(self.broker_url, {"op": "advertise", "ad": {"pub": self.id.pub, "url": self.url, "profile": profile,
+                                                             "sig": self.id.sign(profile)}})
+
+    async def handle(self, r):
+        if r["op"] == "call_for_ideas":
+            asyncio.create_task(self.work(r))  # ack immediately; the human (persona) takes time
+            return {"ok": True, "ack": True}
+        if r["op"] == "evaluate_ideas":
+            return await self.review(r)
+        return {"ok": False, "error": "unknown op"}
+
+    async def review(self, r):
+        me = alias(self.id.pub)
+        if "review" not in self.p.get("can", []):
+            return {"ok": False, "error": "이 peer는 심사 요청을 받지 않습니다"}
+        if any(p["consumer"] != self.id.pub for p in r["share_payloads"].values()):
+            return {"ok": False, "error": "share payload mismatch"}
+        emit("peer", me, f"비서: 심사 요청 수락, 심사 전문가(페르소나)에게 아이디어 {len(r['ideas'])}건 전달")
+        listing = "\n".join(f"- {i['id']}: [{i['title']}] {i['idea']} (첫 단계: {i['first_step']} / 위험: {i['risk']})" for i in r["ideas"])
+        d = await llm.ask_json(
+            actor=me, model=llm.PERSONA_MODEL, effort="medium", system=judge_system(self.p), user=f"[공모]\n{r['call_text']}\n\n[아이디어]\n{listing}",
+            schema={"type": "object", "additionalProperties": False, "required": ["reviews"], "properties": {"reviews": {"type": "array", "items": {
+                "type": "object", "additionalProperties": False, "required": ["id", "score", "comment"],
+                "properties": {"id": {"type": "string"}, "score": {"type": "number"}, "comment": {"type": "string"}}}}}},
+            fallback=lambda: offline_review(r["ideas"]))
+        full = {k[:8]: k for k in r["share_payloads"]}
+        receipts = {k: self.id.sign(p) for k, p in r["share_payloads"].items()}
+        reviews = []
+        for rv in d["reviews"]:
+            if rv["id"] in full:
+                payload = {"evaluator": self.id.pub, "content_hash": full[rv["id"]], "verdict": "review",
+                           "score": float(rv["score"]), "comment": rv["comment"]}
+                reviews.append({"payload": payload, "sig": self.id.sign(payload)})
+        return {"ok": True, "receipts": receipts, "reviews": reviews}
+
+    async def work(self, r):
+        me = alias(self.id.pub)
+        # 1) secretary agent decides whether to bother its owner
+        d = await llm.ask_json(
+            actor=me, model=llm.AGENT_MODEL, system=secretary_system(self.p), user=f"[사내 공모]\n{r['text']}",
+            schema={"type": "object", "additionalProperties": False, "required": ["forward", "reason"],
+                    "properties": {"forward": {"type": "boolean"}, "reason": {"type": "string"}}},
+            fallback=lambda: {"forward": self.p["eager"] > 0.55, "reason": "참여 성향 기준(오프라인)"})
+        if not d["forward"]:
+            emit("peer", me, f"비서: 사원에게 전달하지 않음 - {d['reason']}")
+            return
+        emit("peer", me, "비서: 사원(페르소나)에게 공모 전달")
+        # 2) the simulated human thinks and writes an idea
+        idea = await llm.ask_json(
+            actor=me, model=llm.PERSONA_MODEL, effort="low", system=persona_system(self.p), schema=IDEA_SCHEMA,
+            fallback=lambda: offline_idea(self.p, r["text"]),
+            user=f"[사내 아이디어 공모]\n{r['text']}\n\n아이디어를 내 주세요. title은 한 줄, idea는 3~5문장, first_step은 첫 실행 단계, risk는 가장 큰 위험.")
+        # 3) secretary connects p2p to the requester and delivers via a2a
+        idea["call_id"] = r["call_id"]
+        content_hash = h(canon(idea))
+        STORE[content_hash] = idea
+        pub_p = {"author": self.id.pub, "content_hash": content_hash, "call_id": r["call_id"]}
+        share_p = {"provider": self.id.pub, "consumer": r["requester_pub"], "content_hash": content_hash,
+                   "terms": "idea submission, credit to author", "nonce": h(f"{content_hash}{time.time()}".encode())[:12]}
+        res = await rpc(r["requester_url"], {"op": "submit_idea", "call_id": r["call_id"], "idea": idea, "publish_payload": pub_p,
+                                             "publish_sig": self.id.sign(pub_p), "share_payload": share_p})
+        if not res.get("ok"):
+            emit("peer", me, f"요청자가 거절: {res.get('error')}")
+            return
+        # 4) prove it: publish (mine) + share (both signatures) on the ledger
+        a = await rpc(self.c1, {"op": "record", "type": "publish", "payload": pub_p, "sigs": {self.id.pub: self.id.sign(pub_p)}})
+        b = await rpc(self.c1, {"op": "record", "type": "share", "payload": share_p,
+                                "sigs": {self.id.pub: self.id.sign(share_p), r["requester_pub"]: res["receipt_sig"]}})
+        if not (a.get("ok") and b.get("ok")):
+            emit("peer", me, f"원장 기록 실패: {a.get('error')} / {b.get('error')}")
+
+
+def build_all(base=9100):
+    c2 = CollectorNode("collector-2", base + 102)
+    c1 = CollectorNode("collector-1", base + 101, peer_url=f"http://127.0.0.1:{base + 102}")
+    broker = Broker(base + 110)
+    me = Requester(base + 200, f"http://127.0.0.1:{base + 110}", f"http://127.0.0.1:{base + 101}")
+    peers = [PeerAgent(p, base + 1 + i, f"http://127.0.0.1:{base + 110}", f"http://127.0.0.1:{base + 101}") for i, p in enumerate(PERSONAS)]
+    return c1, c2, broker, me, peers
