@@ -57,6 +57,7 @@ export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드�
 | [app/](app/) | **동작하는 데모 코드** (peer·broker·기록자·절대자, 원장, LLM 어댑터, 대시보드) |
 | [proto/](proto/) | 초기 실현 가능성 spike (`spike_a2a.py`, `spike_ledger.py`) |
 | [docs/hackathon-proposal.md](docs/hackathon-proposal.md) | **제출용 신청서** (주최 측 7개 문항) |
+| [docs/form-original.txt](docs/form-original.txt) | **주최 측 양식 원문. 수정·삭제 금지.** 신청서의 문항 글은 이 원문 그대로이며 `python3 review/check_form.py`로 검사 |
 | [review/premises.md](review/premises.md) | 합의된 전제와 용어. `[가정]`은 확인 필요 |
 | [review/review-checklist.md](review/review-checklist.md) | 리뷰 지적과 반영 상태 |
 
