@@ -54,6 +54,7 @@ export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드�
 | [docs/broker-and-discovery.md](docs/broker-and-discovery.md) | broker(AI 없는 게시판·검색기) 3곳, 공지 공유, 응모 대상 라벨, 추천 peer |
 | [docs/a2a-transaction.md](docs/a2a-transaction.md) | p2p 연결, a2a 상호작용, 응모 판단과 제출 흐름 |
 | [docs/trust-and-security.md](docs/trust-and-security.md) | 신원 방식(실명·가명·익명), 원장의 보장 범위, 위험과 대응 |
+| [docs/competitive-comparison.md](docs/competitive-comparison.md) | 기존 제품(Agent 365, Gemini Enterprise, AGNTCY, NANDA, Fetch.ai, Glean, 공모 도구)과의 비교 |
 | [app/](app/) | **동작하는 데모 코드** (peer·broker·기록자·절대자, 원장, LLM 어댑터, 대시보드) |
 | [proto/](proto/) | 초기 실현 가능성 spike (`spike_a2a.py`, `spike_ledger.py`) |
 | [docs/hackathon-proposal.md](docs/hackathon-proposal.md) | **제출용 신청서** (주최 측 7개 문항) |
