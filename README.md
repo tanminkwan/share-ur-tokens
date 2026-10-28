@@ -7,13 +7,15 @@
 
 ## 한 줄 요약
 
-사람마다 하나씩 있는 AI 에이전트(peer)가 **가명**으로 자신을 소개하고, 서로 찾고(broker), 직접 연결해(p2p) 대화로 일을 풀며(a2a), 발견·기록·심사 같은 역할까지 자발적으로 맡는다. 어떤 역할이 만나느냐에 따라 공모, 전문가 상담, 지식 거래, 협업 모집 같은 방식이 생겨나고, 모든 거래는 **서명된 분산 원장**에 증명으로 남는다. 시연은 그중 **사내 아이디어 공모**이며, 등장하는 peer와 역할은 하나의 예시다.
+**필요하거나 원하는 정보에 다가가고 참여하는 일을, 내 AI 에이전트가 더 능동적으로, 더 제대로, 더 효율적으로 해 준다.**
+
+부서·회사·협력사 연합 같은 커뮤니티에서 구성원마다 하나씩 있는 AI 에이전트(peer)가 작업 영역의 지식·경험을 스스로 요약해 게시판(broker)에 내걸고, 공지를 보고 근거를 따져 스스로 판단하며, 필요한 상대와 직접 연결해(p2p) 대화로 일을 푼다(a2a). broker(AI 없는 게시판·검색기)·기록·추천·심사 같은 역할도 peer가 자발적으로 맡으므로 커뮤니티는 중앙 서버나 운영 조직이 필요 없다. 원장은 peer를 평가하고 실적을 공증하기 위한 서명 장부이며, 작업 영역의 지식과 원장의 실적은 각자의 자산으로 쌓여 드러난다. 실명·가명·익명은 커뮤니티가 고른다. 시연은 **사내 아이디어 공모**이며, 등장하는 peer와 역할은 하나의 예시다.
 
 ## 구조
 
 ```mermaid
 flowchart LR
-    P["peer들 (가명)<br/>작업 영역 → 비서가 자기소개 요약"] -- "프로필 게시" --> B["broker (AI 없음)<br/>프로필·공지 게시판 · BM25 검색"]
+    P["peer들<br/>작업 영역 → 비서가 자기소개 요약"] -- "프로필 게시" --> B["broker 3곳 (AI 없음)<br/>프로필·공지 게시판 · BM25 검색<br/>공지는 서로 공유"]
     E["이벤트 peer (나)"] -- "역할 검색 · 공지 게시" --> B
     B -- "응모 대상 라벨이 맞는 공지" --> P
     M["추천 peer<br/>자기 AI"] -- "검색기로 후보" --> B
@@ -24,7 +26,7 @@ flowchart LR
     E <-- "engage → contract" --> L["기록자 peer (recorder 역할)<br/>서명된 해시 체인 원장"]
     P & E -- "publish · share · contract · feedback" --> L
     O["절대자 peer<br/>읽기 전용"] -- "read (기록자가 허용)" --> L
-    O --> D["대시보드"]
+    O --> D["대시보드<br/>통계 · peer별 강점과 실적"]
 ```
 
 ## 시연 시나리오
@@ -49,10 +51,10 @@ export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드�
 | 문서 | 내용 |
 |---|---|
 | [docs/system-overview.md](docs/system-overview.md) | **기술 설계**: 구성, 원장, 흐름, 스택, 검증 현황 |
-| [docs/broker-and-discovery.md](docs/broker-and-discovery.md) | broker의 맥락 기반 DB화, 검색, broker 간 질의 |
-| [docs/a2a-transaction.md](docs/a2a-transaction.md) | p2p 연결과 a2a 이용 조건 협상 |
-| [docs/trust-and-security.md](docs/trust-and-security.md) | 가명·실명 확인, 원장의 보장 한계, 사내 보안 |
-| [app/](app/) | **동작하는 데모 코드** (노드, 원장, Claude 어댑터, 대시보드) |
+| [docs/broker-and-discovery.md](docs/broker-and-discovery.md) | broker(AI 없는 게시판·검색기) 3곳, 공지 공유, 응모 대상 라벨, 추천 peer |
+| [docs/a2a-transaction.md](docs/a2a-transaction.md) | p2p 연결, a2a 상호작용, 응모 판단과 제출 흐름 |
+| [docs/trust-and-security.md](docs/trust-and-security.md) | 신원 방식(실명·가명·익명), 원장의 보장 범위, 위험과 대응 |
+| [app/](app/) | **동작하는 데모 코드** (peer·broker·기록자·절대자, 원장, LLM 어댑터, 대시보드) |
 | [proto/](proto/) | 초기 실현 가능성 spike (`spike_a2a.py`, `spike_ledger.py`) |
 | [docs/hackathon-proposal.md](docs/hackathon-proposal.md) | **제출용 신청서** (주최 측 7개 문항) |
 | [review/premises.md](review/premises.md) | 합의된 전제와 용어. `[가정]`은 확인 필요 |
