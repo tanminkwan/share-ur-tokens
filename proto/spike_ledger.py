@@ -1,6 +1,9 @@
 """Feasibility spike: hash-chained, dual-signed provenance ledger with 2 collectors.
 
 Proves (in-process, no LLM, no network):
+ - first publisher of a content hash wins; a later duplicate publish is rejected (priority)
+ - every entry carries a timestamp, monotonic non-decreasing
+ - replaying the same share entry is rejected (nonce)
  - publish/share/derive entries are signed by pseudonymous ed25519 keys
  - a share needs BOTH provider and consumer signatures, else rejected
  - a derive must reference parents that exist in the ledger
@@ -63,7 +66,13 @@ class Collector:
             sig = e["sigs"].get(signer)
             if not sig or not verify(signer, e["payload"], sig):
                 return f"missing/invalid signature of {signer[:8]}"
+        if self.chain and e["ts"] < self.chain[-1]["ts"]:
+            return "timestamp goes backwards"
         known = {x["payload"]["content_hash"] for x in self.chain if "content_hash" in x["payload"]}
+        if e["type"] in ("publish", "derive") and e["payload"]["content_hash"] in known:
+            return "content already published (first publisher wins)"
+        if e["type"] == "share" and any(x["type"] == "share" and x["payload"].get("nonce") == e["payload"].get("nonce") for x in self.chain):
+            return "replay (nonce already used)"
         if e["type"] == "derive" and not all(p in known for p in e["payload"]["parents"]):
             return "unknown parent"
         if e["type"] == "share" and e["payload"]["content_hash"] not in known:
@@ -74,7 +83,7 @@ class Collector:
         err = self.validate(e)
         if err:
             return err
-        body = copy.deepcopy({k: e[k] for k in ("type", "payload", "sigs", "prev")})  # each collector owns its copy
+        body = copy.deepcopy({k: e[k] for k in ("type", "payload", "sigs", "prev", "ts")})  # each collector owns its copy
         e = dict(body, seq=len(self.chain), hash=h(canon(body)))
         self.chain.append(e)
         return None
@@ -82,21 +91,31 @@ class Collector:
     def audit(self):
         prev = "0" * 64
         for i, e in enumerate(self.chain):
-            body = {k: e[k] for k in ("type", "payload", "sigs", "prev")}
+            body = {k: e[k] for k in ("type", "payload", "sigs", "prev", "ts")}
             if e["prev"] != prev or e["hash"] != h(canon(body)):
-                return f"TAMPERED at seq {i}"
+                return f"TAMPERED at seq {i} (hash chain)"
+            if any(not verify(signer, e["payload"], e["sigs"].get(signer, "")) for signer in self._required_signers(e)):
+                return f"TAMPERED at seq {i} (signature)"
             prev = e["hash"]
         return "ok"
 
 
 def entry(kind, payload, signers, prev):
-    return {"type": kind, "payload": payload, "sigs": {s.pub: s.sign(payload) for s in signers}, "prev": prev}
+    return {"type": kind, "payload": payload, "sigs": {s.pub: s.sign(payload) for s in signers}, "prev": prev, "ts": time.time()}
+
+
+def cross_check(c1, c2):
+    """compare two collectors entry by entry; returns first diverging seq or None"""
+    for i, (a, b) in enumerate(zip(c1.chain, c2.chain)):
+        if a["hash"] != b["hash"]:
+            return i
+    return None if len(c1.chain) == len(c2.chain) else min(len(c1.chain), len(c2.chain))
 
 
 def submit(c1, c2, e):
     """collector 1 accepts, collector 2 independently validates & appends the same entry"""
     for c in (c1, c2):
-        err = c.append(dict(e, prev=c.head()))
+        err = c.append(dict(e, prev=c.head()))  # same ts for both so hashes match
         if err:
             return f"{c.name}: {err}"
     return None
@@ -138,14 +157,28 @@ if __name__ == "__main__":
     k_a = h("CI 캐시 설정 노하우(원문)".encode())
     k_b = h("A의 노하우를 우리 서비스에 적용한 변형".encode())
     print("publish A      :", submit(c1, c2, entry("publish", {"content_hash": k_a, "author": A.pub}, [A], "")))
-    print("share A->B     :", submit(c1, c2, entry("share", {"content_hash": k_a, "provider": A.pub, "consumer": B.pub, "terms": "attribution"}, [A, B], "")))
+    print("share A->B     :", submit(c1, c2, entry("share", {"content_hash": k_a, "provider": A.pub, "consumer": B.pub, "terms": "attribution", "nonce": "n1"}, [A, B], "")))
     print("derive B(A)    :", submit(c1, c2, entry("derive", {"content_hash": k_b, "author": B.pub, "parents": [k_a]}, [B], "")))
-    print("share B->C     :", submit(c1, c2, entry("share", {"content_hash": k_b, "provider": B.pub, "consumer": C.pub, "terms": "attribution"}, [B, C], "")))
+    print("share B->C     :", submit(c1, c2, entry("share", {"content_hash": k_b, "provider": B.pub, "consumer": C.pub, "terms": "attribution", "nonce": "n2"}, [B, C], "")))
 
-    print("one-sided share:", submit(c1, c2, entry("share", {"content_hash": k_a, "provider": A.pub, "consumer": C.pub, "terms": ""}, [A], "")))
+    print("one-sided share:", submit(c1, c2, entry("share", {"content_hash": k_a, "provider": A.pub, "consumer": C.pub, "terms": "", "nonce": "n3"}, [A], "")))
     print("derive w/ fake parent:", submit(c1, c2, entry("derive", {"content_hash": h(b"x"), "author": C.pub, "parents": ["f" * 64]}, [C], "")))
-    print("audit c1/c2    :", c1.audit(), "/", c2.audit(), "| same head:", c1.head() == c2.head())
+    print("late duplicate publish (C re-publishes A's content):", submit(c1, c2, entry("publish", {"content_hash": k_a, "author": C.pub}, [C], "")))
+    replay = entry("share", {"content_hash": k_a, "provider": A.pub, "consumer": B.pub, "terms": "attribution", "nonce": "n1"}, [A, B], "")
+    print("replayed share :", submit(c1, c2, replay))
+    print("audit c1/c2    :", c1.audit(), "/", c2.audit(), "| cross_check:", cross_check(c1, c2))
     print("credit         :", {name[a]: n for a, n in contribution(c1.chain).items()})
 
-    c1.chain[1]["payload"]["terms"] = "none"  # an admin edits history on collector-1
-    print("after tamper   : c1 =", c1.audit(), "| c2 =", c2.audit(), "| stored heads equal:", c1.head() == c2.head())
+    # attack 1: edit history on collector-1 without fixing hashes
+    c1.chain[1]["payload"]["terms"] = "none"
+    print("tamper (naive) : c1 =", c1.audit(), "| c2 =", c2.audit(), "| cross_check diverges at:", cross_check(c1, c2))
+    c1.chain[1]["payload"]["terms"] = "attribution"
+
+    # attack 2: admin edits an entry AND recomputes every later hash so c1.audit() passes
+    c1.chain[1]["payload"]["terms"] = "none"
+    prev = c1.chain[0]["hash"]
+    for e in c1.chain[1:]:
+        e["prev"] = prev
+        e["hash"] = h(canon({k: e[k] for k in ("type", "payload", "sigs", "prev", "ts")}))
+        prev = e["hash"]
+    print("tamper (rehash): c1.audit =", c1.audit(), "| cross_check diverges at:", cross_check(c1, c2), "<- caught twice: signatures no longer match the edited payload, and the other collector disagrees")
