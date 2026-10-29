@@ -2,7 +2,8 @@
 
 원문을 문항별 블록(문항 번호로 시작하는 줄부터 다음 문항 전까지, 끝의 빈 줄 제외)으로 나누고,
 각 블록이 신청서 안에 그대로(줄 끝 공백 포함) 순서대로 들어 있는지 확인한다. 어긋나면 0이 아닌 값으로 끝난다.
-    python3 review/check_form.py
+    python3 review/check_form.py                                   # 신청서 원본
+    python3 review/check_form.py docs/hackathon-proposal-submit.md # 제출용 압축본
 """
 import re
 import sys
@@ -10,7 +11,8 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 original = (root / "docs/form-original.txt").read_text(encoding="utf-8").rstrip("\n").split("\n")
-proposal = (root / "docs/hackathon-proposal.md").read_text(encoding="utf-8")
+target = Path(sys.argv[1]) if len(sys.argv) > 1 else root / "docs/hackathon-proposal.md"
+proposal = (target if target.is_absolute() else Path.cwd() / target).read_text(encoding="utf-8")
 
 starts = [i for i, line in enumerate(original) if re.match(r"^[1-7]\. ", line)]
 blocks = []
