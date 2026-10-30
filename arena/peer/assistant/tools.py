@@ -82,10 +82,16 @@ async def send(A, ctx, st, to, text, data=None, attach_reveals=()):
         if "error" in rec:
             return {"ok": False, "error": rec["error"]}
         data.setdefault("reveals", []).append(rec)
-    _, url = await A.resolve_peer(ctx, st, to)
+    pub, url = await A.resolve_peer(ctx, st, to)
     if not url:
         return {"ok": False, "error": f"{to}의 주소를 찾지 못했다"}
-    return await A.send(ctx, st, url, text, data)
+    r = await A.send(ctx, st, url, text, data)
+    if r.get("ok"):
+        for label in attach_reveals or ():
+            st.sent_reveals.setdefault(label, [])
+            if pub and pub not in st.sent_reveals[label]:
+                st.sent_reveals[label].append(pub)
+    return r
 
 
 async def solicit(A, ctx, st, targets, text, data=None):
@@ -119,6 +125,21 @@ async def commit(A, ctx, st, label, value):
         return {"ok": False, "error": r.get("error")}
     st.secrets[label] = {"value": value, "salt": salt, "commit": c, "publish_hash": r["hash"]}
     return {"ok": True, "label": label, "commit": c, "publish_hash": r["hash"]}
+
+
+async def reveal(A, ctx, st, label):
+    """open my registration on the ledger: the code fills value and salt, the ledger checks them against the sealed hash"""
+    s = st.secrets.get(label)
+    if not s:
+        return {"error": f"먼저 등록한 라벨 {label}이 없다"}
+    if s.get("reveal_hash"):
+        return {"ok": True, "hash": s["reveal_hash"], "note": "이미 원장에 공개했다"}
+    p = {"author": ctx.pub, "label": label, "value": s["value"], "salt": s["salt"], "commit": s["publish_hash"],
+         "event_id": st.event_id, "group_id": st.group_id}
+    r = await _record(A, ctx, st, "reveal", p)
+    if r.get("ok"):
+        s["reveal_hash"] = r["hash"]
+    return {"ok": bool(r.get("ok")), "label": label, "value": s["value"], "hash": r.get("hash"), "error": r.get("error")}
 
 
 async def my_reveal(A, ctx, st, label):
@@ -236,6 +257,8 @@ def default_tools() -> list[Tool]:
         Tool("publish_text", "{text}: 글을 원장에 먼저 등록한다. 결과 content_hash, publish_hash", _obj(text=S), publish_text),
         Tool("commit", "{label, value}: 값에 비밀값을 붙인 해시를 원장에 먼저 등록하고 값은 숨겨 둔다. 결과 label, commit, publish_hash",
              _obj(label=S, value=S), commit),
+        Tool("reveal", "{label}: 내가 먼저 등록한 값을 원장에 공개한다(값과 비밀값은 코드가 채우고, 원장이 먼저 등록한 해시와 맞는지 확인한다). "
+             "다른 사람의 공개는 진행 현황(event_progress)에서 보인다", _obj(label=S), reveal),
         Tool("my_reveal", "{label}: 내가 먼저 등록한 값의 공개값 묶음(author, label, value, salt, publish_hash)을 본다. 보낼 때는 send의 attach_reveals를 쓴다",
              _obj(label=S), my_reveal),
         Tool("check_reveal", "{publish_hash, author, label, value, salt}: 상대(필명)가 보낸 공개값이 상대가 먼저 등록한 해시와 맞는지 원장으로 확인한다. 결과 match",

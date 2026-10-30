@@ -1,0 +1,66 @@
+"""P5-C35 ~ C36: found by live run 8 (two matches finished, the third stalled: a player said "here is my reveal" but
+attached nothing, believed it had sent it, and both sides waited for each other). Generic features:
+- a reveal can be recorded on the ledger: the ledger checks it against the author's own registration (same event, same
+  label, the sealed hash matches) and keeps one reveal per registration; its public view shows the revealed value
+- the assistant reveals by label (the code fills value and salt), sees others' reveals in the event's progress, and
+  "공개:<handle>:<label>" is filled from a ledger reveal without any message
+- the assistant's state line says, from code, which of my labels are revealed on the ledger and to whom I sent reveals"""
+from arena.crypto import commit_hash
+from tests.test_assistant import asst, ctx, eco, joined, settle  # noqa: F401  (eco is a fixture)
+from tests.test_reveal_carry import _commit
+
+
+def _reveal(p, ev, label, value, salt, commit):
+    payload = {"author": p.identity.pub, "label": label, "value": value, "salt": salt, "commit": commit, "event_id": ev, "group_id": "public"}
+    return payload, {p.identity.pub: p.identity.sign(payload)}
+
+
+async def test_p5c35_the_ledger_checks_a_reveal_against_its_own_registration(eco):
+    ev = await joined(eco)
+    a, b = eco.a, eco.b
+    s = await _commit(a, ev, "r-1", "바위")
+    assert s["commit"] == commit_hash("r-1", "바위", s["salt"], a.identity.pub)
+    rec = eco.svc.record
+    assert "match" in (await rec("reveal", *_reveal(a, ev, "r-1", "보", s["salt"], s["publish_hash"])))["error"]       # wrong value
+    assert "label" in (await rec("reveal", *_reveal(a, ev, "r-2", "바위", s["salt"], s["publish_hash"])))["error"]     # another label
+    assert "author" in (await rec("reveal", *_reveal(b, ev, "r-1", "바위", s["salt"], s["publish_hash"])))["error"]    # not the author
+    ok = await rec("reveal", *_reveal(a, ev, "r-1", "바위", s["salt"], s["publish_hash"]))
+    assert ok["ok"]
+    assert "already" in (await rec("reveal", *_reveal(a, ev, "r-1", "바위", s["salt"], s["publish_hash"])))["error"]  # once
+    v = eco.svc.verify(ok["hash"])
+    assert v["type"] == "reveal" and v["value"] == "바위" and v["label"] == "r-1" and v["commit"] == s["publish_hash"]
+
+
+async def test_p5c36_the_assistant_reveals_by_label_and_uses_ledger_reveals(eco):
+    ev = await joined(eco)
+    a, b = eco.a, eco.b
+    await _commit(a, ev, "r-1", "바위")
+    await _commit(b, ev, "r-1", "보")
+    a.llm.push("reveal", label="r-1")
+    await asst(a).feed(ctx(a), ev, "공개하라")
+    await settle(a)
+    assert any(x["type"] == "reveal" and x["payload"]["author"] == a.identity.pub for x in eco.svc.ledger.chain)
+    assert "원장에 공개한 내 라벨: r-1" in asst(a)._system(ctx(a), asst(a).events[ev])
+    # b sees a's reveal in the progress, with no message at all
+    st_b = asst(b).events[ev]
+    lines = "\n".join(await asst(b).progress_lines(ctx(b), st_b))
+    assert "reveal" in lines and a.pen in lines and "바위" in lines
+    # b reveals too, then proposes with references only; the code fills both from the ledger
+    b.llm.push("reveal", label="r-1")
+    b.llm.push("propose_attest", kind="pair", subject="r", value={"a": f"공개:{a.pen}:r-1", "b": f"공개:{b.pen}:r-1"}, parties=[b.pen, a.pen])
+    await asst(b).feed(ctx(b), ev, "공개하고 제안하라")
+    await settle(a, b)
+    rid = next(iter(asst(a).events[ev].pending))
+    assert asst(a).events[ev].pending[rid]["reveals_ok"] is True
+    filled = asst(a).events[ev].pending[rid]["payload"]["value"]
+    assert filled["a"]["value"] == "바위" and filled["b"]["value"] == "보" and filled["a"]["author"] == a.identity.pub
+
+
+async def test_p5c36_the_state_line_says_to_whom_i_sent_reveals(eco):
+    ev = await joined(eco)
+    a, b = eco.a, eco.b
+    await _commit(a, ev, "r-1", "바위")
+    a.llm.push("send", to=b.pen, text="공개", data={}, attach_reveals=["r-1"])
+    await asst(a).feed(ctx(a), ev, "보내라")
+    await settle(a, b)
+    assert f"내가 보낸 공개값: r-1→{b.pen}" in asst(a)._system(ctx(a), asst(a).events[ev])

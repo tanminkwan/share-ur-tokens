@@ -17,6 +17,11 @@ def h(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
+def commit_hash(label: str, value, salt: str, pub: str) -> str:
+    """the sealed hash of a value registered before it is revealed (commit-reveal), bound to its label and author"""
+    return h(canon({"label": label, "value": value, "salt": salt, "pub": pub}))
+
+
 def pen_name(pub: str, prefix: str, n: int) -> str:
     return prefix + pub[:n]
 

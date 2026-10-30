@@ -7,6 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Callable
 
+from ..crypto import commit_hash
 from ..peer.plugin import valid_run
 
 POLICY_LISTS = ("roles", "conflict_roles", "hidden_roles")
@@ -214,6 +215,23 @@ def _attest_contribute(rec, p, index):
         _inc_map(rec, who, "attested", p.get("kind"))
 
 
+# ---------------- reveal ----------------
+def _reveal_rule(chain, e, now, s):
+    """a reveal opens the author's own registration: same event, same label, and the sealed hash must match"""
+    p = e["payload"]
+    c = next((x for x in chain if x["hash"] == p.get("commit")), None)
+    if c is None or c["type"] != "publish" or c["payload"].get("event_id") != p.get("event_id"):
+        return "commit must be a registration (publish) in this event"
+    if c["payload"].get("author") != p.get("author"):
+        return "only the author of the registration can reveal it"
+    if c["payload"].get("label") != p.get("label"):
+        return "label differs from the registration's label"
+    if commit_hash(str(p.get("label")), p.get("value"), str(p.get("salt")), p["author"]) != c["payload"]["content_hash"]:
+        return "revealed value and salt do not match the registered hash"
+    if any(x["type"] == "reveal" and x["payload"].get("commit") == p["commit"] for x in chain):
+        return "this registration is already revealed"
+
+
 # ---------------- close ----------------
 def _close_rule(chain, e, now, s):
     if e["payload"].get("issuer") != events(chain)[e["payload"]["event_id"]]["issuer"]:
@@ -251,6 +269,10 @@ for _t in (
               rules=(_attest_rule,), public=lambda p, c: {"kind": p.get("kind"), "subject": p.get("subject"), "parties": list(p["parties"]),
                                                           "value": p.get("value")},
               counters={"attested": defaultdict(int)}, contribute=_attest_contribute),
+    EntryType("reveal", lambda p: [p.get("author")], event_ref="required", rules=(_reveal_rule,),
+              public=lambda p, c: {"author": p["author"], "label": p.get("label"), "value": p.get("value"), "salt": p.get("salt"),
+                                   "commit": p.get("commit")},
+              counters={"revealed": 0}, contribute=_count("revealed", "author")),
     EntryType("close", lambda p: [p.get("issuer")], event_ref="required", rules=(_close_rule,),
               public=lambda p, c: {"issuer": p["issuer"], "result_hash": p.get("result_hash")}, counters={"closed": 0},
               contribute=_count("closed", "issuer")),

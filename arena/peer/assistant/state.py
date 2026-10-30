@@ -6,11 +6,9 @@ import os
 import time
 from dataclasses import dataclass, field
 
-from ...crypto import canon, h
+from ...crypto import canon, commit_hash, h  # noqa: F401  (commit_hash kept importable from here)
 
 
-def commit_hash(label: str, value, salt: str, pub: str) -> str:
-    return h(canon({"label": label, "value": value, "salt": salt, "pub": pub}))
 
 
 def nonce(*parts) -> str:
@@ -37,6 +35,7 @@ class EventState:
     peers: dict = field(default_factory=dict)        # pub -> url learned from messages and contracts
     contracts: list = field(default_factory=list)    # [role, contractor pub] this host has contracted (kept by code)
     applicants: list = field(default_factory=list)   # pubs whose signed join carried this event's rules hash (checked by code)
+    sent_reveals: dict = field(default_factory=dict)  # my label -> handles I sent its reveal record to (kept by code)
     reveals: dict = field(default_factory=dict)      # "author pub|label" -> a received reveal record the code checked against the ledger
     roster: list = field(default_factory=list)       # pubs seen in this event's ledger entries (shown as handles)
     aliases: dict = field(default_factory=dict)      # what the LLM sees -> the real value: 필명-xxxxxx -> public key, #ab12.. -> hash
@@ -51,7 +50,7 @@ class EventState:
     task: asyncio.Task | None = None
 
     KEEP = ("event_id", "role", "title", "rules", "rules_hash", "group_id", "recorder_url", "recorder_pub", "issuer_pub", "issuer_url",
-            "offer_roles", "transcript", "pending", "proposals", "peers", "contracts", "applicants", "reveals", "roster", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed",
+            "offer_roles", "transcript", "pending", "proposals", "peers", "contracts", "applicants", "sent_reveals", "reveals", "roster", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed",
             "last_input_at", "idle_checks")
 
     def to_dict(self) -> dict:

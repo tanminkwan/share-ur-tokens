@@ -257,3 +257,24 @@ sequenceDiagram
     B->>B: propose_attest(value={"a": "공개:필명-A:m1-1", "b": "공개:필명-B:m1-1"})
     Note over B: 코드가 참조를 보관한 묶음으로 바꿔 넣음 (손으로 옮긴 값 없음)
 ```
+
+
+## 11. 원장 공개 (실제 실행 8에서 발견)
+
+메시지로 공개값을 주고받으면 "보냈다"는 사실이 LLM의 기억에만 남는다. 실행 8에서 한 선수는 빈 메시지를 보내고 보냈다고 믿었다. 공개 자체를 원장 항목으로 만들어, 보냈는지 받았는지를 원장이 답하게 했다.
+
+```mermaid
+sequenceDiagram
+    participant A as 선수 A
+    participant R as recorder (원장)
+    participant B as 선수 B
+    A->>R: publish {label "m3-1", content_hash = 봉인 해시}
+    B->>R: publish {label "m3-1", content_hash = 봉인 해시}
+    A->>R: reveal {label "m3-1", value, salt, commit = A의 등록}
+    Note over R: 같은 작성자·이벤트·이름표, 봉인 해시 일치, 한 번만
+    B->>R: GET /events/{id} → A의 공개가 보임
+    B->>R: reveal {label "m3-1", ...}
+    A->>A: propose_attest(value에 "공개:필명-A:m3-1", "공개:필명-B:m3-1") → 코드가 원장 공개로 채움
+```
+
+가위바위보 규칙 글(`dev/acceptance-rps-rules.md`)도 메시지 대신 원장 공개를 쓰도록 바꿨다. 플랫폼이 새 기능을 얻었고, 규칙 글은 그 기능을 쓰는 소재일 뿐이다.

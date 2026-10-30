@@ -192,6 +192,10 @@ class EventAssistant:
                 return {"author": ctx.pub, "label": label, "value": s["value"], "salt": s["salt"], "publish_hash": s["publish_hash"]}
             if f"{who}|{label}" in st.reveals:
                 return dict(st.reveals[f"{who}|{label}"])
+            on_ledger = next((e for e in await self.progress_entries(ctx, st)
+                              if e["type"] == "reveal" and e.get("author") == who and e.get("label") == label), None)
+            if on_ledger:  # opened on the ledger: already checked by the ledger against the sealed hash
+                return {"author": who, "label": label, "value": on_ledger["value"], "salt": on_ledger["salt"], "publish_hash": on_ledger["commit"]}
             missing.append(x)
             return x
         return await one(obj), missing
@@ -304,7 +308,10 @@ class EventAssistant:
     def _system(self, ctx, st) -> str:
         h = lambda pub: self.handle(ctx, st, pub)
         tools = "\n".join(f"- {n} {self.tools[n].description}" for n in self._tools_for(st))
-        state = (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 내가 받은 서명 요청: {', '.join(st.pending) or '없음'} / "
+        revealed = [k for k, v in st.secrets.items() if v.get("reveal_hash")]
+        sent = [f"{k}→{'·'.join(h(p) for p in v)}" for k, v in st.sent_reveals.items()]
+        state = (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 원장에 공개한 내 라벨: {', '.join(revealed) or '없음'} / "
+                 f"내가 보낸 공개값: {', '.join(sent) or '없음'} / 내가 받은 서명 요청: {', '.join(st.pending) or '없음'} / "
                  f"내가 제안한 공동 확인: {', '.join(st.proposals) or '없음'} / 참가 신청: {'함' if st.joined else '안 함'} / 닫힘: {st.closed} / "
                  f"아는 peer: {', '.join(h(p) for p in st.peers) or '없음'} / "
                  f"이 이벤트에서 맺은 역할 계약 {len(st.contracts)}건: {', '.join(f'{c[0]}={h(c[1])}' for c in st.contracts) or '없음'}"
