@@ -11,7 +11,7 @@ from ...crypto import h, pen_name, verify
 from ...llm import ask_json
 from ..event_store import EventStore, FolderEventStore
 from ..events import announce_event
-from ..plugin import ASSISTANT_APP_ID, Decision, MessageHead, assistant_spec
+from ..plugin import ASSISTANT_APP_ID, Decision, MessageHead
 from .state import EventState, nonce
 from .tools import Tool, default_tools
 
@@ -99,7 +99,7 @@ class EventAssistant:
     async def host_event(self, ctx, *, title, kind, rules, policy, instruction, audience=None, recorder=None):
         """open an event run in the primordial way: natural-language rules, app = the basic assistant"""
         out = await announce_event(ctx, group=self.group, title=title, kind=kind, rules=rules, policy=policy,
-                                   app=assistant_spec(self.version), audience=audience, recorder=recorder)
+                                   mode="assistant", apps=[], audience=audience, recorder=recorder)
         ev, rec = out["event_id"], out["recorder"]
         st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url)
         self.save(ctx, st)
@@ -157,7 +157,8 @@ class EventAssistant:
         tools = "\n".join(f"- {n} {self.tools[n].description}" for n in self._tools_for(st))
         state = (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 내가 받은 서명 요청: {', '.join(st.pending) or '없음'} / "
                  f"내가 제안한 공동 확인: {', '.join(st.proposals) or '없음'} / 참가 신청: {'함' if st.joined else '안 함'} / 닫힘: {st.closed} / "
-                 f"아는 peer: {', '.join(f'{p[:8]}={u}' for p, u in st.peers.items()) or '없음'}")
+                 f"아는 peer: {', '.join(f'{p[:8]}={u}' for p, u in st.peers.items()) or '없음'} / "
+                 f"이 이벤트에서 맺은 역할 계약 {len(st.contracts)}건: {', '.join(f'{c[0]}={c[1][:8]}' for c in st.contracts) or '없음'}")
         return (f"당신은 peer '{ctx.pen}'의 비서 에이전트입니다. 이벤트 '{st.title}'(event_id {st.event_id}, broker 그룹 {st.group_id})에 "
                 f"{'개최자' if st.role == 'host' else '참가자'}로 참여합니다. 아래 이벤트 규칙을 정확히 따르세요. 규칙에 없는 일은 하지 말고, "
                 "확실하지 않으면 note로 적은 뒤 wait 하세요. 소유자(사람)에게 묻는 말은 한국어로 씁니다.\n\n[이벤트 규칙]\n" + st.rules +

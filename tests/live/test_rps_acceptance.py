@@ -91,14 +91,17 @@ async def start_world(live, tmp):
 
 
 async def test_rps_app_free_acceptance(live, tmp_path):
+    import dataclasses
+    live = dataclasses.replace(live, assistant_idle_sec=30.0)  # a stalled agent is woken after 30s (then 60, 120, ...)
     procs, servers, msgs, peers, reader, log = await start_world(live, tmp_path)
     host, players = peers["host"], [peers[f"p{i}"] for i in range(N_PLAYERS + 1)]
     try:
         t0 = time.time()
-        ev = await host.app(EventAssistant).host_event(host, title="peer 가위바위보 대회", kind="가위바위보", rules=RULES, policy=POLICY,
+        ev = await host.app(EventAssistant).host_event(host.ctx(EventAssistant), title="peer 가위바위보 대회", kind="가위바위보", rules=RULES, policy=POLICY,
                                                        instruction=INSTRUCTION)
+        await host.start()  # the host's assistant checks itself when its event goes quiet
         for p in players:
-            await p.start()  # each player's assistant watches the board on its own
+            await p.start()  # each player's event router watches the board and hands the event to its assistant
         rec_url = host.app(EventAssistant).events[ev].recorder_url
         R = RecorderClient(rec_url, live)
         chain = []

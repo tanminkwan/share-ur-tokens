@@ -203,13 +203,13 @@ sequenceDiagram
     participant B as broker (그룹마다)
     participant ER as 이벤트 배정기 (각 peer의 내장 앱)
     participant A as 지정된 앱 / 기본 비서
-    H->>R: 이벤트 선언 (규칙 해시, app = {id, version, mode, hash?})
-    H->>B: 공지 (규칙 글, app)
+    H->>R: 이벤트 선언 (규칙 해시, mode, apps = [{id, version, hash?, required?}...])
+    H->>B: 공지 (rules, policy, mode, apps 블록)
     loop 주기
         ER->>B: 바뀐 공지만 (그룹마다)
-        ER->>R: 선언 확인: 규칙 해시·app이 공지와 같은가
-        ER->>ER: mode와 app_id로 앱 고르기 (버전, 코드 해시)
-        ER->>A: on_event(new / updated / closed)
+        ER->>R: 선언 확인: 규칙 해시·mode·apps가 공지와 같은가
+        ER->>ER: 코드로만: 목록의 필수 앱 설치·버전·코드 해시 확인 (LLM 없음)
+        ER->>A: 목록의 이벤트 받는 앱 모두에 on_event(new / updated / closed)
     end
 ```
 

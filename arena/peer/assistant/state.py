@@ -35,6 +35,7 @@ class EventState:
     pending: dict = field(default_factory=dict)      # signature requests waiting for me: id -> {payload, from_pub, from_url}
     proposals: dict = field(default_factory=dict)    # my attest proposals: id -> {payload, sigs}
     peers: dict = field(default_factory=dict)        # pub -> url learned from messages and contracts
+    contracts: list = field(default_factory=list)    # [role, contractor pub] this host has contracted (kept by code)
     joined: bool = False
     closed: bool = False
     notice_ver: int = 1
@@ -45,7 +46,7 @@ class EventState:
     task: asyncio.Task | None = None
 
     KEEP = ("event_id", "role", "title", "rules", "rules_hash", "group_id", "recorder_url", "recorder_pub", "issuer_pub", "issuer_url",
-            "offer_roles", "transcript", "pending", "proposals", "peers", "joined", "closed", "notice_ver", "notice_closed",
+            "offer_roles", "transcript", "pending", "proposals", "peers", "contracts", "joined", "closed", "notice_ver", "notice_closed",
             "last_input_at", "idle_checks")
 
     def to_dict(self) -> dict:

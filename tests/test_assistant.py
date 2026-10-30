@@ -230,9 +230,11 @@ async def test_p5c11_decline_and_issuer_attest_and_close(eco):
     await settle(host)
     at = [x for x in eco.svc.ledger.chain if x["type"] == "attest"]
     assert len(at) == 1 and at[0]["payload"]["parties"] == [host.identity.pub]
+    host.llm.push("close_event", result_hash="0" * 64)  # no such entry: refused by code
     host.llm.push("close_event", result_hash=at[0]["hash"])
     await asst(host).feed(ctx(host), ev, "닫아라")
     await settle(host)
+    assert any("이 이벤트의 원장 항목이어야" in x for x in asst(host).events[ev].transcript)
     assert eco.svc.ledger.chain[-1]["type"] == "close" and eco.svc.ledger.chain[-1]["payload"]["result_hash"] == at[0]["hash"]
     assert (await host.brokers["public"].list_notices(host.identity))["notices"] == []
     assert audit_chain(eco.svc.ledger.chain) == "ok"

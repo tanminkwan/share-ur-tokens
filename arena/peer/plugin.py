@@ -115,21 +115,31 @@ def app_fingerprint(app) -> str:
     return hashlib.sha256(src.encode()).hexdigest()
 
 
-def app_spec(app, mode: str, pin_code: bool = False) -> dict:
-    """what an event declaration says about the app it needs"""
-    spec = {"id": app.app_id, "name": app.name, "version": app.version, "mode": mode}
+def app_ref(app, pin_code: bool = False, required: bool = True) -> dict:
+    """one entry of an event's app list block: which app, which version, optionally its exact code"""
+    ref = {"id": app.app_id, "name": app.name, "version": app.version}
     if pin_code:
-        spec["hash"] = app_fingerprint(app)
-    return spec
+        ref["hash"] = app_fingerprint(app)
+    if not required:
+        ref["required"] = False
+    return ref
 
 
-def assistant_spec(version: str = "1.0") -> dict:
-    return {"id": ASSISTANT_APP_ID, "name": "assistant", "version": version, "mode": "assistant"}
+ASSISTANT_RUN = {"mode": "assistant", "apps": []}  # the primordial way: no app, the basic assistant reads the rules
 
 
-def valid_app_spec(spec) -> bool:
-    return (isinstance(spec, dict) and is_uuid(spec.get("id")) and spec.get("mode") in MODES and bool(_v(spec.get("version", "")))
-            and set(spec) <= {"id", "name", "version", "mode", "hash"})
+def valid_app_ref(ref) -> bool:
+    return (isinstance(ref, dict) and is_uuid(ref.get("id")) and bool(_v(ref.get("version", "")))
+            and set(ref) <= {"id", "name", "version", "hash", "required"} and isinstance(ref.get("required", True), bool))
+
+
+def valid_run(mode, apps) -> bool:
+    """the execution block (mode) and the app list block (apps) of an event"""
+    if mode not in MODES or not isinstance(apps, list) or not all(valid_app_ref(r) for r in apps):
+        return False
+    if len({r["id"] for r in apps}) != len(apps):
+        return False
+    return mode == "assistant" or bool(apps)
 
 
 def capabilities_of(app) -> list[str]:

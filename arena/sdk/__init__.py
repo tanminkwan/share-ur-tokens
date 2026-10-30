@@ -17,8 +17,9 @@ from ..peer.plugin import (  # noqa: F401
     CAPABILITIES, SDK_VERSION, App, BaseApp, Decision, EventApprover, Lifecycle, MessageHead, OfferProvider, OpHandler, OpProvider,
     ProfileContributor, RequestReceiver, RoleAcceptor, capabilities_of)
 from ..peer.plugin import (  # noqa: F401
-    ASSISTANT_APP_ID, MODES, EventHandler, app_fingerprint, app_spec, assistant_spec, valid_app_spec, version_ok)
+    ASSISTANT_APP_ID, ASSISTANT_RUN, MODES, EventHandler, app_fingerprint, app_ref, valid_app_ref, valid_run, version_ok)
 from ..peer.plugins import load_app, load_apps  # noqa: F401
+from ..peer.events import announce_event  # noqa: F401
 from .adapters import A2AAgentAdapter, HttpServiceAdapter, function_app  # noqa: F401
 from .context import Context, State  # noqa: F401
 from .discovery import ENTRY_POINT_GROUP, discover_apps  # noqa: F401

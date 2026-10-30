@@ -61,7 +61,8 @@ async def contract(A, ctx, st, role, peer_pub, peer_url):
     r = await ctx.recorder(st.recorder_url).record("contract", c, {ctx.pub: ctx.sign(c), peer_pub: eng["sig"]})
     if r.get("ok"):
         st.peers[peer_pub] = peer_url
-    return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error")}
+        st.contracts.append([role, peer_pub])
+    return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error"), "contracts_so_far": len(st.contracts)}
 
 
 async def send(A, ctx, st, to_url, text, data=None):
@@ -144,6 +145,9 @@ async def decline(A, ctx, st, request_id, reason):
 
 
 async def close_event(A, ctx, st, result_hash):
+    v = await ctx.recorder(st.recorder_url).verify(result_hash)  # checked by code: the result must be on the ledger, in this event
+    if not (v.get("exists") and v.get("event_id") == st.event_id):
+        return {"error": "result_hash는 이 이벤트의 원장 항목이어야 한다(결과를 먼저 원장에 기록한 뒤 닫는다)"}
     c = {"event_id": st.event_id, "issuer": ctx.pub, "result_hash": result_hash, "group_id": st.group_id}
     r = await _record(A, ctx, st, "close", c)
     if r.get("ok"):
