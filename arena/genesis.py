@@ -15,6 +15,7 @@ from .broker.api import build_broker_app
 from .broker.client import BrokerClient
 from .broker.neighbors import HttpNeighbors
 from .broker.service import BrokerService
+from .broker.store import FileBrokerStore
 from .config import ConfigError, Settings
 from .crypto import Identity
 from .events import EventLog
@@ -71,9 +72,10 @@ async def start(settings: Settings, viewers=None) -> Genesis:
     god_id = Identity.load_or_create(os.path.join(d, "god.key"))
     broker = BrokerService(settings, Identity.load_or_create(os.path.join(d, "broker.key")), BM25Searcher(settings.bm25_k1, settings.bm25_b),
                            HttpNeighbors(settings.neighbor_timeout_sec), name=settings.genesis_broker_name, neighbors=[],
-                           group_id=settings.genesis_group_id)
+                           group_id=settings.genesis_group_id, store=FileBrokerStore(os.path.join(d, "broker-state.json")))
     rec_id = Identity.load_or_create(os.path.join(d, "recorder.key"))
-    svc = RecorderService.build(settings, rec_id, JsonlStore(os.path.join(d, "ledger.jsonl")), readers=[god_id.pub, *settings.recorder_readers])
+    svc = RecorderService.build(settings, rec_id, JsonlStore(os.path.join(d, "ledger.jsonl")), readers=[god_id.pub, *settings.recorder_readers],
+                                access_log_path=os.path.join(d, "recorder-access.jsonl"))
     if not svc.ledger.chain:
         r = await record_genesis(svc, god_id, settings, broker.identity.pub, rec_id.pub)
         if not r["ok"]:

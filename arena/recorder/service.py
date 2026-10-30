@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import time
 from collections import deque
 from typing import Callable, Iterable
@@ -12,23 +14,28 @@ from ..ledger import JsonlStore, Ledger, LedgerStore, contribution, events
 
 
 class RecorderService:
-    def __init__(self, settings: Settings, ledger: Ledger, readers: Iterable[str], clock: Callable[[], float] = time.time):
+    def __init__(self, settings: Settings, ledger: Ledger, readers: Iterable[str], clock: Callable[[], float] = time.time,
+                 access_log_path: str | None = None):
         self.settings, self.ledger, self.clock = settings, ledger, clock
         self.identity = ledger.identity
         self.readers = set(readers)
         self.access_log: deque = deque(maxlen=settings.access_log_size)
+        self.access_log_path = access_log_path  # appended file: who tried to read the whole ledger, kept across restarts
+        if access_log_path and os.path.exists(access_log_path):
+            with open(access_log_path, encoding="utf-8") as f:
+                self.access_log.extend(json.loads(line) for line in f if line.strip())
         self._lock = asyncio.Lock()
 
     @classmethod
     def build(cls, settings: Settings, identity: Identity, store: LedgerStore, readers: Iterable[str] | None = None,
-              clock: Callable[[], float] = time.time) -> "RecorderService":
+              clock: Callable[[], float] = time.time, access_log_path: str | None = None) -> "RecorderService":
         ledger = Ledger(identity, store, settings, clock=clock)
-        return cls(settings, ledger, settings.recorder_readers if readers is None else readers, clock=clock)
+        return cls(settings, ledger, settings.recorder_readers if readers is None else readers, clock=clock, access_log_path=access_log_path)
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "RecorderService":
         identity = Identity.load_or_create(settings.recorder_key_file)
-        return cls.build(settings, identity, JsonlStore(settings.recorder_ledger_file))
+        return cls.build(settings, identity, JsonlStore(settings.recorder_ledger_file), access_log_path=settings.recorder_access_log_file)
 
     async def record(self, kind: str, payload: dict, sigs: dict) -> dict:
         async with self._lock:
@@ -78,7 +85,12 @@ class RecorderService:
 
     def _allowed(self, reader_pub: str) -> bool:
         granted = reader_pub in self.readers
-        self.access_log.append({"ts": self.clock(), "reader": reader_pub, "granted": granted})
+        row = {"ts": self.clock(), "reader": reader_pub, "granted": granted}
+        self.access_log.append(row)
+        if self.access_log_path:
+            os.makedirs(os.path.dirname(os.path.abspath(self.access_log_path)), exist_ok=True)
+            with open(self.access_log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(row) + "\n")
         return granted
 
     def read_chain(self, reader_pub: str) -> dict:

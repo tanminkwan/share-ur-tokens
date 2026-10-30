@@ -10,6 +10,7 @@ from ..config import ConfigError, Settings
 from ..crypto import Identity, pen_name, verify
 from ..search import BM25Searcher, Searcher
 from .neighbors import Caller, HttpNeighbors, NeighborGateway
+from .store import BrokerStore, FileBrokerStore, MemoryBrokerStore
 
 log = logging.getLogger("arena.broker")
 NOTICE_TEXT_FIELDS = ("title", "text", "kind")  # searched if present; every other notice field is the app's business
@@ -18,7 +19,7 @@ NOTICE_TEXT_FIELDS = ("title", "text", "kind")  # searched if present; every oth
 class BrokerService:
     def __init__(self, settings: Settings, identity: Identity, searcher: Searcher, neighbors_gw: NeighborGateway,
                  name: str | None = None, neighbors: Iterable[str] | None = None, owner_pub: str | None = None,
-                 clock: Callable[[], float] = time.time, group_id: str | None = None):
+                 clock: Callable[[], float] = time.time, group_id: str | None = None, store: BrokerStore | None = None):
         self.settings, self.identity, self.searcher, self.gw, self.clock = settings, identity, searcher, neighbors_gw, clock
         self.name = name or settings.broker_name
         self.group_id = group_id or settings.broker_group_id or settings.genesis_group_id
@@ -28,13 +29,23 @@ class BrokerService:
         self.notices: dict[str, dict] = {}
         self.notice_meta: dict[str, dict] = {}  # notice_id -> {"updated_at", "closed"}: kept outside the signed notice
         self.grants: dict[str, float] = {}
+        self.store = store or MemoryBrokerStore()
+        saved = self.store.load() or {}
+        self.profiles.update(saved.get("profiles", {}))
+        self.notices.update(saved.get("notices", {}))
+        self.notice_meta.update(saved.get("notice_meta", {}))
+        self.grants.update(saved.get("grants", {}))
         if self.group_id == settings.genesis_group_id and self.owner_pub is not None:
             raise ConfigError(f"the genesis group {self.group_id!r} is open to everyone and cannot have an owner")
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "BrokerService":
         return cls(settings, Identity.load_or_create(settings.broker_key_file),
-                   BM25Searcher(settings.bm25_k1, settings.bm25_b), HttpNeighbors(settings.neighbor_timeout_sec))
+                   BM25Searcher(settings.bm25_k1, settings.bm25_b), HttpNeighbors(settings.neighbor_timeout_sec),
+                   store=FileBrokerStore(settings.broker_state_file))
+
+    def _persist(self) -> None:
+        self.store.save({"profiles": self.profiles, "notices": self.notices, "notice_meta": self.notice_meta, "grants": self.grants})
 
     # ---- membership (closed peer group) ----
     @property
@@ -51,6 +62,7 @@ class BrokerService:
         if not self.closed or not verify(self.owner_pub, grant, sig):
             return {"ok": False, "error": "grant must be signed by the group owner"}
         self.grants[grant["pub"]] = float(grant["until"])
+        self._persist()
         return {"ok": True}
 
     # ---- profiles ----
@@ -66,6 +78,7 @@ class BrokerService:
             return {"ok": False, "error": "members of this peer group only"}
         updated = pub in self.profiles
         self.profiles[pub] = dict(prof, pub=pub)
+        self._persist()
         log.info("%s: profile %s %s v%s", self.name, pen_name(pub, self.settings.pen_name_prefix, self.settings.pen_name_len),
                  "updated" if updated else "registered", prof.get("ver"))
         return {"ok": True, "updated": updated}
@@ -139,6 +152,7 @@ class BrokerService:
                 return {"ok": False, "error": "older or same version"}
         self.notices[notice["notice_id"]] = dict(notice)
         self.notice_meta[notice["notice_id"]] = {"updated_at": self.clock(), "closed": False}
+        self._persist()
         seen_by = self._seen_by(notice)
         log.info("%s: notice %s %s, visible to %d", self.name, notice["notice_id"], "received" if shared else "posted", seen_by)
         if not shared:
@@ -171,6 +185,7 @@ class BrokerService:
             return {"ok": False, "error": "not the issuer"}
         n["until"] = self.clock()
         self.notice_meta[notice_id] = {"updated_at": self.clock(), "closed": True}
+        self._persist()
         if not shared:
             for url in self.neighbors:
                 try:

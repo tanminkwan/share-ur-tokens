@@ -208,3 +208,20 @@ async def test_p5a18_genesis_process_god_creates_broker_and_recorder(tmp_path, p
     assert snap["stats"]["genesis"]["god"] == god_pub and snap["stats"]["by_type"] == {"genesis": 1, "group": 1, "publish": 2}
     assert snap["stats"]["by_group"] == {"public": 2, "g-new": 2} and snap["integrity"]["agree"]
     assert [x["group_id"] for x in snap["stats"]["groups"]] == ["public", "g-new"]
+
+
+async def test_p5c21_broker_process_keeps_state_across_restart(tmp_path, procs):
+    port = free_port()
+    url = f"http://127.0.0.1:{port}"
+    env = make_env(tmp_path, ARENA_BROKER_PORT=port, ARENA_BROKER_STATE_FILE=str(tmp_path / "broker-state.json"))
+    start(procs, "arena.broker", env, tmp_path, url)
+    s = Settings.load(env=env, dotenv_path=None)
+    B, me, issuer = BrokerClient(url, s), Identity.generate(), Identity.generate()
+    assert (await B.advertise(me, profile("http://me", "기록 보관", offers=["record"], now=time.time())))["ok"]
+    assert (await B.post_notice(issuer, notice(issuer, "keep", now=time.time())))["ok"]
+    pub_before = (await B.health())["pub"]
+    procs[-1].stop()
+    start(procs, "arena.broker", env, tmp_path, url)
+    assert (await B.health())["pub"] == pub_before and (await B.health())["profiles"] == 1
+    assert [p["pub"] for p in (await B.find("기록", role="record"))["peers"]] == [me.pub]
+    assert [n["notice_id"] for n in (await B.list_notices(me))["notices"]] == ["keep"]

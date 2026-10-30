@@ -186,3 +186,5 @@ class Settings(EnvSettings):
     event_request_ttl_sec: float = F("ARENA_EVENT_REQUEST_TTL_SEC", 600.0, float, "기본 비서가 보내는 직접 요청의 만기(초)")
     event_notice_ttl_sec: float = F("ARENA_EVENT_NOTICE_TTL_SEC", 3600.0, float, "기본 비서가 올리는 이벤트 공지의 만기(초)")
     event_store_dir: str = F("ARENA_EVENT_STORE_DIR", "data/events", str, "기본 비서가 참여 중인 이벤트를 저장하는 로컬 폴더(peer별 하위 폴더)")
+    broker_state_file: str = F("ARENA_BROKER_STATE_FILE", "data/broker-state.json", str, "broker가 프로필·공지·가입 허가를 저장하는 파일(단독 실행)")
+    recorder_access_log_file: str = F("ARENA_RECORDER_ACCESS_LOG_FILE", "data/recorder-access.jsonl", str, "recorder 열람 접근 기록 파일(단독 실행)")
