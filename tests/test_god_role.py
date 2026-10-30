@@ -1,4 +1,4 @@
-"""P3-C: the spectator overseer peer: reads the whole ledger with its allow-listed key, audits it, generic stats."""
+"""P3-C: the god peer as spectator: reads the whole ledger with its allow-listed key, audits it, generic stats."""
 import time
 
 import pytest
@@ -13,7 +13,7 @@ from arena.ledger import MemoryStore
 from arena.llm import NoLLM
 from arena.peer.area import LocalFolderArea
 from arena.peer.node import Peer, PeerConfig
-from arena.peer.overseer_role import OverseerRole
+from arena.peer.god_role import GodRole
 from arena.peer.owner import NoOwner
 from arena.peer.record_role import RecordRole
 from arena.recorder.client import InMemoryRecorderClient
@@ -39,7 +39,7 @@ async def setup(tmp_path, settings):
         p.recorder_factory = lambda u: InMemoryRecorderClient(svc)
         return p
     rec = make("rec", cast.keeper, [RecordRole(svc, "mem://rec/recorder")], "기록 보관 담당")
-    role = OverseerRole(settings, viewers=[viewer.pub])
+    role = GodRole(settings, viewers=[viewer.pub])
     ov = make("ov", ov_id, [role], "관전 peer")
     judge = make("judge", cast.judge, [], "평가 전문가")
     for p in (rec, ov, judge):
@@ -87,16 +87,16 @@ async def test_p3c4_p3c5_per_peer_and_access_log(setup):
 
 async def test_p3c6_snapshot_op_only_for_viewers_and_cached(setup, settings):
     s = setup
-    r = await s["ov"].handle(dict({"op": "overseer_snapshot"}, **sign_message(s["viewer"], "overseer_snapshot")))
+    r = await s["ov"].handle(dict({"op": "god_snapshot"}, **sign_message(s["viewer"], "god_snapshot")))
     assert r["ok"] and r["snapshot"]["stats"]["entries"] == 8
-    r = await s["ov"].handle(dict({"op": "overseer_snapshot"}, **sign_message(Identity.generate(), "overseer_snapshot")))
+    r = await s["ov"].handle(dict({"op": "god_snapshot"}, **sign_message(Identity.generate(), "god_snapshot")))
     assert r == {"ok": False, "error": "not a viewer"}
-    assert (await s["ov"].handle({"op": "overseer_snapshot"}))["ok"] is False
+    assert (await s["ov"].handle({"op": "god_snapshot"}))["ok"] is False
     a = await s["role"].snapshot(s["ov"])
     b = await s["role"].snapshot(s["ov"])
-    assert a is b  # cached within ARENA_OVERSEER_CACHE_SEC
+    assert a is b  # cached within ARENA_GOD_CACHE_SEC
 
 
-def test_p3c7_overseer_has_no_write_or_content_ops(setup):
-    assert set(setup["ov"].skills()) == {"engage", "approve", "solicit", "overseer_snapshot"}  # platform ops + read-only snapshot
+def test_p3c7_god_has_no_write_or_content_ops(setup):
+    assert set(setup["ov"].skills()) == {"engage", "approve", "solicit", "god_snapshot"}  # platform ops + read-only snapshot
     assert setup["ov"].offers() == []

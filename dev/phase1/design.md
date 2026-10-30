@@ -153,7 +153,7 @@ classDiagram
 - 기록자는 하나다. 다른 기록자의 항목을 받아 검증하는 경로(validator)와 시각 편차 규칙은 마지막 단계(recorder 분산)에서 넣는다.
 - `Ledger(identity, store, settings, clock=time.time)`: 시작 시 `store.load()`로 체인을 읽고 `audit_chain`이 `ok`가 아니면 `LedgerCorrupt` 예외. `propose`가 통과하면 `store.append`.
 - `JsonlStore`: 한 항목 한 줄. 열 때 `O_APPEND`. 디렉터리가 없으면 만든다.
-- `audit_chain(chain)`, `contribution(chain)`은 모듈 함수(절대자·대시보드도 같은 함수를 쓴다).
+- `audit_chain(chain)`, `contribution(chain)`은 모듈 함수(god·대시보드도 같은 함수를 쓴다).
 
 ## 6. recorder 서비스와 API
 

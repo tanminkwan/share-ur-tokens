@@ -13,7 +13,8 @@ from tests.test_broker_service import SDS, notice, profile
 
 
 def make(settings, owner_pub=None):
-    return BrokerService(settings, Identity.generate(), BM25Searcher(), NoNeighbors(), name="bx", neighbors=[], owner_pub=owner_pub)
+    return BrokerService(settings, Identity.generate(), BM25Searcher(), NoNeighbors(), name="bx", neighbors=[], owner_pub=owner_pub,
+                         group_id="g-closed" if owner_pub else None)
 
 
 def http_for(svc):

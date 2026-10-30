@@ -20,8 +20,9 @@ class CapabilityLabeler:
         self.s = settings
 
     def system(self) -> str:
+        vocab = (f" 분야 이름은 반드시 다음 목록 안에서만 고르세요: {', '.join(self.s.label_field_vocab)}." if self.s.label_field_vocab else "")
         return (f"당신은 한 구성원의 비서 에이전트입니다. 구성원의 공개 영역을 읽고, 이 구성원이 잘 아는 분야를 최대 {self.s.label_field_max}개 "
-                "짧은 이름으로 고르세요. 분야 이름은 공개 영역에 쓰인 말로 짓습니다(공개 영역이 한국어면 한국어로, 번역하지 말 것). 분야마다 근거가 된 문장을 공개 영역에서 **글자 그대로** 인용하세요. 공개 영역에 없는 분야는 고르지 마세요.")
+                "짧은 이름으로 고르세요. 분야 이름은 공개 영역에 쓰인 말로 짓습니다(공개 영역이 한국어면 한국어로, 번역하지 말 것). 분야마다 근거가 된 문장을 공개 영역에서 **글자 그대로** 인용하세요. 공개 영역에 없는 분야는 고르지 마세요." + vocab)
 
     async def compute(self, peer) -> list[dict]:
         s, person = self.s, set(peer.config.labels)
@@ -42,6 +43,9 @@ class CapabilityLabeler:
             n = 0
             for f in d.get("fields", []):
                 ev, label = _flat(str(f.get("evidence", ""))).strip("'\" "), s.label_field_prefix + _flat(str(f.get("field", "")))
+                name = label[len(s.label_field_prefix):]
+                if s.label_field_vocab and name not in s.label_field_vocab:
+                    continue
                 if n >= s.label_field_max or label in seen or len(ev) < s.label_evidence_min_len or ev not in flat:
                     continue
                 seen.add(label)

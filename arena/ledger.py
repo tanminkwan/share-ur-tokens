@@ -1,6 +1,10 @@
 """Hash-chained, signed provenance ledger kept by ONE recorder (distributed recorders are the last phase).
 Content never goes on-chain: only hashes, public keys (pen names), signatures.
-Entry types: event (a declared event with its policy and optional approvers), contract, publish, share, feedback.
+The ledger begins with the genesis: god creates the genesis broker and the recorder and signs entry 0, which creates
+the genesis group open to everyone. Every entry carries the group_id of the broker group where it happened; a "group" entry declares a group when a peer
+founds it, and (by default) every other entry must name a declared group, so each record traces back to its group.
+Entry types: group, event (a declared event with its policy and optional approvers), contract, publish, share, feedback,
+attest (several parties co-sign one statement) and close (the issuer ends the event; nothing may enter it afterwards).
 
 Entry shape: {type, payload, sigs, prev, ts, seq, hash, seal:{pub, sig}}; hash = SHA-256 of canon(type, payload, sigs, prev, ts).
 Rules live in RULES as small functions run in order (add a rule = add a function). The Ledger does not know about HTTP.
@@ -18,7 +22,7 @@ from .config import Settings
 from .crypto import Identity, canon, h, verify
 
 BODY = ("type", "payload", "sigs", "prev", "ts")
-TYPES = ("event", "contract", "publish", "share", "feedback")
+TYPES = ("genesis", "group", "event", "contract", "publish", "share", "feedback", "attest", "close")
 
 
 class LedgerCorrupt(Exception):
@@ -63,15 +67,17 @@ class JsonlStore:
 # ---------------- rules ----------------
 # The platform does not know what any role or verdict means. Events declare a policy; these rules compare strings.
 POLICY_LISTS = ("roles", "conflict_roles", "hidden_roles")
-POLICY_KEYS = set(POLICY_LISTS) | {"verdict_roles"}
+POLICY_MAPS = ("verdict_roles", "attest_roles")
+POLICY_KEYS = set(POLICY_LISTS) | set(POLICY_MAPS)
 ISSUER = "issuer"  # policy value meaning "the event issuer" rather than a contracted role
 
 
 def signers(e: dict) -> list:
     p = e["payload"]
-    return {"event": [p.get("issuer"), *p.get("approvers", [])], "publish": [p.get("author")],
+    return {"genesis": [p.get("god")], "group": [p.get("founder")], "event": [p.get("issuer"), *p.get("approvers", [])], "publish": [p.get("author")],
             "share": [p.get("provider"), p.get("consumer")], "feedback": [p.get("evaluator")],
-            "contract": [p.get("issuer"), p.get("contractor")]}[e["type"]]
+            "contract": [p.get("issuer"), p.get("contractor")], "attest": list(p.get("parties", [])) or [None],
+            "close": [p.get("issuer")]}[e["type"]]
 
 
 def events(chain) -> dict:
@@ -92,8 +98,44 @@ def _valid_policy(pol) -> bool:
         return False
     if any(not isinstance(pol.get(k, []), list) or not all(isinstance(x, str) for x in pol.get(k, [])) for k in POLICY_LISTS):
         return False
-    vr = pol.get("verdict_roles", {})
-    return isinstance(vr, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in vr.items())
+    for key in POLICY_MAPS:
+        m = pol.get(key, {})
+        if not isinstance(m, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in m.items()):
+            return False
+    return True
+
+
+def groups(chain) -> dict:
+    return {x["payload"]["group_id"]: x["payload"] for x in chain if x["type"] == "group"}
+
+
+def r_group(chain, e, now, s):
+    """every entry names the broker group it happened in; groups are declared once by their founder"""
+    p = e["payload"]
+    gid = p.get("group_id")
+    if not isinstance(gid, str) or not gid:
+        return "group_id required"
+    if e["type"] == "genesis":
+        if gid != s.genesis_group_id:
+            return "the genesis creates the genesis group"
+        if chain:
+            return "the genesis happens once, as the first entry"
+        return None
+    if s.recorder_require_group and (not chain or chain[0]["type"] != "genesis"):
+        return "the ledger starts with the genesis"
+    if e["type"] == "group":
+        if gid == s.genesis_group_id:
+            return "the genesis group exists from the beginning and cannot be declared"
+        if not isinstance(p.get("closed"), bool) or not isinstance(p.get("brokers", []), list) or not p.get("founder"):
+            return "bad group declaration"
+        if gid in groups(chain):
+            return "group already declared"
+    elif s.recorder_require_group and gid != s.genesis_group_id and gid not in groups(chain):
+        return f"unknown group: {gid}"
+
+
+def closed_events(chain) -> set:
+    return {x["payload"]["event_id"] for x in chain if x["type"] == "close"}
 
 
 def r_type(chain, e, now, s):
@@ -108,6 +150,12 @@ def r_prev(chain, e, now, s):
 
 
 def r_shape(chain, e, now, s):
+    if e["type"] == "attest":
+        parties = e["payload"].get("parties")
+        if not isinstance(parties, list) or not parties:
+            return "attest needs at least one party"
+        if len(set(parties)) != len(parties):
+            return "duplicate parties"
     if e["type"] == "event":
         p = e["payload"]
         if not isinstance(p.get("approvers", []), list):
@@ -138,10 +186,36 @@ def r_event(chain, e, now, s):
 
 
 def r_event_ref(chain, e, now, s):
-    """an entry that names an event must name a declared one"""
+    """an entry that names an event must name a declared one that is still open"""
     ev = e["payload"].get("event_id")
-    if e["type"] in ("contract", "publish", "feedback") and (ev is not None or e["type"] == "contract") and ev not in events(chain):
-        return "unknown event"
+    if e["type"] in ("contract", "publish", "feedback", "attest", "close") and (ev is not None or e["type"] in ("contract", "close")):
+        if ev not in events(chain):
+            return "unknown event"
+        if ev in closed_events(chain):
+            return "event closed"
+
+
+def r_close(chain, e, now, s):
+    if e["type"] == "close" and e["payload"].get("issuer") != events(chain)[e["payload"]["event_id"]]["issuer"]:
+        return "only the event issuer can close it"
+
+
+def r_attest(chain, e, now, s):
+    if e["type"] != "attest":
+        return
+    p = e["payload"]
+    ev = p.get("event_id")
+    if ev is None:
+        return
+    if any(x["type"] == "attest" and x["payload"].get("event_id") == ev and x["payload"].get("kind") == p.get("kind")
+           and x["payload"].get("subject") == p.get("subject") for x in chain):
+        return "already attested (kind, subject) in this event"
+    decl = events(chain)[ev]
+    need = decl.get("policy", {}).get("attest_roles", {}).get(p.get("kind"))
+    if need == ISSUER and p["parties"] != [decl["issuer"]]:
+        return f"attest '{p.get('kind')}' must be by the event issuer alone"
+    if need and need != ISSUER and not all(need in _roles_of(chain, ev, who) for who in p["parties"]):
+        return f"attest '{p.get('kind')}' requires every party to hold the '{need}' role in this event"
 
 
 def r_contract(chain, e, now, s):
@@ -175,7 +249,7 @@ def r_known_content(chain, e, now, s):
 
 
 def r_nonce(chain, e, now, s):
-    if e["type"] in ("share", "contract") and any(
+    if e["type"] in ("share", "contract", "attest") and any(
             x["type"] == e["type"] and x["payload"].get("nonce") == e["payload"].get("nonce") for x in chain):
         return "replay (nonce already used)"
 
@@ -198,8 +272,8 @@ def r_feedback(chain, e, now, s):
         return "evaluator never received this content"
 
 
-RULES: list[Callable] = [r_type, r_prev, r_shape, r_signatures, r_time, r_event, r_event_ref, r_contract,
-                         r_publish, r_known_content, r_nonce, r_feedback]
+RULES: list[Callable] = [r_type, r_prev, r_group, r_shape, r_signatures, r_time, r_event, r_event_ref, r_close, r_contract,
+                         r_publish, r_known_content, r_nonce, r_feedback, r_attest]
 
 
 def check(chain: list[dict], e: dict, now: float, settings: Settings) -> str | None:
@@ -261,7 +335,8 @@ def contribution(chain: list[dict]) -> dict:
     """per public key, without knowing what any verdict or role means"""
     author = {x["payload"]["content_hash"]: x["payload"]["author"] for x in chain if x["type"] == "publish"}
     rec = defaultdict(lambda: {"published": 0, "received_by": set(), "verdicts_received": defaultdict(int),
-                               "verdicts_given": defaultdict(int), "roles": defaultdict(int), "events": 0, "approvals": 0})
+                               "verdicts_given": defaultdict(int), "roles": defaultdict(int), "events": 0, "approvals": 0,
+                               "attested": defaultdict(int), "closed": 0, "groups": 0})
     for e in chain:
         p, t = e["payload"], e["type"]
         if t == "publish":
@@ -278,6 +353,14 @@ def contribution(chain: list[dict]) -> dict:
             rec[p["issuer"]]["events"] += 1
             for a in p.get("approvers", []):
                 rec[a]["approvals"] += 1
+        elif t == "attest":
+            for who in p.get("parties", []):
+                rec[who]["attested"][p.get("kind")] += 1
+        elif t == "close":
+            rec[p["issuer"]]["closed"] += 1
+        elif t == "group":
+            rec[p["founder"]]["groups"] += 1
     return {k: {"published": v["published"], "received_by": len(v["received_by"]), "verdicts_received": dict(v["verdicts_received"]),
-                "verdicts_given": dict(v["verdicts_given"]), "roles": dict(v["roles"]), "events": v["events"], "approvals": v["approvals"]}
+                "verdicts_given": dict(v["verdicts_given"]), "roles": dict(v["roles"]), "events": v["events"], "approvals": v["approvals"],
+                "attested": dict(v["attested"]), "closed": v["closed"], "groups": v["groups"]}
             for k, v in rec.items()}

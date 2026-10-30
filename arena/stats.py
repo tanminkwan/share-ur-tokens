@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 from .ledger import contribution
 
 
-def ledger_stats(chain: list[dict], top_flows: int) -> dict:
+def ledger_stats(chain: list[dict], top_flows: int, genesis_group_id: str | None = None) -> dict:
     types = Counter(e["type"] for e in chain)
     verdicts: dict = {}
     sums: dict = defaultdict(lambda: defaultdict(list))
@@ -24,11 +24,18 @@ def ledger_stats(chain: list[dict], top_flows: int) -> dict:
     flows = Counter((e["payload"]["provider"], e["payload"]["consumer"]) for e in chain if e["type"] == "share")
     return {
         "entries": len(chain), "by_type": dict(types),
+        "by_group": dict(Counter(e["payload"].get("group_id") for e in chain)),
+        "genesis": next(({k: e["payload"][k] for k in ("god", "broker", "recorder", "group_id")} for e in chain if e["type"] == "genesis"), None),
+        "groups": ([{"group_id": genesis_group_id, "founder": None, "closed": False, "genesis": True}] if genesis_group_id else [])
+                  + [{"group_id": e["payload"]["group_id"], "founder": e["payload"]["founder"], "closed": e["payload"]["closed"]}
+                     for e in chain if e["type"] == "group"],
         "signers": len({pub for e in chain for pub in e["sigs"]}),
         "events": [{"event_id": e["payload"]["event_id"], "kind": e["payload"].get("kind"), "issuer": e["payload"]["issuer"],
                     "approvers": list(e["payload"].get("approvers", []))} for e in chain if e["type"] == "event"],
         "verdicts": verdicts,
         "roles": dict(Counter(e["payload"]["role"] for e in chain if e["type"] == "contract")),
+        "attests": dict(Counter(e["payload"].get("kind") for e in chain if e["type"] == "attest")),
+        "closed": [{"event_id": e["payload"]["event_id"], "result_hash": e["payload"].get("result_hash")} for e in chain if e["type"] == "close"],
         "top_flows": [{"from": a, "to": b, "n": n} for (a, b), n in flows.most_common(top_flows)],
         "span_sec": round(chain[-1]["ts"] - chain[0]["ts"], 1) if chain else 0,
     }
@@ -38,7 +45,8 @@ def per_peer(chain: list[dict], profiles: list[dict], pen) -> list[dict]:
     """strengths = what the profile says (self-described); track record = what the ledger proves, joined by public key"""
     contrib = contribution(chain)
     prof = {p["pub"]: p for p in profiles}
-    empty = {"published": 0, "received_by": 0, "verdicts_received": {}, "verdicts_given": {}, "roles": {}, "events": 0, "approvals": 0}
+    empty = {"published": 0, "received_by": 0, "verdicts_received": {}, "verdicts_given": {}, "roles": {}, "events": 0, "approvals": 0,
+             "attested": {}, "closed": 0, "groups": 0}
     out = []
     for pub in sorted(set(prof) | set(contrib)):
         p = prof.get(pub, {})

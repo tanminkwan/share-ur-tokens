@@ -26,7 +26,7 @@
 | `tests/test_autonomous.py` | 2 | 단위 | P3-A3, A4 |
 | `tests/test_search_role.py` | 5 | 단위 (결정적 임베딩 대역, 메모리 broker 2곳) | P3-B1 ~ B7 |
 | `tests/test_overseer_role.py` | 5 | 단위 | P3-C1 ~ C7 |
-| `tests/test_processes.py` (추가 1건) | 1 | 실제 프로세스 | P3-D1, D4 (broker + recorder + 절대자 peer) |
+| `tests/test_processes.py` (추가 1건) | 1 | 실제 프로세스 | P3-D1, D4 (broker + recorder + god peer) |
 | `tests/live/test_search_live.py` | 3 | **실제 bge-m3** (+ 실제 프로세스 1건) | P3-D3, D4 |
 | 이전 단계 테스트 | 117 | | 그대로 통과 |
 | **합계** | **138** | | |
@@ -74,9 +74,9 @@ broker 프로세스 하나에 프로필 4개와 공지 2개를 올리고 `python
 
 실행 기록은 [evidence/live-search-bge-m3.txt](evidence/live-search-bge-m3.txt)에 있다.
 
-## 3. 관전용 절대자 peer
+## 3. 관전용 god peer
 
-broker 프로세스, recorder 프로세스(열람 허용 목록에 절대자 키), `python -m arena.peers.overseer`를 띄우고, 열람자 키로 A2A `overseer_snapshot`을 불렀다.
+broker 프로세스, recorder 프로세스(열람 허용 목록에 god 키), `python -m arena.peers.overseer`를 띄우고, 열람자 키로 A2A `overseer_snapshot`을 불렀다.
 
 | 확인 | 결과 |
 |---|---|

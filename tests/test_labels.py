@@ -70,3 +70,12 @@ async def test_p4d3_field_cap_and_p4d5_no_duplicates_and_switch(tmp_path):
     q, _, llm = await setup(tmp_path / "o", off)
     prof = await q.advertise()
     assert prof["labels"] == ["소속:예시"] and prof["capabilities"] == [] and llm.asked("fields") == []
+
+
+async def test_p5a8_field_vocabulary_limits_names(tmp_path):
+    s = on(tmp_path, ARENA_LABEL_FIELD_VOCAB="혁신 과제 평가,클라우드")
+    p, _, llm = await setup(tmp_path, s, fields={"fields": [{"field": "혁신 과제 평가", "evidence": "혁신 과제 평가 20년"},
+                                                            {"field": "평가 기준표", "evidence": "기준표대로 본다는 원칙"}]})
+    prof = await p.advertise()
+    assert [c["label"] for c in prof["capabilities"] if c["basis"] == "area"] == ["분야:혁신 과제 평가"]  # off-list name dropped
+    assert "혁신 과제 평가, 클라우드" in llm.asked("fields")[0]["system"]  # the model is given the list

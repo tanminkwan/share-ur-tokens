@@ -1,4 +1,4 @@
-"""The spectator overseer role (a default serving peer): with a key the recorder allow-listed, it reads whole ledgers,
+"""The god role (the peer that starts the ecosystem with the genesis, and its spectator): with a key the recorder allow-listed, it reads whole ledgers,
 audits them itself and computes generic statistics and per-peer strengths and track records. It cannot write, cannot
 see content (only hashes are on the ledger) and cannot re-identify anyone."""
 from __future__ import annotations
@@ -10,17 +10,17 @@ from ..stats import ledger_stats, per_peer
 from .app import PeerApp
 
 
-class OverseerRole(PeerApp):
-    name = "overseer"
+class GodRole(PeerApp):
+    name = "god"
 
     def __init__(self, settings, viewers=None):
         self.settings = settings
-        self.viewers = set(settings.overseer_viewers if viewers is None else viewers)
+        self.viewers = set(settings.god_viewers if viewers is None else viewers)
         self.recorders: list[dict] = []
         self._cache, self._alerted = (0.0, None), False
 
     def ops(self):
-        return {"overseer_snapshot": self._op_snapshot}
+        return {"god_snapshot": self._op_snapshot}
 
     def invalidate(self):
         self._cache = (0.0, None)
@@ -40,7 +40,7 @@ class OverseerRole(PeerApp):
 
     async def snapshot(self, peer) -> dict:
         now = peer.clock()
-        if self._cache[1] is not None and now - self._cache[0] < self.settings.overseer_cache_sec:
+        if self._cache[1] is not None and now - self._cache[0] < self.settings.god_cache_sec:
             return self._cache[1]
         if not self.recorders:
             await self.locate(peer)
@@ -58,7 +58,7 @@ class OverseerRole(PeerApp):
         agree = all(x["status"] == "ok" for x in integ) and len({x["head"] for x in integ}) == 1
         if not agree and not self._alerted:
             self._alerted = True
-            peer.log.emit("overseer", peer.pen, f"원장 변조 또는 기록자 간 불일치 탐지: {integ}")
+            peer.log.emit("god", peer.pen, f"원장 변조 또는 기록자 간 불일치 탐지: {integ}")
         profiles = []
         for group, broker in peer.brokers.items():
             r = await broker.list_profiles(identity=peer.identity)
@@ -66,7 +66,7 @@ class OverseerRole(PeerApp):
         chain = copies[0][1]
         pen = lambda pub: pen_name(pub, self.settings.pen_name_prefix, self.settings.pen_name_len)
         snap = {"ok": True, "integrity": {"recorders": integ, "agree": agree},
-                "stats": ledger_stats(chain, self.settings.overseer_top_flows), "peers": per_peer(chain, profiles, pen),
+                "stats": ledger_stats(chain, self.settings.god_top_flows, self.settings.genesis_group_id), "peers": per_peer(chain, profiles, pen),
                 "access": access}
         self._cache = (now, snap)
         return snap

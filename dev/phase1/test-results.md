@@ -53,7 +53,7 @@ set -a && . ./.env && set +a
 | 원장 | 28건 (계약 3, 먼저 등록 4, 공유 12, 피드백 9), 감사 정상 |
 | 아이디어 / 채택 | 4건 / 2건 |
 | 권한 없는 열람 | 거부됨 |
-| 과거 항목 변조 | 절대자가 `TAMPERED at seq 1 (hash chain)`으로 탐지 |
+| 과거 항목 변조 | god이 `TAMPERED at seq 1 (hash chain)`으로 탐지 |
 | LLM 호출 실패 | 1건 (아래) |
 
 실행 기록은 [evidence/regression-app-demo-gpt-oss-120b.txt](evidence/regression-app-demo-gpt-oss-120b.txt)에 있다(파이썬 종료 시 나오는 uvicorn 취소 traceback은 뺐다).

@@ -37,7 +37,8 @@ async def test_p4c1_track_endpoint_and_switch(recs, settings, tmp_path):
     http = httpx.AsyncClient(transport=httpx.ASGITransport(app=build_recorder_app(svc)), base_url="http://r")
     t = (await http.get(f"/track/{cast.judge.pub}")).json()
     assert t == {"ok": True, "pub": cast.judge.pub, "track": {"published": 0, "received_by": 0, "verdicts_received": {}, "verdicts_given": {"score": 1},
-                                                                "roles": {"judge": 1}, "events": 0, "approvals": 0}}
+                                                                "roles": {"judge": 1}, "events": 0, "approvals": 0,
+                                                                "attested": {}, "closed": 0, "groups": 0}}
     nobody = (await http.get(f"/track/{Identity.generate().pub}")).json()
     assert nobody["track"]["roles"] == {} and nobody["track"]["published"] == 0
     assert "chain" not in str(t) and cast.author.pub not in str(t)  # no counterparties, no hashes

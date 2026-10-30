@@ -50,10 +50,10 @@ async def world(tmp_path, settings):
     for p in (w.rev2, w.search):
         await p.advertise()
     # an earlier event in which the experienced reviewer already served
-    past = {"event_id": "past", "issuer": w.org.identity.pub, "kind": "earlier", "policy": {}, "approvers": []}
+    past = {"event_id": "past", "issuer": w.org.identity.pub, "kind": "earlier", "policy": {}, "approvers": [], "group_id": "g-review"}
     R = w.org.recorder("mem://rec/recorder")
     assert (await R.record("event", past, {w.org.identity.pub: w.org.sign(past)}))["ok"]
-    c = {"event_id": "past", "role": "review", "issuer": w.org.identity.pub, "contractor": w.rev.identity.pub, "nonce": "past-1"}
+    c = {"event_id": "past", "role": "review", "issuer": w.org.identity.pub, "contractor": w.rev.identity.pub, "nonce": "past-1", "group_id": "g-review"}
     assert (await R.record("contract", c, {w.org.identity.pub: w.org.sign(c), w.rev.identity.pub: w.rev.sign(c)}))["ok"]
     await w.search_role.sync(w.search)
     return w

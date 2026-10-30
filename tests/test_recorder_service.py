@@ -44,13 +44,28 @@ async def test_pa7_verify_reveals_only_public_metadata(svc, cast):
     hidden = await svc.record(*cast.contract(role="judge"))
     shown = await svc.record(*cast.contract(role="keeper", contractor=cast.keeper, nonce="c2"))
     pb = await svc.record(*cast.publish())
-    assert svc.verify(ev["hash"]) == {"ok": True, "exists": True, "type": "event", "seal_ok": True, "event_id": cast.ev,
+    assert svc.verify(ev["hash"]) == {"ok": True, "exists": True, "type": "event", "seal_ok": True, "event_id": cast.ev, "group_id": "g-test",
                                       "issuer": cast.issuer.pub, "kind": "test", "approvers": [cast.approver.pub]}
-    assert svc.verify(hidden["hash"]) == {"ok": True, "exists": True, "type": "contract", "seal_ok": True, "event_id": cast.ev,
+    assert svc.verify(hidden["hash"]) == {"ok": True, "exists": True, "type": "contract", "seal_ok": True, "event_id": cast.ev, "group_id": "g-test",
                                           "role": "judge", "issuer": cast.issuer.pub, "contractor": None}  # hidden by policy
     assert svc.verify(shown["hash"])["contractor"] == cast.keeper.pub
-    assert svc.verify(pb["hash"]) == {"ok": True, "exists": True, "type": "publish", "seal_ok": True, "event_id": cast.ev}
-    assert svc.verify("0" * 64) == {"ok": True, "exists": False, "type": None, "seal_ok": False, "event_id": None}
+    assert svc.verify(pb["hash"]) == {"ok": True, "exists": True, "type": "publish", "seal_ok": True, "event_id": cast.ev, "group_id": "g-test",
+                                      "author": cast.author.pub, "content_hash": pb_hash(cast)}
+
+
+def pb_hash(cast):
+    return cast.publish()[1]["content_hash"]
+
+
+async def test_p5a7_verify_close_and_attest(svc, cast):
+    await svc.record(*cast.event(policy={}))
+    at = await svc.record(*cast.attest(value={"winner": "judge"}))
+    cl = await svc.record(*cast.close(result_hash="r" * 64))
+    assert svc.verify(at["hash"]) == {"ok": True, "exists": True, "type": "attest", "seal_ok": True, "event_id": cast.ev, "group_id": "g-test", "kind": "match",
+                                      "subject": "m1", "parties": [cast.judge.pub, cast.keeper.pub], "value": {"winner": "judge"}}
+    assert svc.verify(cl["hash"]) == {"ok": True, "exists": True, "type": "close", "seal_ok": True, "event_id": cast.ev, "group_id": "g-test",
+                                      "issuer": cast.issuer.pub, "result_hash": "r" * 64}
+    assert svc.verify("0" * 64) == {"ok": True, "exists": False, "type": None, "seal_ok": False, "event_id": None, "group_id": None}
 
 
 async def test_r3_3_audit(svc, cast):
@@ -100,3 +115,21 @@ def test_r3_8_build_from_settings_uses_key_and_ledger_files(settings):
     a = RecorderService.from_settings(settings)
     b = RecorderService.from_settings(settings)
     assert a.identity.pub == b.identity.pub
+
+
+
+async def test_p5a16_verify_group_declaration(svc, cast):
+    from tests.test_ledger import group_decl
+    b = Identity.generate()
+    r = await svc.record(*group_decl(cast.issuer, gid="g-hr", closed=True, brokers=[b.pub]))
+    assert svc.verify(r["hash"]) == {"ok": True, "exists": True, "type": "group", "seal_ok": True, "event_id": None, "group_id": "g-hr",
+                                     "founder": cast.issuer.pub, "closed": True, "brokers": [b.pub]}
+
+
+
+async def test_p5a18_verify_genesis(svc):
+    from tests.test_ledger import genesis_entry
+    god = Identity.generate()
+    r = await svc.record(*genesis_entry(god, broker_pub="b" * 64, recorder_pub=svc.identity.pub))
+    assert svc.verify(r["hash"]) == {"ok": True, "exists": True, "type": "genesis", "seal_ok": True, "event_id": None, "group_id": "public",
+                                     "god": god.pub, "broker": "b" * 64, "recorder": svc.identity.pub}

@@ -7,6 +7,7 @@ from arena.crypto import Identity
 from arena.search import BM25Searcher
 
 SDS = "소속:삼성SDS"
+GENESIS = "public"  # the genesis group: brokers without a group id belong to it
 
 
 def profile(url, summary, offers=(), labels=(SDS,), until=None, ver=1, now=0):
@@ -22,18 +23,19 @@ def notice(issuer, nid="call-1", audience=None, until=None, now=0, text="신입 
     return {"notice_id": nid, "kind": "아이디어 공모", "title": text[:20], "text": text,
             "audience": {"소속": "삼성SDS"} if audience is None else audience, "conditions": {},
             "until": until if until is not None else now + 600, "issuer_pub": issuer.pub, "issuer_url": "http://issuer",
-            "recorder_pub": "", "recorder_url": "", "contracts": []}
+            "recorder_pub": "", "recorder_url": "", "contracts": [], "group_id": GENESIS}
 
 
 class Net:
     """three open brokers that share notices, like the demo's applicant group"""
 
-    def __init__(self, settings, clock, n=3, owner_pub=None):
+    def __init__(self, settings, clock, n=3, owner_pub=None, group_id=None):
         self.gw = InMemoryNeighbors()
         self.brokers = []
         for i in range(n):
             b = BrokerService(settings, Identity.generate(), BM25Searcher(), self.gw, name=f"b{i}",
-                              neighbors=[f"mem://b{j}" for j in range(n) if j != i], owner_pub=owner_pub, clock=clock)
+                              neighbors=[f"mem://b{j}" for j in range(n) if j != i], owner_pub=owner_pub, clock=clock,
+                              group_id=group_id)
             self.gw.register(f"mem://b{i}", b)
             self.brokers.append(b)
 
@@ -190,7 +192,7 @@ async def test_r4_8_search_notices_within_visible(b0, clock):
 
 async def test_r4_9_closed_group_needs_owner_grant_until_expiry(settings, clock):
     owner, member, outsider = (Identity.generate() for _ in range(3))
-    net = Net(settings, clock, n=1, owner_pub=owner.pub)
+    net = Net(settings, clock, n=1, owner_pub=owner.pub, group_id="g-closed")
     d = net.brokers[0]
     assert (await d.advertise(ad(member, profile("http://m", "심사", now=clock()))))["error"] == "members of this peer group only"
     g = {"pub": member.pub, "until": clock() + 100}
@@ -215,18 +217,48 @@ async def test_r4_10_health(net, clock):
     b = net.brokers[0]
     await b.advertise(ad(Identity.generate(), profile("http://a", "a", now=clock())))
     hl = b.health()
-    assert hl == {"ok": True, "name": "b0", "pub": b.identity.pub, "profiles": 1, "notices": 0,
+    assert hl == {"ok": True, "name": "b0", "group_id": GENESIS, "pub": b.identity.pub, "profiles": 1, "notices": 0,
                   "neighbors": ["mem://b1", "mem://b2"], "closed": False}
 
 
 async def test_pa8_minimal_notice_is_accepted_and_searchable(b0, clock):
     issuer, viewer = Identity.generate(), Identity.generate()
     await b0.advertise(ad(viewer, profile("http://v", "v", labels=[], now=clock())))
-    n = {"notice_id": "bare", "issuer_pub": issuer.pub, "until": clock() + 60}
+    n = {"notice_id": "bare", "issuer_pub": issuer.pub, "until": clock() + 60, "group_id": GENESIS}
     assert (await b0.post_notice(n, issuer.sign(n)))["ok"]
     assert [x["notice_id"] for x in await b0.visible_notices(viewer.pub)] == ["bare"]  # no audience -> everyone
     assert await b0.search_notices(viewer.pub, "anything") == []
-    m = {"notice_id": "m", "issuer_pub": issuer.pub, "until": clock() + 60, "text": "TF 모집 클라우드", "anything": {"app": "data"}}
+    m = {"notice_id": "m", "issuer_pub": issuer.pub, "until": clock() + 60, "text": "TF 모집 클라우드", "anything": {"app": "data"}, "group_id": GENESIS}
     await b0.post_notice(m, issuer.sign(m))
     hits = await b0.search_notices(viewer.pub, "클라우드")
     assert [x["notice_id"] for x in hits] == ["m"] and hits[0]["anything"] == {"app": "data"}
+
+
+
+async def test_p5a9_group_id_on_health_profiles_and_hits(settings, clock):
+    from arena.broker.neighbors import NoNeighbors
+    b = BrokerService(settings, Identity.generate(), BM25Searcher(), NoNeighbors(), name="x", neighbors=[], group_id="g-hr", clock=clock)
+    me = Identity.generate()
+    await b.advertise(ad(me, profile("http://me", "인사 담당", now=clock())))
+    assert b.health()["group_id"] == "g-hr"
+    assert (await b.list_profiles(Caller.anonymous(), local=True))[0]["group_id"] == "g-hr"
+    assert (await b.find(Caller.anonymous(), "인사"))[0]["group_id"] == "g-hr"
+
+
+async def test_p5a10_notices_must_belong_to_the_group(net, clock):
+    issuer = Identity.generate()
+    n = dict(notice(issuer, "other", now=clock()), group_id="g-elsewhere")
+    assert await net.brokers[0].post_notice(n, issuer.sign(n)) == {"ok": False, "error": "notice belongs to another group"}
+    m = {k: v for k, v in notice(issuer, "none", now=clock()).items() if k != "group_id"}
+    assert (await net.brokers[0].post_notice(m, issuer.sign(m)))["ok"] is False
+    assert await net.brokers[1].post_notice(n, issuer.sign(n), shared=True) == {"ok": False, "error": "notice belongs to another group"}
+
+
+
+def test_p5a17_genesis_group_cannot_be_closed(settings):
+    import pytest
+    from arena.config import ConfigError
+    from arena.broker.neighbors import NoNeighbors
+    with pytest.raises(ConfigError):
+        BrokerService(settings, Identity.generate(), BM25Searcher(), NoNeighbors(), name="x", neighbors=[], owner_pub=Identity.generate().pub)
+    assert BrokerService(settings, Identity.generate(), BM25Searcher(), NoNeighbors(), name="y", neighbors=[]).group_id == GENESIS

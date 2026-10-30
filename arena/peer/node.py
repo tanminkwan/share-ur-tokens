@@ -40,6 +40,7 @@ class Peer:
         self.known_recorders: list[str] = list(settings.peer_track_recorders)
         self.inbox: deque = deque(maxlen=settings.solicit_inbox_size)
         self.last_profile: dict | None = None
+        self._group_ids: dict[str, str] = {}
         self._ops = {"engage": self._engage, "approve": self._approve, "solicit": self._solicit}
         for app in self.apps:
             for op, fn in app.ops().items():
@@ -67,6 +68,15 @@ class Peer:
         if url not in self.known_recorders:
             self.known_recorders.append(url)
         return self.recorder_factory(url)
+
+    async def group_id(self, group: str) -> str:
+        """the broker group identifier of one of my broker groups (asked once, then remembered)"""
+        if group not in self._group_ids:
+            gid = (await self.brokers[group].health()).get("group_id")
+            if not gid:
+                raise RuntimeError(f"broker group {group!r} has no group_id")
+            self._group_ids[group] = gid
+        return self._group_ids[group]
 
     def current_labels(self) -> list[str]:
         """labels on my posted profile (person-set + capability labels), or the person-set ones before the first post"""

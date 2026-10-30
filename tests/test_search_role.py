@@ -28,14 +28,15 @@ def prof(url, summary, offers=(), labels=(SDS,), ver=1):
 
 def notice(issuer, nid, text, audience=None):
     return {"notice_id": nid, "issuer_pub": issuer.pub, "until": time.time() + 600, "title": text[:10], "text": text,
-            "kind": "모집", "audience": {"소속": "삼성SDS"} if audience is None else audience}
+            "kind": "모집", "audience": {"소속": "삼성SDS"} if audience is None else audience, "group_id": "public"}
 
 
 class Net:
     def __init__(self, tmp, settings):
         self.owner = Identity.generate()
         self.open = BrokerService(settings, Identity.generate(), BM25Searcher(), NoNeighbors(), name="open", neighbors=[])
-        self.closed = BrokerService(settings, Identity.generate(), BM25Searcher(), NoNeighbors(), name="closed", neighbors=[], owner_pub=self.owner.pub)
+        self.closed = BrokerService(settings, Identity.generate(), BM25Searcher(), NoNeighbors(), name="closed", neighbors=[], owner_pub=self.owner.pub,
+                                     group_id="g-closed")
         self.emb = HashEmbedder()
         self.role = SearchRole(self.emb, settings)
         (tmp / "area").mkdir()

@@ -135,9 +135,9 @@ async def test_pb11_receipts_check_the_recorder_seal():
     from arena.ledger import Ledger, MemoryStore
     from arena.config import Settings
     rec = Identity.generate()
-    ledger = Ledger(rec, MemoryStore(), Settings.load(env={}, dotenv_path=None))
+    ledger = Ledger(rec, MemoryStore(), Settings.load(env={"ARENA_RECORDER_REQUIRE_GROUP": "false"}, dotenv_path=None))
     me = Identity.generate()
-    payload = {"author": me.pub, "content_hash": "c" * 64}
+    payload = {"author": me.pub, "content_hash": "c" * 64, "group_id": "public"}
     e, _ = ledger.propose("publish", payload, {me.pub: me.sign(payload)})
     resp = {"ok": True, "seq": e["seq"], "hash": e["hash"], "seal": e["seal"]}
     r = Receipts()

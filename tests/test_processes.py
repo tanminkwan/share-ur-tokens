@@ -96,7 +96,7 @@ async def test_r4_11_closed_group_owner_from_settings(tmp_path, procs):
     owner, member = Identity.generate(), Identity.generate()
     port = free_port()
     url = f"http://127.0.0.1:{port}"
-    env = make_env(tmp_path, ARENA_BROKER_PORT=port, ARENA_BROKER_OWNER_PUB=owner.pub, ARENA_BROKER_NAME="D")
+    env = make_env(tmp_path, ARENA_BROKER_PORT=port, ARENA_BROKER_OWNER_PUB=owner.pub, ARENA_BROKER_NAME="D", ARENA_BROKER_GROUP_ID="g-closed")
     start(procs, "arena.broker", env, tmp_path, url)
     D = BrokerClient(url, Settings.load(env=env, dotenv_path=None))
     assert (await D.health())["closed"] is True
@@ -153,38 +153,6 @@ async def test_r2_12_recorder_process_refuses_tampered_file(tmp_path, procs):
     assert "TAMPERED at seq 0" in p.p.stdout.read().decode()
 
 
-async def test_p3d4_overseer_peer_process_reads_and_audits(tmp_path, procs):
-    """broker + recorder service + overseer peer as processes; a viewer asks the overseer over A2A"""
-    from arena.a2a import A2ATransport
-    from arena.signing import sign_message
-    bport, rport, oport = free_port(), free_port(), free_port()
-    burl, rurl, ourl = (f"http://127.0.0.1:{p}" for p in (bport, rport, oport))
-    ov_key, rec_key, viewer = tmp_path / "ov.key", tmp_path / "rec.key", Identity.generate()
-    ov, rec = Identity.load_or_create(str(ov_key)), Identity.load_or_create(str(rec_key))
-    base = make_env(tmp_path)
-    start(procs, "arena.broker", dict(base, ARENA_BROKER_PORT=str(bport)), tmp_path, burl)
-    start(procs, "arena.recorder", dict(base, ARENA_RECORDER_PORT=str(rport), ARENA_RECORDER_KEY_FILE=str(rec_key),
-                                        ARENA_RECORDER_READERS=ov.pub), tmp_path, rurl)
-    s = Settings.load(env=base, dotenv_path=None)
-    B, R = BrokerClient(burl, s), RecorderClient(rurl, s)
-    assert (await B.advertise(rec, dict(profile(rurl, "기록 보관", offers=["record"], now=time.time()), recorder_url=rurl)))["ok"]
-    cast = Cast()
-    for e in (cast.publish(ev=None), cast.share()):
-        assert (await R.record(*e))["ok"]
-    p = Proc("arena.peers.overseer", dict(base, ARENA_OVERSEER_PEER_PORT=str(oport), ARENA_OVERSEER_PEER_KEY_FILE=str(ov_key),
-                                          ARENA_OVERSEER_PEER_AREA=str(tmp_path / "ov-area"), ARENA_OVERSEER_PEER_BROKERS=f"open={burl}",
-                                          ARENA_OVERSEER_VIEWERS=viewer.pub), tmp_path)
-    procs.append(p)
-    p.wait_up(ourl, path="/.well-known/agent-card.json")
-    t = A2ATransport(s)
-    r = await t.call(ourl, dict({"op": "overseer_snapshot"}, **sign_message(viewer, "overseer_snapshot")))
-    assert r["ok"], r
-    snap = r["snapshot"]
-    assert snap["integrity"]["agree"] and snap["stats"]["entries"] == 2 and snap["stats"]["by_type"] == {"publish": 1, "share": 1}
-    assert any(x["pub"] == ov.pub and x["strengths"].startswith("관전용 절대자 peer") for x in snap["peers"])
-    assert (await t.call(ourl, dict({"op": "overseer_snapshot"}, **sign_message(Identity.generate(), "overseer_snapshot"))))["ok"] is False
-
-
 async def test_p4e3_recorder_process_serves_track_records(tmp_path, procs):
     port = free_port()
     url = f"http://127.0.0.1:{port}"
@@ -196,3 +164,47 @@ async def test_p4e3_recorder_process_serves_track_records(tmp_path, procs):
     t = await R.track(cast.judge.pub)
     assert t["ok"] and t["track"]["roles"] == {"judge": 1}
     assert (await R.track(cast.approver.pub))["track"]["approvals"] == 1
+
+
+async def test_p5a18_genesis_process_god_creates_broker_and_recorder(tmp_path, procs):
+    """python -m arena.genesis: god creates the genesis broker and recorder, signs entry 0; newcomers join; a restart continues"""
+    from arena.a2a import A2ATransport
+    from arena.signing import sign_message
+    ports = {k: free_port() for k in ("broker", "rec", "api", "god")}
+    viewer = Identity.generate()
+    env = make_env(tmp_path, ARENA_GENESIS_DIR=str(tmp_path / "genesis"), ARENA_GENESIS_BROKER_PORT=ports["broker"],
+                   ARENA_GENESIS_RECORDER_PORT=ports["rec"], ARENA_GENESIS_RECORDER_API_PORT=ports["api"], ARENA_GENESIS_GOD_PORT=ports["god"],
+                   ARENA_GOD_VIEWERS=viewer.pub, ARENA_RECORDER_REQUIRE_GROUP="true", ARENA_GOD_CACHE_SEC="0")
+    burl, gurl = f"http://127.0.0.1:{ports['broker']}", f"http://127.0.0.1:{ports['god']}"
+    p = Proc("arena.genesis", env, tmp_path)
+    procs.append(p)
+    p.wait_up(burl)
+    p.wait_up(gurl, path="/.well-known/agent-card.json")
+    s = Settings.load(env=env, dotenv_path=None)
+    B, t = BrokerClient(burl, s), A2ATransport(s)
+    assert (await B.health())["group_id"] == "public" and (await B.health())["closed"] is False
+    rec_hit = (await B.find("기록", role="record"))["peers"][0]
+    R = RecorderClient(rec_hit["recorder_url"], s)
+    snap = (await t.call(gurl, dict({"op": "god_snapshot"}, **sign_message(viewer, "god_snapshot"))))["snapshot"]
+    god_pub = snap["stats"]["genesis"]["god"]
+    assert snap["stats"]["entries"] == 1 and snap["stats"]["by_type"] == {"genesis": 1} and snap["integrity"]["agree"]
+    assert snap["stats"]["genesis"]["recorder"] == rec_hit["pub"] and snap["stats"]["genesis"]["broker"] == (await B.health())["pub"]
+    # a newcomer founds its own group and records in both groups
+    me, cast = Identity.generate(), Cast()
+    g = {"group_id": "g-new", "founder": me.pub, "closed": False, "brokers": []}
+    assert (await R.record("group", g, {me.pub: me.sign(g)}))["ok"]
+    cast.group = "public"
+    assert (await R.record(*cast.publish(ev=None)))["ok"]
+    cast.group = "g-new"
+    assert (await R.record(*cast.publish(content="in my group", ev=None)))["ok"]
+    cast.group = "g-nobody-founded"
+    assert (await R.record(*cast.publish(content="nowhere", ev=None)))["error"] == "unknown group: g-nobody-founded"
+    # restart: same god, same chain, no second genesis
+    p.stop()
+    p2 = Proc("arena.genesis", env, tmp_path)
+    procs.append(p2)
+    p2.wait_up(gurl, path="/.well-known/agent-card.json")
+    snap = (await t.call(gurl, dict({"op": "god_snapshot"}, **sign_message(viewer, "god_snapshot"))))["snapshot"]
+    assert snap["stats"]["genesis"]["god"] == god_pub and snap["stats"]["by_type"] == {"genesis": 1, "group": 1, "publish": 2}
+    assert snap["stats"]["by_group"] == {"public": 2, "g-new": 2} and snap["integrity"]["agree"]
+    assert [x["group_id"] for x in snap["stats"]["groups"]] == ["public", "g-new"]

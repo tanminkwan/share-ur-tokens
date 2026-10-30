@@ -36,7 +36,7 @@ flowchart LR
         IDX["MemoryVectorIndex"]
         SR --> IDX
     end
-    subgraph ov["관전용 절대자 peer (python -m arena.peers.overseer)"]
+    subgraph ov["관전용 god peer (python -m arena.peers.overseer)"]
         OR["OverseerRole<br/>op overseer_snapshot"]
     end
     EMB["bge-m3 서비스<br/>POST /embed"]
@@ -75,7 +75,7 @@ flowchart LR
 | `ARENA_SEARCH_SYNC_SEC` | `5` | 색인 갱신 주기 |
 | `ARENA_SEARCH_MIN_SCORE` | `0.0` | 이보다 낮은 유사도는 버림 |
 | `ARENA_SEARCH_PEER_*` | | 검색 peer 단독 실행: `PORT`, `KEY_FILE`, `AREA`, `LABELS`, `BROKERS`(`그룹=주소` 쉼표 목록) |
-| `ARENA_OVERSEER_PEER_*` | | 절대자 peer 단독 실행: 같은 항목 + `VIEWERS`(열람자 공개키 목록) |
+| `ARENA_OVERSEER_PEER_*` | | god peer 단독 실행: 같은 항목 + `VIEWERS`(열람자 공개키 목록) |
 | `ARENA_OVERSEER_CACHE_SEC` | `1` | 관전 결과 캐시 |
 | `ARENA_OVERSEER_TOP_FLOWS` | `5` | 공유 흐름 상위 개수 |
 
@@ -121,7 +121,7 @@ flowchart TD
 - `search_profiles`는 서명이 없어도 열린 그룹은 답한다. 닫힌 그룹은 서명이 있어야 한다.
 - `search_notices`는 서명이 필수다. 묻는 peer의 라벨은 **색인된 그 peer의 프로필**에서 가져온다(broker와 같은 근거).
 
-## 4. 관전용 절대자 peer
+## 4. 관전용 god peer
 
 - `OverseerRole(viewers, settings)`: `locate()`, `read_all()`, `snapshot()`.
 - 통계는 `arena/stats.py`의 순수 함수(`ledger_stats(chain, top_flows)`, `per_peer(chain, profiles)`)로 두어 테스트하기 쉽게 한다. 기여 집계는 기존 `contribution`을 쓴다.
@@ -143,4 +143,4 @@ python -m arena.peers.overseer   # ARENA_OVERSEER_PEER_*
 | 단위 | `HashEmbedder`(단어 해시 bag-of-words, 정규화) | 색인 갱신(바뀐 것만, 사라진 것 빼기), 거르기, 응모 대상 규칙, 닫힌 그룹, 서명, 통계 |
 | HTTP | `httpx.MockTransport` | `HttpEmbedder` 나눔·재시도·오류 |
 | 실제 임베딩 | bge-m3 | 뜻이 같은 다른 말 질의 |
-| 실제 프로세스 | broker·검색 peer·절대자 peer 프로세스 | A2A 질의, 원장 감사 |
+| 실제 프로세스 | broker·검색 peer·god peer 프로세스 | A2A 질의, 원장 감사 |

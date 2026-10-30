@@ -42,12 +42,22 @@ class RecorderService:
         A contractor is shown unless the event's policy hides that role."""
         e = self.ledger.find(hash_)
         if not e:
-            return {"ok": True, "exists": False, "type": None, "seal_ok": False, "event_id": None}
+            return {"ok": True, "exists": False, "type": None, "seal_ok": False, "event_id": None, "group_id": None}
         p = e["payload"]
         out = {"ok": True, "exists": True, "type": e["type"], "seal_ok": verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"]),
-               "event_id": p.get("event_id")}
+               "event_id": p.get("event_id"), "group_id": p.get("group_id")}
         if e["type"] == "event":
             out.update(issuer=p["issuer"], kind=p.get("kind"), approvers=list(p.get("approvers", [])))
+        elif e["type"] == "genesis":
+            out.update(god=p["god"], broker=p["broker"], recorder=p["recorder"])
+        elif e["type"] == "group":
+            out.update(founder=p["founder"], closed=p["closed"], brokers=list(p.get("brokers", [])))
+        elif e["type"] == "publish":
+            out.update(author=p["author"], content_hash=p["content_hash"])
+        elif e["type"] == "attest":
+            out.update(kind=p.get("kind"), subject=p.get("subject"), parties=list(p["parties"]), value=p.get("value"))
+        elif e["type"] == "close":
+            out.update(issuer=p["issuer"], result_hash=p.get("result_hash"))
         elif e["type"] == "contract":
             hidden = events(self.ledger.chain).get(p["event_id"], {}).get("policy", {}).get("hidden_roles", [])
             out.update(role=p["role"], issuer=p["issuer"], contractor=None if p["role"] in hidden else p["contractor"])
@@ -57,7 +67,8 @@ class RecorderService:
         """public track record of one key: counts only, no counterparties, no content hashes"""
         if not self.settings.recorder_public_track:
             return {"ok": False, "error": "track records are not public on this recorder"}
-        empty = {"published": 0, "received_by": 0, "verdicts_received": {}, "verdicts_given": {}, "roles": {}, "events": 0, "approvals": 0}
+        empty = {"published": 0, "received_by": 0, "verdicts_received": {}, "verdicts_given": {}, "roles": {}, "events": 0, "approvals": 0,
+                 "attested": {}, "closed": 0, "groups": 0}
         return {"ok": True, "pub": pub, "track": contribution(self.ledger.chain).get(pub, empty)}
 
     def audit(self) -> dict:

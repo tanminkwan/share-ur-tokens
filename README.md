@@ -27,13 +27,13 @@ flowchart LR
     E -- "evaluate_ideas (p2p 직접)" --> R
     E <-- "engage → contract" --> L["기록자 peer (recorder 역할)<br/>서명된 해시 체인 원장"]
     P & E -- "publish · share · contract · feedback" --> L
-    O["절대자 peer<br/>읽기 전용"] -- "read (기록자가 허용)" --> L
+    O["god peer<br/>읽기 전용"] -- "read (기록자가 허용)" --> L
     O --> D["대시보드<br/>통계 · peer별 강점과 실적"]
 ```
 
 ## 시연 시나리오
 
-심사·기록 역할을 할 수 있는 peer가 공개 영역을 요약한 프로필와 역할을 공개해 둔다 → 이벤트 peer(나)가 broker에서 기록자와 심사자를 발견해 **역할 계약**(원장)을 맺는다 → **사장님 peer가 이벤트에 결재 서명**을 하여 회사가 인정한 공모가 된다(결재 서명은 원장에 남아 누구나 확인) → **공지**(응모 대상: 삼성SDS 전사원)를 게시하면 broker가 라벨이 맞는 peer 전원에게 기계적으로 보여 주고, 추천 peer가 맞는 사람을 근거와 함께 추천한다 → 각 peer의 비서가 작업 노트·소유자 규칙·상황·위험·원장 확인(계약과 사장님 결재)의 다섯 근거로 응모·사원에게 묻기·넘김을 정한다 → 사원이 낸 아이디어가 p2p로 나에게 온다 → 마감 뒤 나의 비서가 도구를 골라 계약한 심사자에게 심사를 맡기고 채택한다 → 경험이 쌓인 peer는 프로필을 스스로 갱신한다 → 전 과정이 원장에 남고 절대자 peer가 통계를 낸다.
+심사·기록 역할을 할 수 있는 peer가 공개 영역을 요약한 프로필와 역할을 공개해 둔다 → 이벤트 peer(나)가 broker에서 기록자와 심사자를 발견해 **역할 계약**(원장)을 맺는다 → **사장님 peer가 이벤트에 결재 서명**을 하여 회사가 인정한 공모가 된다(결재 서명은 원장에 남아 누구나 확인) → **공지**(응모 대상: 삼성SDS 전사원)를 게시하면 broker가 라벨이 맞는 peer 전원에게 기계적으로 보여 주고, 추천 peer가 맞는 사람을 근거와 함께 추천한다 → 각 peer의 비서가 작업 노트·소유자 규칙·상황·위험·원장 확인(계약과 사장님 결재)의 다섯 근거로 응모·사원에게 묻기·넘김을 정한다 → 사원이 낸 아이디어가 p2p로 나에게 온다 → 마감 뒤 나의 비서가 도구를 골라 계약한 심사자에게 심사를 맡기고 채택한다 → 경험이 쌓인 peer는 프로필을 스스로 갱신한다 → 전 과정이 원장에 남고 god peer가 통계를 낸다.
 
 ## 실행
 
@@ -54,7 +54,7 @@ export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드�
 .venv/bin/python -m arena.broker        # broker API (ARENA_BROKER_*)
 .venv/bin/python -m arena.recorder     # recorder API, 원장 보관소 (ARENA_RECORDER_*)
 .venv/bin/python -m arena.peers.search  # 고급 검색 peer: 임베딩 벡터 검색 (ARENA_SEARCH_PEER_*, ARENA_EMBED_URL)
-.venv/bin/python -m arena.peers.overseer # 관전용 절대자 peer (ARENA_OVERSEER_PEER_*, ARENA_OVERSEER_VIEWERS)
+.venv/bin/python -m arena.peers.overseer # 관전용 god peer (ARENA_OVERSEER_PEER_*, ARENA_OVERSEER_VIEWERS)
 ```
 
 상세는 [docs/system-overview.md](docs/system-overview.md) 10절. 실제 LLM(`gpt-oss-120b`)으로 전 흐름을 실행한 기록은 `review/evidence/live-run-gpt-oss-120b.txt`에 있다. Claude 경로는 키가 생기면 검증한다.
@@ -69,8 +69,8 @@ export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드�
 | [docs/trust-and-security.md](docs/trust-and-security.md) | 신원 방식(실명·가명·익명), 원장의 보장 범위, 위험과 대응 |
 | [docs/competitive-comparison.md](docs/competitive-comparison.md) | 기존 제품(Agent 365, Gemini Enterprise, AGNTCY, NANDA, Fetch.ai, Glean, 공모 도구)과의 비교 |
 | [dev/plan.md](dev/plan.md) | **개발 계획**: 단계 나눔, 개발 원칙, 단계별 요구사항·설계·테스트 결과(`dev/phaseN/`) |
-| [arena/](arena/) | **플랫폼 패키지**(개발 중): 설정, 서명, 검색기, 원장(이벤트 선언·policy·결재), broker·recorder API 서비스, peer 핵심(A2A, 공개 영역, 프로필, 앱 등록, 역할 계약, 결재 요청, 기록자 역할), LLM 어댑터, 기본 서빙 peer(고급 검색, 관전용 절대자), 공개 영역 주소 연결(로컬·URL), 공지 없는 직접 요청, 원장 실적 조회, 역량 라벨 자율 갱신 |
-| [app/](app/) | **사전 프로토타입** (peer·broker·기록자·절대자, 원장, LLM 어댑터, 대시보드). 플랫폼 개발 범위 밖이라 그대로 둔다 |
+| [arena/](arena/) | **플랫폼 패키지**(개발 중): 설정, 서명, 검색기, 원장(이벤트 선언·policy·결재), broker·recorder API 서비스, peer 핵심(A2A, 공개 영역, 프로필, 앱 등록, 역할 계약, 결재 요청, 기록자 역할), LLM 어댑터, 기본 서빙 peer(고급 검색, 관전용 god), 공개 영역 주소 연결(로컬·URL), 공지 없는 직접 요청, 원장 실적 조회, 역량 라벨 자율 갱신 |
+| [app/](app/) | **사전 프로토타입** (peer·broker·기록자·god, 원장, LLM 어댑터, 대시보드). 플랫폼 개발 범위 밖이라 그대로 둔다 |
 | [proto/](proto/) | 초기 실현 가능성 spike (`spike_a2a.py`, `spike_ledger.py`) |
 | [docs/hackathon-proposal-submit.md](docs/hackathon-proposal-submit.md) | **제출용 신청서(압축본)** (주최 측 7개 문항, 심사용) |
 | [docs/hackathon-proposal.md](docs/hackathon-proposal.md) | 신청서 원본(상세판). 압축본의 근거와 세부 설계 |

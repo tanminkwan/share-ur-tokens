@@ -1,8 +1,8 @@
 """Track records across recorders, and a mechanical check against a requirement (e.g. before a role contract)."""
 from __future__ import annotations
 
-NUMBERS = ("published", "received_by", "events", "approvals")
-MAPS = ("verdicts_received", "verdicts_given", "roles")
+NUMBERS = ("published", "received_by", "events", "approvals", "closed", "groups")
+MAPS = ("verdicts_received", "verdicts_given", "roles", "attested")
 
 
 def empty_track() -> dict:

@@ -6,7 +6,7 @@ import logging
 import time
 from typing import Callable, Iterable
 
-from ..config import Settings
+from ..config import ConfigError, Settings
 from ..crypto import Identity, pen_name, verify
 from ..search import BM25Searcher, Searcher
 from .neighbors import Caller, HttpNeighbors, NeighborGateway
@@ -18,14 +18,17 @@ NOTICE_TEXT_FIELDS = ("title", "text", "kind")  # searched if present; every oth
 class BrokerService:
     def __init__(self, settings: Settings, identity: Identity, searcher: Searcher, neighbors_gw: NeighborGateway,
                  name: str | None = None, neighbors: Iterable[str] | None = None, owner_pub: str | None = None,
-                 clock: Callable[[], float] = time.time):
+                 clock: Callable[[], float] = time.time, group_id: str | None = None):
         self.settings, self.identity, self.searcher, self.gw, self.clock = settings, identity, searcher, neighbors_gw, clock
         self.name = name or settings.broker_name
+        self.group_id = group_id or settings.broker_group_id or settings.genesis_group_id
         self.neighbors = list(settings.broker_neighbors if neighbors is None else neighbors)
         self.owner_pub = owner_pub if owner_pub is not None else settings.broker_owner_pub
         self.profiles: dict[str, dict] = {}
         self.notices: dict[str, dict] = {}
         self.grants: dict[str, float] = {}
+        if self.group_id == settings.genesis_group_id and self.owner_pub is not None:
+            raise ConfigError(f"the genesis group {self.group_id!r} is open to everyone and cannot have an owner")
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "BrokerService":
@@ -69,7 +72,7 @@ class BrokerService:
     async def list_profiles(self, caller: Caller, local: bool = False) -> list[dict] | None:
         if not self.is_member(caller.pub):
             return None
-        out = [dict(p, broker=self.name) for p in self._active(self.profiles)]
+        out = [dict(p, broker=self.name, group_id=self.group_id) for p in self._active(self.profiles)]
         if not local:
             for url in self.neighbors:
                 try:
@@ -91,7 +94,8 @@ class BrokerService:
         ranked = self.searcher.rank(q, [f"{p['summary']} {' '.join(p.get('offers', []))}" for p in cands])
         s = self.settings
         hits = [dict(cands[i], offers=cands[i].get("offers", []), labels=cands[i].get("labels", []),
-                     pen_name=pen_name(cands[i]["pub"], s.pen_name_prefix, s.pen_name_len), score=score, broker=self.name)
+                     pen_name=pen_name(cands[i]["pub"], s.pen_name_prefix, s.pen_name_len), score=score, broker=self.name,
+                     group_id=self.group_id)
                 for i, score in ranked[:k]]
         if not local:
             query = {"q": q, "role": role, "labels": labels, "exclude": list(exclude), "k": k}
@@ -122,6 +126,8 @@ class BrokerService:
     async def post_notice(self, notice: dict, sig: str, shared: bool = False) -> dict:
         if not verify(notice.get("issuer_pub", ""), notice, sig):
             return {"ok": False, "error": "bad signature"}
+        if notice.get("group_id") != self.group_id:  # the issuer signs which group the notice belongs to
+            return {"ok": False, "error": "notice belongs to another group"}
         self.notices[notice["notice_id"]] = dict(notice)
         seen_by = sum(self._visible(notice, set(p.get("labels", []))) for p in self._active(self.profiles))
         log.info("%s: notice %s %s, visible to %d", self.name, notice["notice_id"], "received" if shared else "posted", seen_by)
@@ -160,5 +166,5 @@ class BrokerService:
         return [dict(visible[i], score=s) for i, s in ranked[:self._k(k)] if s > 0]
 
     def health(self) -> dict:
-        return {"ok": True, "name": self.name, "pub": self.identity.pub, "profiles": len(self._active(self.profiles)),
+        return {"ok": True, "name": self.name, "group_id": self.group_id, "pub": self.identity.pub, "profiles": len(self._active(self.profiles)),
                 "notices": len(self._active(self.notices)), "neighbors": self.neighbors, "closed": self.closed}

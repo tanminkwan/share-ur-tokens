@@ -61,7 +61,7 @@ async def test_p3d4_search_peer_process_answers_over_a2a(live_embed, tmp_path):
             assert (await B.advertise(who, p))["ok"]
         issuer = Identity.generate()
         for nid, text in (("n1", "새로 온 동료의 첫 달 적응을 돕는 방법 모집"), ("n2", "서버 비용 절감 아이디어 모집")):
-            n = {"notice_id": nid, "issuer_pub": issuer.pub, "until": time.time() + 600, "title": text, "text": text, "audience": {"소속": "삼성SDS"}}
+            n = {"notice_id": nid, "issuer_pub": issuer.pub, "until": time.time() + 600, "title": text, "text": text, "audience": {"소속": "삼성SDS"}, "group_id": "public"}
             assert (await B.post_notice(issuer, n))["ok"]
         sp = Proc("arena.peers.search", dict(base, ARENA_SEARCH_PEER_PORT=str(sport), ARENA_SEARCH_PEER_KEY_FILE=str(tmp_path / "s.key"),
                                              ARENA_SEARCH_PEER_AREA=str(tmp_path / "s-area"), ARENA_SEARCH_PEER_LABELS=SDS,

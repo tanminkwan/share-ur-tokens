@@ -19,3 +19,8 @@ class Receipts:
             return False
         self.items.append({"kind": kind, "payload": payload, "seq": response["seq"], "hash": response["hash"], "seal": response["seal"]})
         return True
+
+    def missing_from(self, chain: list[dict]) -> list[dict]:
+        """receipts whose entry is not in this copy of the chain (deleted, cut off the end, or rewritten)"""
+        have = {(e["seq"], e["hash"]) for e in chain}
+        return [r for r in self.items if (r["seq"], r["hash"]) not in have]
