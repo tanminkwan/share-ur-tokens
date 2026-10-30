@@ -133,3 +133,13 @@ async def test_p5a18_verify_genesis(svc):
     r = await svc.record(*genesis_entry(god, broker_pub="b" * 64, recorder_pub=svc.identity.pub))
     assert svc.verify(r["hash"]) == {"ok": True, "exists": True, "type": "genesis", "seal_ok": True, "event_id": None, "group_id": "public",
                                      "god": god.pub, "broker": "b" * 64, "recorder": svc.identity.pub}
+
+
+async def test_p5a19_verify_returns_rules_hash(svc, cast):
+    kind, p, _ = cast.event(policy={})
+    p["rules_hash"] = "f" * 64
+    ev = await svc.record(kind, p, {cast.issuer.pub: cast.issuer.sign(p)})
+    kind, c, _ = cast.contract(role="judge")
+    c["rules_hash"] = "f" * 64
+    ct = await svc.record(kind, c, {cast.issuer.pub: cast.issuer.sign(c), cast.judge.pub: cast.judge.sign(c)})
+    assert svc.verify(ev["hash"])["rules_hash"] == "f" * 64 and svc.verify(ct["hash"])["rules_hash"] == "f" * 64

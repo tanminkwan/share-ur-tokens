@@ -26,6 +26,7 @@ class BrokerService:
         self.owner_pub = owner_pub if owner_pub is not None else settings.broker_owner_pub
         self.profiles: dict[str, dict] = {}
         self.notices: dict[str, dict] = {}
+        self.notice_meta: dict[str, dict] = {}  # notice_id -> {"updated_at", "closed"}: kept outside the signed notice
         self.grants: dict[str, float] = {}
         if self.group_id == settings.genesis_group_id and self.owner_pub is not None:
             raise ConfigError(f"the genesis group {self.group_id!r} is open to everyone and cannot have an owner")
@@ -128,8 +129,17 @@ class BrokerService:
             return {"ok": False, "error": "bad signature"}
         if notice.get("group_id") != self.group_id:  # the issuer signs which group the notice belongs to
             return {"ok": False, "error": "notice belongs to another group"}
+        old = self.notices.get(notice["notice_id"])
+        if old is not None:
+            if old == notice:
+                return {"ok": True, "visible_to": self._seen_by(notice), "unchanged": True}
+            if old["issuer_pub"] != notice["issuer_pub"]:
+                return {"ok": False, "error": "not the issuer"}
+            if notice.get("ver", 1) <= old.get("ver", 1):
+                return {"ok": False, "error": "older or same version"}
         self.notices[notice["notice_id"]] = dict(notice)
-        seen_by = sum(self._visible(notice, set(p.get("labels", []))) for p in self._active(self.profiles))
+        self.notice_meta[notice["notice_id"]] = {"updated_at": self.clock(), "closed": False}
+        seen_by = self._seen_by(notice)
         log.info("%s: notice %s %s, visible to %d", self.name, notice["notice_id"], "received" if shared else "posted", seen_by)
         if not shared:
             for url in self.neighbors:
@@ -139,11 +149,28 @@ class BrokerService:
                     log.warning("%s: sharing to %s failed (%s)", self.name, url, e)
         return {"ok": True, "visible_to": seen_by}
 
+    def _seen_by(self, notice) -> int:
+        return sum(self._visible(notice, set(p.get("labels", []))) for p in self._active(self.profiles))
+
+    async def changed_notices(self, pub: str, since: float) -> dict | None:
+        """notices posted, updated or closed after `since` that this viewer may see (closed ones included, marked)"""
+        labels = self._labels_of(pub)
+        if labels is None:
+            return None
+        now = self.clock()
+        out = []
+        for nid, n in self.notices.items():
+            m = self.notice_meta.get(nid, {"updated_at": 0, "closed": False})
+            if m["updated_at"] > since and self._visible(n, labels):
+                out.append(dict(n, updated_at=m["updated_at"], closed=m["closed"] or n.get("until", 0) <= now))
+        return {"notices": sorted(out, key=lambda x: x["updated_at"]), "now": now}
+
     async def close_notice(self, notice_id: str, sig: str, shared: bool = False) -> dict:
         n = self.notices.get(notice_id)
         if not n or not verify(n["issuer_pub"], {"close": notice_id}, sig):
             return {"ok": False, "error": "not the issuer"}
         n["until"] = self.clock()
+        self.notice_meta[notice_id] = {"updated_at": self.clock(), "closed": True}
         if not shared:
             for url in self.neighbors:
                 try:

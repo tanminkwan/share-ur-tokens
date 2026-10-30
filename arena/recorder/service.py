@@ -46,6 +46,8 @@ class RecorderService:
         p = e["payload"]
         out = {"ok": True, "exists": True, "type": e["type"], "seal_ok": verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"]),
                "event_id": p.get("event_id"), "group_id": p.get("group_id")}
+        if e["type"] in ("event", "contract") and "rules_hash" in p:  # the rules everyone agreed to, by hash
+            out["rules_hash"] = p["rules_hash"]
         if e["type"] == "event":
             out.update(issuer=p["issuer"], kind=p.get("kind"), approvers=list(p.get("approvers", [])))
         elif e["type"] == "genesis":

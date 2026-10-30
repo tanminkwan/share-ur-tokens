@@ -39,3 +39,25 @@ async def test_pb7_local_transport_copies_messages():
     assert msg["n"] == [1]  # JSON round trip like the real wire
     with pytest.raises(ConnectionError):
         await t.call("mem://nobody", {})
+
+
+async def test_p5c17_group_and_event_ride_in_the_message_head(settings):
+    seen = []
+
+    async def handler(msg, meta):
+        seen.append(meta)
+        return {"ok": True}
+    port = free_port()
+    url = f"http://127.0.0.1:{port}"
+    srv = await serve_background(build_a2a_app("peer-m", "meta", url, ["x"], handler), "127.0.0.1", port)
+    try:
+        await A2ATransport(settings).call(url, {"op": "x"}, meta={"group_id": "g-1", "event_id": "ev-9"})
+        await A2ATransport(settings).call(url, {"op": "x"})
+    finally:
+        srv.should_exit = True
+    assert seen[0] == {"group_id": "g-1", "event_id": "ev-9", "context_id": "ev-9"}
+    assert seen[1]["group_id"] is None and seen[1]["event_id"] is None
+    t = LocalTransport()
+    t.register("mem://m", handler)
+    await t.call("mem://m", {"op": "x"}, meta={"group_id": "g-2", "event_id": None})
+    assert seen[-1]["group_id"] == "g-2"

@@ -102,3 +102,14 @@ async def test_r4_9_bad_signature_on_closed_group_is_401(settings):
     h = sign_request(owner, "GET", "/profiles")
     h["X-Arena-Sig"] = "00" * 64
     assert (await http.get("/profiles/search", params={"q": "x"}, headers=h)).status_code == 401
+
+
+async def test_p5c15_changes_since_over_both_clients(client):
+    import time
+    issuer, viewer = Identity.generate(), Identity.generate()
+    assert (await client.advertise(viewer, profile("http://v", "v", now=time.time())))["ok"]
+    t0 = time.time() - 1
+    await client.post_notice(issuer, notice(issuer, "c1", now=time.time()))
+    r = await client.changed_notices(viewer, since=t0)
+    assert r["ok"] and [x["notice_id"] for x in r["notices"]] == ["c1"] and r["now"] >= t0
+    assert (await client.changed_notices(Identity.generate(), since=t0))["ok"] is False

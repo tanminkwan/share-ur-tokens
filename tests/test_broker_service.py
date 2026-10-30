@@ -262,3 +262,33 @@ def test_p5a17_genesis_group_cannot_be_closed(settings):
     with pytest.raises(ConfigError):
         BrokerService(settings, Identity.generate(), BM25Searcher(), NoNeighbors(), name="x", neighbors=[], owner_pub=Identity.generate().pub)
     assert BrokerService(settings, Identity.generate(), BM25Searcher(), NoNeighbors(), name="y", neighbors=[]).group_id == GENESIS
+
+
+async def test_p5c15_changes_since_versions_updates_and_closes(net, clock):
+    b = net.brokers[0]
+    issuer, viewer, other = Identity.generate(), Identity.generate(), Identity.generate()
+    await b.advertise(ad(viewer, profile("http://v", "v", now=clock())))
+    t0 = clock()
+    clock.tick(1)
+    n = dict(notice(issuer, "n1", now=clock()), ver=1)
+    assert (await b.post_notice(n, issuer.sign(n)))["ok"]
+    ch = await b.changed_notices(viewer.pub, since=t0)
+    assert [x["notice_id"] for x in ch["notices"]] == ["n1"] and ch["notices"][0]["closed"] is False and ch["now"] == clock()
+    t1 = clock()
+    assert (await b.changed_notices(viewer.pub, since=t1))["notices"] == []  # nothing new since
+    clock.tick(1)
+    n2 = dict(n, ver=2, text="수정한 내용")
+    assert (await b.post_notice(n2, issuer.sign(n2)))["ok"]
+    got = (await b.changed_notices(viewer.pub, since=t1))["notices"]
+    assert got[0]["ver"] == 2 and got[0]["text"] == "수정한 내용" and got[0]["updated_at"] == clock()
+    old = dict(n, ver=1, text="옛것")
+    assert await b.post_notice(old, issuer.sign(old)) == {"ok": False, "error": "older or same version"}
+    hijack = dict(n, ver=3, issuer_pub=other.pub)
+    assert await b.post_notice(hijack, other.sign(hijack)) == {"ok": False, "error": "not the issuer"}
+    t2 = clock()
+    clock.tick(1)
+    await b.close_notice("n1", issuer.sign({"close": "n1"}))
+    closed = (await b.changed_notices(viewer.pub, since=t2))["notices"]
+    assert closed[0]["notice_id"] == "n1" and closed[0]["closed"] is True
+    assert await b.visible_notices(viewer.pub) == []  # the plain list still shows only open notices
+    assert await b.changed_notices(Identity.generate().pub, since=0) is None  # no profile here -> refused

@@ -2,6 +2,7 @@
 Transport is the interface peers depend on: A2ATransport over HTTP, LocalTransport inside one process (tests)."""
 from __future__ import annotations
 
+import inspect
 import json
 from typing import Awaitable, Callable, Protocol
 
@@ -17,12 +18,21 @@ from starlette.applications import Starlette
 
 from .config import Settings
 
-Handler = Callable[[dict], Awaitable[dict]]
+Handler = Callable[..., Awaitable[dict]]  # handler(msg) or handler(msg, meta)
 RPC_PATH = "/rpc"
+H_GROUP, H_EVENT = "X-Arena-Group", "X-Arena-Event"
 
 
 class Transport(Protocol):
-    async def call(self, url: str, msg: dict, timeout: float | None = None) -> dict: ...
+    async def call(self, url: str, msg: dict, timeout: float | None = None, meta: dict | None = None) -> dict: ...
+
+
+def _wants_meta(handler) -> bool:
+    return len(inspect.signature(handler).parameters) >= 2
+
+
+async def _dispatch(handler, msg, meta):
+    return await (handler(msg, meta) if _wants_meta(handler) else handler(msg))
 
 
 class _JsonExecutor(AgentExecutor):
@@ -33,7 +43,10 @@ class _JsonExecutor(AgentExecutor):
 
     async def execute(self, context, event_queue) -> None:
         try:
-            res = await self.handler(json.loads(context.get_user_input()))
+            m = context.message
+            md = dict(m.metadata) if m is not None and m.metadata else {}
+            meta = {"group_id": md.get("group_id"), "event_id": md.get("event_id"), "context_id": (m.context_id if m is not None else None) or None}
+            res = await _dispatch(self.handler, json.loads(context.get_user_input()), meta)
         except Exception as e:  # surface errors to the caller instead of hanging
             res = {"ok": False, "error": f"{type(e).__name__}: {e}"}
         await event_queue.enqueue_event(new_text_message(json.dumps(res, ensure_ascii=False), context_id=context.context_id))
@@ -57,12 +70,19 @@ class A2ATransport:
     def __init__(self, settings: Settings):
         self.timeout = settings.a2a_timeout_sec
 
-    async def call(self, url, msg, timeout=None):
-        """discover the Agent Card at url, send one JSON message, parse the JSON reply"""
-        async with httpx.AsyncClient(timeout=timeout or self.timeout) as hc:
+    async def call(self, url, msg, timeout=None, meta=None):
+        """discover the Agent Card at url, send one JSON message, parse the JSON reply.
+        meta {"group_id", "event_id"} rides in the message head: context_id = event_id, metadata, and HTTP headers"""
+        meta = meta or {}
+        group, event = meta.get("group_id"), meta.get("event_id")
+        headers = {k: v for k, v in ((H_GROUP, group), (H_EVENT, event)) if v}
+        message = new_text_message(json.dumps(msg, ensure_ascii=False), role=Role.ROLE_USER, **({"context_id": event} if event else {}))
+        if group or event:
+            message.metadata.update({k: v for k, v in (("group_id", group), ("event_id", event)) if v})
+        async with httpx.AsyncClient(timeout=timeout or self.timeout, headers=headers) as hc:
             client = await create_client(url, ClientConfig(streaming=False, httpx_client=hc))
             last = None
-            async for r in client.send_message(SendMessageRequest(message=new_text_message(json.dumps(msg, ensure_ascii=False), role=Role.ROLE_USER))):
+            async for r in client.send_message(SendMessageRequest(message=message)):
                 last = r
         if last is None:
             return {"ok": False, "error": "no response"}
@@ -80,7 +100,8 @@ class LocalTransport:
     def register(self, url: str, handler: Handler) -> None:
         self.handlers[url] = handler
 
-    async def call(self, url, msg, timeout=None):
+    async def call(self, url, msg, timeout=None, meta=None):
         if url not in self.handlers:
             raise ConnectionError(f"{url} unreachable")
-        return json.loads(json.dumps(await self.handlers[url](json.loads(json.dumps(msg)))))
+        m = {"group_id": None, "event_id": None, **(meta or {})}
+        return json.loads(json.dumps(await _dispatch(self.handlers[url], json.loads(json.dumps(msg)), m)))

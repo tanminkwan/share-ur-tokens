@@ -155,3 +155,16 @@ async def test_pb16_peer_builds_recorder_clients_by_url(tmp_path, settings, brok
     sentinel = object()
     p.recorder_factory = lambda url: sentinel
     assert p.recorder("http://x") is sentinel
+
+
+async def test_p5c17_peer_checks_the_group_in_the_head(tmp_path, settings, broker):
+    p = make_peer(tmp_path, settings, broker, apps=[EchoApp()])
+    mine = await p.group_id("main")
+    assert (await p.handle({"op": "hello", "who": "x"}, meta={"group_id": mine, "event_id": None}))["ok"]
+    r = await p.handle({"op": "hello"}, meta={"group_id": "g-elsewhere", "event_id": None})
+    assert r == {"ok": False, "error": "not a member of broker group g-elsewhere"}
+    r = await p.handle({"op": "hello", "group_id": "other"}, meta={"group_id": mine, "event_id": None})
+    assert r == {"ok": False, "error": "group_id in the body differs from the head"}
+    r = await p.handle({"op": "hello", "event_id": "ev-a"}, meta={"group_id": mine, "event_id": "ev-b"})
+    assert r == {"ok": False, "error": "event_id in the body differs from the head"}
+    assert (await p.handle({"op": "hello"}))["ok"]  # no head: platform ops decide on the body alone

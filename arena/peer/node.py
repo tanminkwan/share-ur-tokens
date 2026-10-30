@@ -90,18 +90,46 @@ class Peer:
             await app.start(self)
 
     # ---- messages ----
-    async def handle(self, msg: dict) -> dict:
+    async def my_group_ids(self) -> set[str]:
+        out = set()
+        for g in self.brokers:
+            try:
+                out.add(await self.group_id(g))
+            except Exception:
+                pass
+        return out
+
+    async def _check_head(self, msg: dict, meta: dict | None) -> str | None:
+        """the head (group, event) is read before the body: refuse groups I am not in and bodies that disagree"""
+        if not meta:
+            return None
+        group, event = meta.get("group_id"), meta.get("event_id")
+        if group and group not in await self.my_group_ids():
+            return f"not a member of broker group {group}"
+        if group and "group_id" in msg and msg["group_id"] != group:
+            return "group_id in the body differs from the head"
+        if event and "event_id" in msg and msg["event_id"] != event:
+            return "event_id in the body differs from the head"
+        return None
+
+    async def handle(self, msg: dict, meta: dict | None = None) -> dict:
         fn = self._ops.get(msg.get("op"))
         if fn is None:
             return {"ok": False, "error": f"unknown op: {msg.get('op')}"}
+        bad = await self._check_head(msg, meta)
+        if bad:
+            return {"ok": False, "error": bad}
+        self._meta = meta or {}
         try:
             return await fn(msg)
         except Exception as e:
             self.log.emit("peer", self.pen, f"{msg.get('op')} 처리 실패: {type(e).__name__}: {e}")
             return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
-    async def call(self, url: str, msg: dict, timeout: float | None = None) -> dict:
-        return await self.transport.call(url, msg, timeout)
+    async def call(self, url: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None) -> dict:
+        """send to another peer; group/event (if this is about one) ride in the message head"""
+        meta = {"group_id": group, "event_id": event} if (group or event) else None
+        return await self.transport.call(url, msg, timeout, meta) if meta else await self.transport.call(url, msg, timeout)
 
     # ---- profile ----
     async def advertise(self) -> dict:
@@ -126,7 +154,8 @@ class Peer:
 
         async def one(url):
             try:
-                return await self.call(url, {"op": "solicit", "request": request, "sig": sig})
+                return await self.call(url, {"op": "solicit", "request": request, "sig": sig},
+                                       group=request.get("group_id"), event=request.get("event_id"))
             except Exception as e:
                 return {"ok": False, "error": f"{type(e).__name__}: {e}"}
         acks = await asyncio.gather(*(one(u) for u in targets))

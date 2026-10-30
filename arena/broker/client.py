@@ -22,6 +22,7 @@ class BrokerAPI(Protocol):
     async def post_notice(self, identity: Identity, notice: dict) -> dict: ...
     async def close_notice(self, identity: Identity, notice_id: str) -> dict: ...
     async def list_notices(self, identity: Identity) -> dict: ...
+    async def changed_notices(self, identity: Identity, since: float) -> dict: ...
     async def search_notices(self, identity: Identity, q: str, k: int | None = None) -> dict: ...
     async def grant(self, owner: Identity, pub: str, until: float) -> dict: ...
     async def health(self) -> dict: ...
@@ -65,6 +66,9 @@ class BrokerClient:
     async def list_notices(self, identity):
         return await self._call("GET", "/notices", identity=identity)
 
+    async def changed_notices(self, identity, since):
+        return await self._call("GET", "/notices", identity=identity, params={"since": repr(float(since))})
+
     async def search_notices(self, identity, q, k=None):
         return await self._call("GET", "/notices/search", identity=identity, params={"q": q, **({"k": str(k)} if k else {})})
 
@@ -106,6 +110,10 @@ class InMemoryBrokerClient:
     async def list_notices(self, identity):
         out = await self.svc.visible_notices(identity.pub)
         return {"ok": False, "error": NEED_PROFILE} if out is None else {"ok": True, "notices": out}
+
+    async def changed_notices(self, identity, since):
+        out = await self.svc.changed_notices(identity.pub, since)
+        return {"ok": False, "error": NEED_PROFILE} if out is None else {"ok": True, **out}
 
     async def search_notices(self, identity, q, k=None):
         out = await self.svc.search_notices(identity.pub, q, k=k)

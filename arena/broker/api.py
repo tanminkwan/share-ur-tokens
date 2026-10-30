@@ -52,7 +52,15 @@ def build_broker_app(svc: BrokerService) -> Starlette:
         return reply(await svc.close_notice(r.path_params["notice_id"], b["sig"], shared=bool(b.get("shared"))), fail_status=403)
 
     async def get_notices(r: Request):
-        out = await svc.visible_notices(signed_caller(r, window, svc.clock))
+        caller = signed_caller(r, window, svc.clock)
+        since = r.query_params.get("since")
+        if since is not None:
+            try:
+                ch = await svc.changed_notices(caller, float(since))
+            except ValueError:
+                return error(400, "since must be a number")
+            return error(403, NEED_PROFILE) if ch is None else JSONResponse({"ok": True, **ch})
+        out = await svc.visible_notices(caller)
         return error(403, NEED_PROFILE) if out is None else JSONResponse({"ok": True, "notices": out})
 
     async def search_notices(r: Request):

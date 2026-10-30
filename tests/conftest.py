@@ -11,6 +11,7 @@ def make_env(tmp_path, **over):
         "ARENA_BROKER_PORT": "0",
         "ARENA_RECORDER_PORT": "0",
         "ARENA_BROKER_KEY_FILE": str(tmp_path / "broker.key"),
+        "ARENA_EVENT_STORE_DIR": str(tmp_path / "events"),
         "ARENA_RECORDER_KEY_FILE": str(tmp_path / "recorder.key"),
         "ARENA_RECORDER_LEDGER_FILE": str(tmp_path / "ledger.jsonl"),
         "ARENA_SIG_WINDOW_SEC": "60",
