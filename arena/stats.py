@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 
-from .ledger import contribution
+from .ledger import contribution, empty_record
 
 
 def ledger_stats(chain: list[dict], top_flows: int, genesis_group_id: str | None = None) -> dict:
@@ -45,8 +45,7 @@ def per_peer(chain: list[dict], profiles: list[dict], pen) -> list[dict]:
     """strengths = what the profile says (self-described); track record = what the ledger proves, joined by public key"""
     contrib = contribution(chain)
     prof = {p["pub"]: p for p in profiles}
-    empty = {"published": 0, "received_by": 0, "verdicts_received": {}, "verdicts_given": {}, "roles": {}, "events": 0, "approvals": 0,
-             "attested": {}, "closed": 0, "groups": 0}
+    empty = {k: (len(v) if isinstance(v, set) else dict(v) if isinstance(v, dict) else v) for k, v in empty_record().items()}
     out = []
     for pub in sorted(set(prof) | set(contrib)):
         p = prof.get(pub, {})

@@ -68,6 +68,7 @@ export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드�
 | [docs/a2a-transaction.md](docs/a2a-transaction.md) | p2p 연결, a2a 상호작용, 응모 판단과 제출 흐름 |
 | [docs/trust-and-security.md](docs/trust-and-security.md) | 신원 방식(실명·가명·익명), 원장의 보장 범위, 위험과 대응 |
 | [docs/competitive-comparison.md](docs/competitive-comparison.md) | 기존 제품(Agent 365, Gemini Enterprise, AGNTCY, NANDA, Fetch.ai, Glean, 공모 도구)과의 비교 |
+| [dev/app-guide.md](dev/app-guide.md) | **앱 개발 규약집**: 앱 구조, 능력 인터페이스, 문맥, 메시지·원장·지속성 규약, 등록·배포, 어댑터, 테스트. 외부 개발자는 `arena.sdk`만 쓴다 |
 | [dev/plan.md](dev/plan.md) | **개발 계획**: 단계 나눔, 개발 원칙, 단계별 요구사항·설계·테스트 결과(`dev/phaseN/`) |
 | [arena/](arena/) | **플랫폼 패키지**(개발 중): 설정, 서명, 검색기, 원장(이벤트 선언·policy·결재), broker·recorder API 서비스, peer 핵심(A2A, 공개 영역, 프로필, 앱 등록, 역할 계약, 결재 요청, 기록자 역할), LLM 어댑터, 기본 서빙 peer(고급 검색, 관전용 god), 공개 영역 주소 연결(로컬·URL), 공지 없는 직접 요청, 원장 실적 조회, 역량 라벨 자율 갱신 |
 | [app/](app/) | **사전 프로토타입** (peer·broker·기록자·god, 원장, LLM 어댑터, 대시보드). 플랫폼 개발 범위 밖이라 그대로 둔다 |

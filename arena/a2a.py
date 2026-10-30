@@ -105,3 +105,24 @@ class LocalTransport:
             raise ConnectionError(f"{url} unreachable")
         m = {"group_id": None, "event_id": None, **(meta or {})}
         return json.loads(json.dumps(await _dispatch(self.handlers[url], json.loads(json.dumps(msg)), m)))
+
+
+async def ask_agent(url: str, text: str, timeout: float = 60.0, context_id: str | None = None) -> str:
+    """talk to any A2A agent in plain text (not only arena peers): send one text message, return the reply text"""
+    async with httpx.AsyncClient(timeout=timeout) as hc:
+        client = await create_client(url, ClientConfig(streaming=False, httpx_client=hc))
+        last = None
+        msg = new_text_message(text, role=Role.ROLE_USER, **({"context_id": context_id} if context_id else {}))
+        async for r in client.send_message(SendMessageRequest(message=msg)):
+            last = r
+    if last is not None and last.HasField("message"):
+        return get_message_text(last.message)
+    if last is not None and last.HasField("task"):
+        t = last.task
+        if t.status.HasField("message"):
+            return get_message_text(t.status.message)
+        for a in t.artifacts:
+            for part in a.parts:
+                if part.HasField("text"):
+                    return part.text
+    return ""

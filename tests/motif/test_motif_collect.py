@@ -19,7 +19,7 @@ from tests.motif.test_motif_memory import SDS, MemoryWorld
 
 class ApplyOnRequest(PeerApp):
     """test double: when a direct request arrives, check it like a notice and apply with what the owner writes"""
-    name = "apply-on-request"
+    name, version = "apply-on-request", "1.0"
 
     def __init__(self):
         self.results = []
@@ -38,7 +38,7 @@ async def world(tmp_path, settings):
     w.rev2 = w.peer("rev2", [AcceptRole("review"), Judge()], ["공모 심사 평가 기준 심사위원 신규"], groups=[REVIEW])
     for i, p in enumerate(w.applicants):
         app = ApplyOnRequest()
-        p.apps.append(app)
+        await p.install(app)
         p.owner = FakeOwner(writes=[{"title": f"직접 요청에 응한 기획 {i}", "idea": "공개 영역 메모로 다듬은 기획서"}])
     w.applicants[2].area.add_note("물류 창고 재고 실사")  # less related: should not be among the chosen
     w.search_role = SearchRole(HashEmbedder(), settings)
@@ -83,7 +83,7 @@ async def test_p4e2_collection_mode_end_to_end(world):
     request = {k: v for k, v in o["notice"].items() if k != "notice_id"}
     request["request_id"] = o["event_id"]
     acks = await org.solicit(chosen, request)
-    assert all(a == {"ok": True, "received": True} for a in acks.values())
+    assert all(a == {"ok": True, "received": True} for a in acks.values()), acks
     for _ in range(50):
         if len(w.inbox.items.get(o["event_id"], {})) == 2:
             break

@@ -112,5 +112,6 @@ async def test_p5b3_closed_group_and_spectator_refusals(settings):
     role = GodRole(settings, viewers=[owner.pub])
     peer = P()
     peer.settings = settings
-    r = await role._op_snapshot(peer, dict({"op": "god_snapshot"}, **sign_message(outsider, "god_snapshot")))
+    from arena.peer.plugin import MessageHead
+    r = await role._op_snapshot(peer, dict({"op": "god_snapshot"}, **sign_message(outsider, "god_snapshot")), MessageHead())
     assert r == {"ok": False, "error": "not a viewer"}

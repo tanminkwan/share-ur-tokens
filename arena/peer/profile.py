@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ..llm import ask_json
 from .labels import CapabilityLabeler
+from .plugin import ProfileContributor
 
 SUMMARY_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["summary"], "properties": {"summary": {"type": "string"}}}
 SUMMARY_SYSTEM = ("당신은 한 구성원의 비서 에이전트입니다. 구성원의 공개 영역(지식과 경험 노트)을 읽고, 다른 peer들이 검색해서 "
@@ -26,5 +27,6 @@ class ProfileBuilder:
                    "labels": list(peer.config.labels) + [c["label"] for c in caps], "capabilities": caps,
                    "until": peer.clock() + peer.settings.profile_ttl_sec, "ver": self.version}
         for app in peer.apps:
-            profile.update(app.profile_extra())
+            if isinstance(app, ProfileContributor):
+                profile.update(app.profile_extra())
         return profile

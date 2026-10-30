@@ -22,7 +22,7 @@ class EchoApp(PeerApp):
         return ["judge"]
 
     def ops(self):
-        async def hello(peer, msg):
+        async def hello(ctx, msg, head):
             return {"ok": True, "hello": msg.get("who")}
         return {"hello": hello}
 
@@ -68,8 +68,10 @@ def test_pb8_duplicate_op_is_an_assembly_error(tmp_path, settings, broker):
 
 async def test_pb6_handler_exception_becomes_error_reply(tmp_path, settings, broker):
     class Boom(PeerApp):
+        name = "boom"
+
         def ops(self):
-            async def boom(peer, msg):
+            async def boom(ctx, msg, head):
                 raise KeyError("missing")
             return {"boom": boom}
     p = make_peer(tmp_path, settings, broker, apps=[Boom()])

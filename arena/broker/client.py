@@ -14,18 +14,34 @@ from .neighbors import Caller
 from .service import BrokerService
 
 
-class BrokerAPI(Protocol):
+class ProfileBoard(Protocol):
+    """profiles: post one, list them, search them"""
     async def advertise(self, identity: Identity, profile: dict) -> dict: ...
     async def list_profiles(self, identity: Identity | None = None) -> dict: ...
     async def find(self, q: str, role: str | None = None, labels: Iterable[str] = (), exclude: Iterable[str] = (),
                    k: int | None = None, identity: Identity | None = None) -> dict: ...
+
+
+class NoticeBoard(Protocol):
+    """notices: post, close, read what I may see, read changes, search"""
     async def post_notice(self, identity: Identity, notice: dict) -> dict: ...
     async def close_notice(self, identity: Identity, notice_id: str) -> dict: ...
     async def list_notices(self, identity: Identity) -> dict: ...
     async def changed_notices(self, identity: Identity, since: float) -> dict: ...
     async def search_notices(self, identity: Identity, q: str, k: int | None = None) -> dict: ...
+
+
+class GroupAdmin(Protocol):
+    """closed groups: the owner grants time-limited membership"""
     async def grant(self, owner: Identity, pub: str, until: float) -> dict: ...
+
+
+class Health(Protocol):
     async def health(self) -> dict: ...
+
+
+class BrokerAPI(ProfileBoard, NoticeBoard, GroupAdmin, Health, Protocol):
+    """the whole broker; each user should depend on the smallest part it needs"""
 
 
 def _ad(identity: Identity, profile: dict) -> dict:

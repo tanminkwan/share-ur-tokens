@@ -48,13 +48,13 @@ async def test_p5c20_a_restarted_peer_continues_as_itself(tmp_path, settings):
     a = p.app(EventAssistant)
     a.since = 123.0
     a.seen.add("ev-ignored")
-    a.save_cursor(p)
+    a.save_cursor(p.ctx(EventAssistant))
     key_file = home / "identity.key"
     assert stat.S_IMODE(os.stat(key_file).st_mode) == 0o600
     pub, n_receipts = p.identity.pub, len(p.receipts.items)
     # --- the process stops; a new one starts from the same home ---
     q = boot(home, settings, broker, svc, LocalTransport())
-    await q.app(EventAssistant).start(q)
+    await q.app(EventAssistant).start(q.ctx(EventAssistant))
     q.app(EventAssistant)._watch.cancel()
     assert q.identity.pub == pub
     assert len(q.receipts.items) == n_receipts == 1 and q.receipts.missing_from(svc.ledger.chain) == []
@@ -63,4 +63,4 @@ async def test_p5c20_a_restarted_peer_continues_as_itself(tmp_path, settings):
     assert (await q.handle({"op": "solicit", "request": req, "sig": other.sign(req)}))["error"] == "duplicate request"
     qa = q.app(EventAssistant)
     assert qa.since == 123.0 and "ev-ignored" in qa.seen
-    assert qa.store(q).root.startswith(str(home))  # events live in the same home
+    assert qa.store(q.ctx(EventAssistant)).root.startswith(str(home))  # events live in the same home

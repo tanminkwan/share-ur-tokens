@@ -189,3 +189,5 @@ class Settings(EnvSettings):
     broker_state_file: str = F("ARENA_BROKER_STATE_FILE", "data/broker-state.json", str, "broker가 프로필·공지·가입 허가를 저장하는 파일(단독 실행)")
     recorder_access_log_file: str = F("ARENA_RECORDER_ACCESS_LOG_FILE", "data/recorder-access.jsonl", str, "recorder 열람 접근 기록 파일(단독 실행)")
     broker_failback_sec: float = F("ARENA_BROKER_FAILBACK_SEC", 30.0, float, "secondary broker로 넘어간 뒤 primary를 다시 시도하기까지(초)")
+    assistant_idle_sec: float = F("ARENA_ASSISTANT_IDLE_SEC", 60.0, float, "열린 이벤트에 입력이 없을 때 기본 비서가 스스로 점검하기까지(초, 점검마다 두 배)")
+    assistant_idle_max_checks: int = F("ARENA_ASSISTANT_IDLE_MAX_CHECKS", 5, int, "입력 없이 연달아 하는 점검의 최대 횟수")

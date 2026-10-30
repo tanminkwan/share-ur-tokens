@@ -1,0 +1,329 @@
+"""The basic assistant app: reads an event's natural-language rules and, for every new input (a notice change, a
+message, a direct request, a signature request, an idle check), lets the LLM pick the next generic tool until it waits.
+It only ever sees its AppContext. Tools are registered (tools.py); state is saved per event (state.py, event_store.py)."""
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+
+from ...crypto import h, pen_name, verify
+from ...llm import ask_json
+from ..event_store import EventStore, FolderEventStore
+from ..plugin import Decision, MessageHead
+from .state import EventState, nonce
+from .tools import Tool, default_tools
+
+
+class EventAssistant:
+    name, version = "assistant", "1.0"
+
+    def __init__(self, settings, group: str = "public", store: EventStore | None = None, tools: list[Tool] | None = None):
+        self.s, self.group, self._store_given = settings, group, store
+        self.events: dict[str, EventState] = {}
+        self.seen: set[str] = set()
+        self.since: float = 0.0  # broker time of the last board read: next time ask only for changes after it
+        self._stores: dict[str, EventStore] = {}
+        self.tools: dict[str, Tool] = {}
+        for t in tools if tools is not None else default_tools():
+            self.add_tool(t)
+
+    def add_tool(self, tool: Tool) -> None:
+        """extend the assistant without changing it"""
+        if tool.name in self.tools:
+            raise ValueError(f"tool {tool.name!r} registered twice")
+        self.tools[tool.name] = tool
+
+    # ---------------- capabilities ----------------
+    def offers(self):
+        out = []
+        for st in self.events.values():
+            if st.joined:
+                out += [r for r in st.offer_roles if r not in out]
+        return out
+
+    def ops(self):
+        return {"event_message": self._op_message, "attest_request": self._op_attest_request, "attest_signature": self._op_attest_signature}
+
+    async def accept_role(self, ctx, role, request):
+        st = self.events.get(request.get("event_id"))
+        if st is None:
+            return None
+        ok = st.joined and request.get("rules_hash") == st.rules_hash
+        return Decision(ok, "참가 신청한 이벤트, 같은 규칙" if ok else "참가 신청하지 않았거나 규칙이 다른 계약")
+
+    async def on_request(self, ctx, request, sender):
+        st = self.events.get(request.get("event_id"))
+        if st:
+            st.peers[sender] = request.get("issuer_url", st.peers.get(sender))
+            await self.feed(ctx, st.event_id, f"[직접 요청] 보낸 이 pub={sender}\n{request.get('text', '')}\n"
+                                              f"data={json.dumps(request.get('data', {}), ensure_ascii=False)}")
+
+    async def start(self, ctx):
+        restored = await self.restore(ctx)
+        if restored:
+            ctx.log.emit("assistant", ctx.pen, f"참여 중인 이벤트 {restored}건을 로컬에서 불러와 이어 감")
+
+        async def loop():
+            while True:
+                try:
+                    await self.watch_once(ctx)
+                    await self.idle_check(ctx)
+                except Exception as e:
+                    ctx.log.emit("assistant", ctx.pen, f"게시판 확인 실패: {type(e).__name__}: {e}")
+                await asyncio.sleep(self.s.assistant_watch_sec)
+        self._watch = asyncio.create_task(loop())
+
+    def busy(self) -> bool:
+        return any(st.task is not None and not st.task.done() for st in self.events.values())
+
+    # ---------------- persistence ----------------
+    def store(self, ctx) -> EventStore:
+        if self._store_given is not None:
+            return self._store_given
+        if ctx.pub not in self._stores:
+            self._stores[ctx.pub] = FolderEventStore(os.path.join(ctx.data_dir, "events"))
+        return self._stores[ctx.pub]
+
+    def save(self, ctx, st: EventState) -> None:
+        self.store(ctx).save(st.event_id, st.to_dict(), st.secrets)
+
+    def save_cursor(self, ctx) -> None:
+        """where I stopped reading the board, and notices I already looked at"""
+        ctx.state.save({"since": self.since, "seen": sorted(self.seen)})
+
+    async def restore(self, ctx) -> int:
+        """reload the events this peer takes part in (after a restart) and continue from where it stopped"""
+        cur = ctx.state.load()
+        self.since = max(self.since, cur.get("since", 0.0))
+        self.seen |= set(cur.get("seen", []))
+        n = 0
+        for state, secrets in self.store(ctx).load_all():
+            st = EventState.from_dict(state, secrets)
+            self.events[st.event_id] = st
+            self.seen.add(st.event_id)
+            n += 1
+        return n
+
+    # ---------------- holding an event ----------------
+    async def host_event(self, ctx, *, title, kind, rules, policy, instruction, audience=None, recorder=None):
+        broker = ctx.brokers[self.group]
+        gid = await ctx.group_id(self.group)
+        rec = recorder or (await broker.find("기록", role="record", identity=ctx.identity))["peers"][0]
+        ev = "ev-" + nonce(title)[:10]
+        rules_hash = h(rules.encode())
+        decl = {"event_id": ev, "issuer": ctx.pub, "kind": kind, "policy": policy, "approvers": [], "group_id": gid, "rules_hash": rules_hash}
+        r = await ctx.recorder(rec["recorder_url"]).record("event", decl, {ctx.pub: ctx.sign(decl)})
+        if not r.get("ok"):
+            raise RuntimeError(f"event declaration refused: {r.get('error')}")
+        notice = {"notice_id": ev, "kind": kind, "title": title, "text": f"{title}: 규칙은 rules에 있다", "rules": rules, "policy": policy,
+                  "until": ctx.clock() + self.s.event_notice_ttl_sec, "issuer_pub": ctx.pub, "issuer_url": ctx.url, "event_hash": r["hash"],
+                  "recorder_pub": rec["pub"], "recorder_url": rec["recorder_url"], "group_id": gid, **({"audience": audience} if audience else {})}
+        posted = await broker.post_notice(ctx.identity, notice)
+        if not posted.get("ok"):
+            raise RuntimeError(f"notice refused: {posted.get('error')}")
+        self.seen.add(ev)
+        st = self.events[ev] = EventState(ev, "host", title, rules, rules_hash, gid, rec["recorder_url"], rec["pub"], ctx.pub, ctx.url)
+        self.save(ctx, st)
+        ctx.log.emit("assistant", ctx.pen, f"이벤트 개최 {ev} '{title}' (규칙 해시 {rules_hash[:10]})")
+        await self.feed(ctx, ev, f"[소유자의 지시] {instruction}")
+        return ev
+
+    # ---------------- reading the board (changes only) ----------------
+    async def watch_once(self, ctx):
+        r = await ctx.brokers[self.group].changed_notices(ctx.identity, self.since)
+        if not r.get("ok"):
+            return
+        self.since = r["now"]
+        try:
+            await self._read_changes(ctx, r["notices"])
+        finally:
+            self.save_cursor(ctx)
+
+    async def _read_changes(self, ctx, notices):
+        for n in notices:
+            ev = n["notice_id"]
+            st = self.events.get(ev)
+            if st is not None:
+                if n.get("closed") and not st.notice_closed:
+                    st.notice_closed = True
+                    await self.feed(ctx, ev, "[공지 마감] 개최자가 이 이벤트의 공지를 마감했다.")
+                elif n.get("ver", 1) > st.notice_ver:
+                    st.notice_ver = n.get("ver", 1)
+                    await self.feed(ctx, ev, f"[공지 수정] 버전 {st.notice_ver}: {n.get('text', '')}")
+                continue
+            if ev in self.seen or "rules" not in n or n.get("issuer_pub") == ctx.pub or n.get("closed"):
+                continue
+            self.seen.add(ev)
+            v = await ctx.recorder(n["recorder_url"]).verify(n["event_hash"])
+            if not (v.get("exists") and v.get("type") == "event" and v.get("event_id") == ev and v.get("issuer") == n["issuer_pub"]
+                    and v.get("rules_hash") == h(n["rules"].encode())):
+                ctx.log.emit("assistant", ctx.pen, f"공지 {ev}의 규칙 글이 원장에 공증된 규칙과 다름 → 무시")
+                continue
+            st = self.events[ev] = EventState(ev, "participant", n.get("title", ""), n["rules"], v["rules_hash"], n["group_id"], n["recorder_url"],
+                                              n["recorder_pub"], n["issuer_pub"], n["issuer_url"], offer_roles=list(n.get("policy", {}).get("roles", [])),
+                                              notice_ver=n.get("ver", 1))
+            st.peers[n["issuer_pub"]] = n["issuer_url"]
+            self.save(ctx, st)
+            await self.feed(ctx, ev, f"[새 공지] '{n.get('title', '')}' (개최자 pub={n['issuer_pub']}). 규칙의 해시가 원장과 같음을 확인했다.")
+
+    async def idle_check(self, ctx):
+        """an open event with no input for a while: wake up and ask myself whether the rules leave something to do"""
+        now = ctx.clock()
+        for st in self.events.values():
+            if st.closed or st.inbox or (st.task is not None and not st.task.done()) or st.idle_checks >= self.s.assistant_idle_max_checks:
+                continue
+            if now - st.last_input_at >= self.s.assistant_idle_sec * (2 ** st.idle_checks):
+                st.idle_checks += 1
+                await self.feed(ctx, st.event_id, "[점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.", idle=True)
+
+    # ---------------- the agent loop ----------------
+    async def feed(self, ctx, event_id: str, text: str, idle: bool = False):
+        st = self.events[event_id]
+        st.inbox.append(text)
+        st.last_input_at = ctx.clock()
+        if not idle:
+            st.idle_checks = 0
+        if st.task is None or st.task.done():
+            st.task = asyncio.create_task(self._work(ctx, st))
+
+    async def _work(self, ctx, st):
+        while st.inbox:
+            await self._turn(ctx, st, st.inbox.pop(0))
+
+    def _tools_for(self, st) -> list[str]:
+        return [n for n, t in self.tools.items() if (st.role == "host" or not t.host_only) and (not st.closed or t.after_close)]
+
+    def _system(self, ctx, st) -> str:
+        tools = "\n".join(f"- {n} {self.tools[n].description}" for n in self._tools_for(st))
+        state = (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 내가 받은 서명 요청: {', '.join(st.pending) or '없음'} / "
+                 f"내가 제안한 공동 확인: {', '.join(st.proposals) or '없음'} / 참가 신청: {'함' if st.joined else '안 함'} / 닫힘: {st.closed} / "
+                 f"아는 peer: {', '.join(f'{p[:8]}={u}' for p, u in st.peers.items()) or '없음'}")
+        return (f"당신은 peer '{ctx.pen}'의 비서 에이전트입니다. 이벤트 '{st.title}'(event_id {st.event_id}, broker 그룹 {st.group_id})에 "
+                f"{'개최자' if st.role == 'host' else '참가자'}로 참여합니다. 아래 이벤트 규칙을 정확히 따르세요. 규칙에 없는 일은 하지 말고, "
+                "확실하지 않으면 note로 적은 뒤 wait 하세요. 소유자(사람)에게 묻는 말은 한국어로 씁니다.\n\n[이벤트 규칙]\n" + st.rules +
+                f"\n\n[나] pub={ctx.pub} url={ctx.url}\n[개최자] pub={st.issuer_pub} url={st.issuer_url}\n"
+                f"[지금 상태] {state}\n\n[쓸 수 있는 도구]\n{tools}\n\n"
+                "먼저 도구 하나를 고르면, 그 도구의 인자를 따로 묻습니다. 이번 입력에 대해 규칙이 정한 일을 다 했으면 wait를 고르세요.")
+
+    async def _turn(self, ctx, st, text):
+        st.transcript.append(f"[입력] {text}")
+        allowed = self._tools_for(st)
+        choose = {"type": "object", "additionalProperties": False, "required": ["thought", "tool"],
+                  "properties": {"thought": {"type": "string"}, "tool": {"type": "string", "enum": allowed}}}
+        for _ in range(self.s.assistant_max_steps):
+            system = self._system(ctx, st)
+            recent = "\n".join(st.transcript[-self.s.assistant_transcript_max:])
+            d = await ask_json(ctx.llm, ctx.log, ctx.pen, fallback=lambda: {"thought": "LLM 응답 없음", "tool": "wait"},
+                               system=system, schema=choose, effort=self.s.assistant_effort,
+                               messages=[{"role": "user", "content": f"[지금까지]\n{recent}\n\n다음에 쓸 도구는?"}])
+            name = d.get("tool", "wait")
+            if name == "wait":
+                st.transcript.append(f"[기다림] {d.get('thought', '')[:120]}")
+                self.save(ctx, st)
+                return
+            tool, args = self.tools.get(name), {}
+            if tool is not None and tool.args:
+                args = await ask_json(ctx.llm, ctx.log, ctx.pen, fallback=lambda: {}, system=system, schema=tool.args,
+                                      effort=self.s.assistant_effort,
+                                      messages=[{"role": "user", "content": f"[지금까지]\n{recent}\n\n[생각] {d.get('thought', '')}\n"
+                                                                            f"도구 {name}의 인자를 채우세요."}])
+            result = await self._run_tool(ctx, st, name, dict(args))
+            st.transcript.append(f"[행동] {name} {json.dumps(args, ensure_ascii=False)[:400]}")
+            st.transcript.append(f"{name} 결과: {json.dumps(result, ensure_ascii=False)[:1500]}")
+            ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] {name} → {json.dumps(result, ensure_ascii=False)[:120]}")
+            self.save(ctx, st)
+        self.save(ctx, st)
+
+    async def _run_tool(self, ctx, st, name, args):
+        tool = self.tools.get(name)
+        if tool is None:
+            return {"error": f"없는 도구: {name}"}
+        if tool.host_only and st.role != "host":
+            return {"error": "개최자만 쓸 수 있는 도구"}
+        if st.closed and not tool.after_close:
+            return {"error": "닫힌 이벤트"}
+        missing = [k for k in (tool.args or {"required": []})["required"] if k not in args]
+        if missing:
+            return {"error": f"인자가 맞지 않음: {', '.join(missing)} 없음"}
+        for k in ("data_json", "value_json"):
+            if k in args:
+                try:
+                    args[k[:-5]] = json.loads(args.pop(k) or "{}")
+                except ValueError:
+                    return {"error": f"인자가 맞지 않음: {k}가 JSON이 아님"}
+        try:
+            return await tool.run(self, ctx, st, **args)
+        except TypeError as e:
+            return {"error": f"인자가 맞지 않음: {e}"}
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    # ---------------- signed messages between assistants ----------------
+    def sign_body(self, ctx, body: dict) -> dict:
+        b = dict(body, pub=ctx.pub, ts=ctx.clock())
+        return dict(b, sig=ctx.sign(b))
+
+    def _check(self, ctx, msg: dict) -> str | None:
+        body = {k: v for k, v in msg.items() if k != "sig"}
+        ok = (msg.get("pub") and abs(ctx.clock() - float(msg.get("ts", 0))) <= ctx.settings.sig_window_sec
+              and verify(msg["pub"], body, msg.get("sig", "")))
+        return msg["pub"] if ok else None
+
+    @staticmethod
+    def _head_ok(st, msg, head: MessageHead) -> bool:
+        """group/event inside the signed body must be this event's, and the head (if any) must say the same"""
+        if msg.get("group_id") != st.group_id or msg.get("event_id") != st.event_id:
+            return False
+        return (not head.group_id or head.group_id == st.group_id) and (not head.event_id or head.event_id == st.event_id)
+
+    async def post(self, ctx, st, url, op, body: dict) -> dict:
+        msg = self.sign_body(ctx, {"op": op, "event_id": st.event_id, "group_id": st.group_id, "url": ctx.url, **body})
+        return await ctx.call(url, msg, group=st.group_id, event=st.event_id)
+
+    async def send(self, ctx, st, to_url, text, data) -> dict:
+        return await self.post(ctx, st, to_url, "event_message", {"text": text, "data": data})
+
+    async def _op_message(self, ctx, msg, head: MessageHead):
+        who, st = self._check(ctx, msg), self.events.get(msg.get("event_id"))
+        if not who:
+            return {"ok": False, "error": "signed message required"}
+        if not st:
+            return {"ok": False, "error": "unknown event"}
+        if not self._head_ok(st, msg, head):
+            return {"ok": False, "error": "group or event does not match this event"}
+        st.peers[who] = msg.get("url")
+        pen = pen_name(who, ctx.settings.pen_name_prefix, ctx.settings.pen_name_len)
+        await self.feed(ctx, st.event_id, f"[메시지] 보낸 이 {pen} pub={who} url={msg.get('url')}\n{msg.get('text', '')}\n"
+                                          f"data={json.dumps(msg.get('data', {}), ensure_ascii=False)}")
+        return {"ok": True}
+
+    async def _op_attest_request(self, ctx, msg, head: MessageHead):
+        who, st = self._check(ctx, msg), self.events.get(msg.get("event_id"))
+        p = msg.get("payload", {})
+        if not who or not st or not self._head_ok(st, msg, head) or who not in p.get("parties", []) or ctx.pub not in p.get("parties", []) \
+                or p.get("event_id") != st.event_id or p.get("group_id") != st.group_id:
+            return {"ok": False, "error": "not a valid signature request for me"}
+        st.pending[msg["request_id"]] = {"payload": p, "from_pub": who, "from_url": msg.get("url")}
+        st.peers[who] = msg.get("url")
+        await self.feed(ctx, st.event_id, f"[서명 요청] request_id={msg['request_id']} 제안자 pub={who}\n"
+                                          f"kind={p.get('kind')} subject={p.get('subject')} parties={p.get('parties')}\nvalue={json.dumps(p.get('value'), ensure_ascii=False)}")
+        return {"ok": True}
+
+    async def _op_attest_signature(self, ctx, msg, head: MessageHead):
+        who, st = self._check(ctx, msg), self.events.get(msg.get("event_id"))
+        prop = st.proposals.get(msg.get("request_id")) if st else None
+        if not who or not prop or not self._head_ok(st, msg, head) or who not in prop["payload"]["parties"]:
+            return {"ok": False, "error": "unknown proposal or party"}
+        if msg.get("declined"):
+            await self.feed(ctx, st.event_id, f"[공동 확인 거절] request_id={msg['request_id']} 거절한 이 pub={who} 이유: {msg.get('reason', '')}")
+            return {"ok": True}
+        if not verify(who, prop["payload"], msg.get("attest_sig", "")):
+            return {"ok": False, "error": "bad signature"}
+        prop["sigs"][who] = msg["attest_sig"]
+        if set(prop["sigs"]) == set(prop["payload"]["parties"]):
+            r = await ctx.recorder(st.recorder_url).record("attest", prop["payload"], prop["sigs"])
+            ctx.receipts.keep(r, "attest", prop["payload"], expected_recorder=st.recorder_pub)
+            await self.feed(ctx, st.event_id, (f"[공동 확인 기록됨] request_id={msg['request_id']} hash={r['hash']}" if r.get("ok")
+                                               else f"[공동 확인 기록 실패] request_id={msg['request_id']} {r.get('error')}"))
+        return {"ok": True}

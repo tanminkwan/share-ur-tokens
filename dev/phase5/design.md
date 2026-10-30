@@ -147,3 +147,48 @@ sequenceDiagram
 - `FailoverBrokerClient(clients)`는 `BrokerAPI`를 그대로 따르므로 peer와 기본 비서는 바뀌지 않는다.
 - 공지는 같은 그룹의 broker끼리 공유되므로 secondary에도 있다. 프로필은 각 peer의 기본 broker에만 있으므로 넘어갈 때 다시 게시한다.
 - 설정 형식: `ARENA_SEARCH_PEER_BROKERS=public=http://a:9110|http://b:9111`.
+
+
+## 7. 플러그인 구조와 SOLID 정리
+
+```mermaid
+classDiagram
+    class Peer {
+        +apps, builtins
+        +ctx(app) AppContext
+        +handle(msg, meta)
+        +install(app)
+    }
+    class AppContext {
+        +pub, pen, url, labels, sign()
+        +settings, clock(), log, llm, owner, area
+        +brokers, recorder(), receipts
+        +call(), solicit(), group_id()
+        +state, data_dir
+    }
+    class PlatformContext {
+        +apps_with(capability)
+    }
+    class OpProvider { <<Protocol>> +ops() }
+    class OfferProvider { <<Protocol>> +offers() }
+    class RoleAcceptor { <<Protocol>> +accept_role(ctx, role, request) }
+    class EventApprover { <<Protocol>> +approve_event(ctx, event, request) }
+    class RequestReceiver { <<Protocol>> +on_request(ctx, request, sender) }
+    class ProfileContributor { <<Protocol>> +profile_extra() }
+    class Lifecycle { <<Protocol>> +start(ctx) }
+    Peer --> AppContext : 앱마다 하나 주입
+    AppContext <|-- PlatformContext
+    Peer --> RoleContracts : 내장 앱(engage)
+    Peer --> EventApprovals : 내장 앱(approve)
+    Peer --> DirectRequests : 내장 앱(solicit)
+```
+
+| SOLID | 이전 | 이후 |
+|---|---|---|
+| 단일 책임 | peer가 op 분기·플랫폼 op·지속성을 함께, 기본 비서가 한 파일 511줄 | peer는 조립·전달·지속성만, 플랫폼 op는 내장 앱 셋, 기본 비서는 상태·도구·핵심으로 나눔 |
+| 개방-폐쇄 | 원장 항목 종류를 더하면 다섯 곳 수정, 도구를 더하면 비서 수정 | `EntryType` 등록, `Tool` 등록, 앱 `install` |
+| 리스코프 치환 | (유지) | 장애 대비 클라이언트·메모리·HTTP 클라이언트가 같은 broker 인터페이스 |
+| 인터페이스 분리 | 앱 기반 클래스 하나에 확장 지점 6개, broker 인터페이스 10개 메서드 | 능력 인터페이스 7개 중 필요한 것만, broker는 `ProfileBoard`·`NoticeBoard`·`GroupAdmin`·`Health` |
+| 의존성 역전 | 앱이 peer 객체에 직접 기댐, 메시지 머리를 peer 인스턴스 변수로 전달 | 앱은 `Context` 인터페이스에만 기대고, 머리는 인자로 받음 |
+
+외부 개발자용 공개 면은 `arena.sdk`(인터페이스, 어댑터, 진입점 찾기, 테스트 하네스)이며 규약은 [../app-guide.md](../app-guide.md)에 있다.
