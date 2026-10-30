@@ -109,3 +109,19 @@ sequenceDiagram
 {"roles": ["player"], "conflict_roles": [], "verdict_roles": {},
  "attest_roles": {"match": "player", "forfeit": "issuer", "ranking": "issuer"}, "hidden_roles": []}
 ```
+
+
+## 5. peer 재시작 지속성 (`arena/peer/home.py`)
+
+```mermaid
+flowchart LR
+    P["peer 프로세스"] -- "시작할 때 읽음 · 바뀔 때마다 씀" --> H["홈 폴더"]
+    H --- K["identity.key (0600)"]
+    H --- S["state.json<br/>프로필 버전 · 쓴 기록자 · 직접 요청 편지함 · 앱별 상태(게시판 읽은 위치)"]
+    H --- R["receipts.jsonl<br/>기록자 서명 영수증 (덧붙이기)"]
+    H --- E["events/<br/>참여 중인 이벤트 (state.json + 소유자 전용 _secrets.json)"]
+    H --- A["area/ 공개 영역"]
+```
+
+- `Peer(..., home=PeerHome(...))`면 위 상태를 읽고 쓴다. 홈이 없으면 예전처럼 메모리에만 둔다(단위 테스트).
+- 제네시스의 god·기록자 peer는 제네시스 폴더 아래 `homes/`를 홈으로 쓴다(키는 제네시스에 서명된 키 파일 그대로).

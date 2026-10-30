@@ -22,6 +22,7 @@ from .ledger import JsonlStore
 from .llm import NoLLM, build_llm
 from .peer.area import LocalFolderArea
 from .peer.god_role import GodRole
+from .peer.home import PeerHome
 from .peer.node import Peer, PeerConfig
 from .peer.owner import NoOwner
 from .peer.record_role import RecordRole
@@ -92,10 +93,10 @@ async def start(settings: Settings, viewers=None) -> Genesis:
     role = RecordRole(svc, urls["recorder_api"])
     recorder = Peer(rec_id, settings, PeerConfig(url=urls["recorder"]), _area(os.path.join(d, "areas", "recorder"), settings,
                     "제네시스 기록자: god이 만든 첫 기록자. 원장을 검증하고 기록자 서명을 남겨 보관한다"), NoOwner(), llm, transport, log,
-                    brokers=brokers(), apps=[role])
+                    brokers=brokers(), apps=[role], home=PeerHome(os.path.join(d, "homes", "recorder"), settings))
     god = Peer(god_id, settings, PeerConfig(url=urls["god"]), _area(os.path.join(d, "areas", "god"), settings,
                "god: 제네시스로 만민 broker와 기록자를 만든 peer. 원장 전체를 읽어 감사하고 통계를 낸다"), NoOwner(), llm, transport, log,
-               brokers=brokers(), apps=[GodRole(settings, viewers)])
+               brokers=brokers(), apps=[GodRole(settings, viewers)], home=PeerHome(os.path.join(d, "homes", "god"), settings))
     world = Genesis(god, recorder, broker, urls)
     world.servers.append(await serve_background(build_broker_app(broker), host, settings.genesis_broker_port))
     world.servers.append(await serve_background(role.api(), host, settings.genesis_recorder_api_port))

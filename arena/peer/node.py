@@ -31,14 +31,20 @@ class PeerConfig:
 
 class Peer:
     def __init__(self, identity: Identity, settings: Settings, config: PeerConfig, area: PublicArea, owner: Owner, llm: LLM,
-                 transport: Transport, log: EventLog, brokers: dict, apps: list[PeerApp], clock: Callable[[], float] = time.time):
+                 transport: Transport, log: EventLog, brokers: dict, apps: list[PeerApp], clock: Callable[[], float] = time.time,
+                 home=None):
         self.identity, self.settings, self.config, self.area, self.owner = identity, settings, config, area, owner
         self.llm, self.transport, self.log, self.brokers, self.apps, self.clock = llm, transport, log, brokers, list(apps), clock
         self.pen = pen_name(identity.pub, settings.pen_name_prefix, settings.pen_name_len)
-        self.receipts, self.profiles = Receipts(), ProfileBuilder()
+        self.home = home  # PeerHome: what must survive a restart
+        saved = home.load_state() if home else {}
+        self.receipts = Receipts(home.load_receipts() if home else [], on_keep=home.append_receipt if home else None)
+        self.profiles = ProfileBuilder()
+        self.profiles.version = saved.get("profile_ver", 0)
         self.recorder_factory: Callable[[str], RecorderAPI] = lambda url: RecorderClient(url, settings)
-        self.known_recorders: list[str] = list(settings.peer_track_recorders)
-        self.inbox: deque = deque(maxlen=settings.solicit_inbox_size)
+        self.known_recorders: list[str] = list(dict.fromkeys(list(settings.peer_track_recorders) + saved.get("known_recorders", [])))
+        self.inbox: deque = deque(saved.get("inbox", []), maxlen=settings.solicit_inbox_size)
+        self.app_states: dict = saved.get("apps", {})
         self.last_profile: dict | None = None
         self._group_ids: dict[str, str] = {}
         self._ops = {"engage": self._engage, "approve": self._approve, "solicit": self._solicit}
@@ -67,7 +73,21 @@ class Peer:
     def recorder(self, url: str) -> RecorderAPI:
         if url not in self.known_recorders:
             self.known_recorders.append(url)
+            self.persist()
         return self.recorder_factory(url)
+
+    # ---- persistence across restarts ----
+    def persist(self) -> None:
+        if self.home:
+            self.home.save_state({"profile_ver": self.profiles.version, "known_recorders": self.known_recorders,
+                                  "inbox": list(self.inbox), "apps": self.app_states})
+
+    def app_state(self, name: str) -> dict:
+        return dict(self.app_states.get(name, {}))
+
+    def set_app_state(self, name: str, state: dict) -> None:
+        self.app_states[name] = state
+        self.persist()
 
     async def group_id(self, group: str) -> str:
         """the broker group identifier of one of my broker groups (asked once, then remembered)"""
@@ -139,6 +159,7 @@ class Peer:
             if not r.get("ok"):
                 self.log.emit("profile", self.pen, f"{group} 게시 실패: {r.get('error')}")
         self.last_profile = profile
+        self.persist()
         caps = [c["label"] for c in profile.get("capabilities", [])]
         self.log.emit("profile", self.pen, f"프로필 게시(v{profile['ver']}): {profile['summary'][:100]}" + (f" | 역량 라벨: {', '.join(caps)}" if caps else ""))
         return profile
@@ -176,6 +197,7 @@ class Peer:
         if any(x["request"].get("request_id") == r.get("request_id") and x["sender"] == issuer for x in self.inbox):
             return {"ok": False, "error": "duplicate request"}
         self.inbox.append({"request": r, "sender": issuer, "ts": self.clock()})
+        self.persist()
         self.log.emit("solicit", self.pen, f"직접 요청 받음 {r.get('request_id')}: {str(r.get('title', ''))[:40]}")
         for app in self.apps:
             asyncio.create_task(app.on_request(self, r, issuer))

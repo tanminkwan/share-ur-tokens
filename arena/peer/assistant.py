@@ -118,14 +118,22 @@ class EventAssistant(PeerApp):
         if self._store_given is not None:
             return self._store_given
         if peer.identity.pub not in self._stores:
-            self._stores[peer.identity.pub] = FolderEventStore(os.path.join(self.s.event_store_dir, peer.identity.pub[:16]))
+            root = peer.home.events_dir() if getattr(peer, "home", None) else os.path.join(self.s.event_store_dir, peer.identity.pub[:16])
+            self._stores[peer.identity.pub] = FolderEventStore(root)
         return self._stores[peer.identity.pub]
 
     def save(self, peer, st: EventState) -> None:
         self.store(peer).save(st.event_id, st.to_dict(), st.secrets)
 
+    def save_cursor(self, peer) -> None:
+        """where I stopped reading the board, and notices I already looked at"""
+        peer.set_app_state(self.name, {"since": self.since, "seen": sorted(self.seen)})
+
     async def restore(self, peer) -> int:
         """reload the events this peer takes part in (after a restart) and continue from where it stopped"""
+        cur = peer.app_state(self.name)
+        self.since = max(self.since, cur.get("since", 0.0))
+        self.seen |= set(cur.get("seen", []))
         n = 0
         for state, secrets in self.store(peer).load_all():
             st = EventState.from_dict(state, secrets)
@@ -208,7 +216,13 @@ class EventAssistant(PeerApp):
         if not r.get("ok"):
             return
         self.since = r["now"]
-        for n in r["notices"]:
+        try:
+            await self._read_changes(peer, r["notices"])
+        finally:
+            self.save_cursor(peer)
+
+    async def _read_changes(self, peer, notices):
+        for n in notices:
             ev = n["notice_id"]
             st = self.events.get(ev)
             if st is not None:
