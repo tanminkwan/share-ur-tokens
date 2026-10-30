@@ -192,3 +192,27 @@ classDiagram
 | 의존성 역전 | 앱이 peer 객체에 직접 기댐, 메시지 머리를 peer 인스턴스 변수로 전달 | 앱은 `Context` 인터페이스에만 기대고, 머리는 인자로 받음 |
 
 외부 개발자용 공개 면은 `arena.sdk`(인터페이스, 어댑터, 진입점 찾기, 테스트 하네스)이며 규약은 [../app-guide.md](../app-guide.md)에 있다.
+
+
+## 8. 이벤트의 앱 지정과 이벤트 배정기
+
+```mermaid
+sequenceDiagram
+    participant H as 개최 peer
+    participant R as recorder
+    participant B as broker (그룹마다)
+    participant ER as 이벤트 배정기 (각 peer의 내장 앱)
+    participant A as 지정된 앱 / 기본 비서
+    H->>R: 이벤트 선언 (규칙 해시, app = {id, version, mode, hash?})
+    H->>B: 공지 (규칙 글, app)
+    loop 주기
+        ER->>B: 바뀐 공지만 (그룹마다)
+        ER->>R: 선언 확인: 규칙 해시·app이 공지와 같은가
+        ER->>ER: mode와 app_id로 앱 고르기 (버전, 코드 해시)
+        ER->>A: on_event(new / updated / closed)
+    end
+```
+
+- 앱 식별자는 UUID다. 플랫폼 앱은 고정 값을 쓴다(내장 넷, 기본 비서, 기록자, 검색, god).
+- 기본 비서는 더 이상 게시판을 직접 읽지 않는다. 배정기가 넘겨준 이벤트만 처리한다(`EventHandler`).
+- 배정기가 읽은 위치(그룹별)와 넘긴 이벤트는 앱 전용 저장소에 남아 재시작 뒤에도 이어진다.

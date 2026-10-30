@@ -7,6 +7,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Callable
 
+from ..peer.plugin import valid_app_spec
+
 POLICY_LISTS = ("roles", "conflict_roles", "hidden_roles")
 POLICY_MAPS = ("verdict_roles", "attest_roles")
 POLICY_KEYS = set(POLICY_LISTS) | set(POLICY_MAPS)
@@ -99,6 +101,8 @@ def _event_once(chain, e, now, s):
         return "event already declared"
     if not valid_policy(e["payload"].get("policy", {})):
         return "bad policy"
+    if "app" in e["payload"] and not valid_app_spec(e["payload"]["app"]):
+        return "bad app spec"
 
 
 def _event_contribute(rec, p, index):
@@ -220,7 +224,8 @@ for _t in (
     EntryType("group", lambda p: [p.get("founder")], public=lambda p, c: {"founder": p["founder"], "closed": p["closed"], "brokers": list(p.get("brokers", []))},
               counters={"groups": 0}, contribute=_count("groups", "founder")),
     EntryType("event", lambda p: [p.get("issuer"), *p.get("approvers", [])], shape=_event_shape, rules=(_event_once,),
-              public=lambda p, c: {**_rules_hash(p), "issuer": p["issuer"], "kind": p.get("kind"), "approvers": list(p.get("approvers", []))},
+              public=lambda p, c: {**_rules_hash(p), **({"app": p["app"]} if "app" in p else {}), "issuer": p["issuer"], "kind": p.get("kind"),
+                                   "approvers": list(p.get("approvers", []))},
               counters={"events": 0, "approvals": 0}, contribute=_event_contribute),
     EntryType("contract", lambda p: [p.get("issuer"), p.get("contractor")], event_ref="required", unique_nonce=True, rules=(_contract_rule,),
               public=_contract_public, counters={"roles": defaultdict(int)}, contribute=_map_count("roles", "contractor", "role")),

@@ -2,7 +2,7 @@
 
 
 class Greeter:
-    name, version = "greeter", "1.0"
+    name, version, app_id = "greeter", "1.0", "5f0c8a52-2c1e-4c55-8f3d-1a2b3c4d5e6f"
 
     def __init__(self, settings):
         self.settings = settings

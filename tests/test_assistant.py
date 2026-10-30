@@ -123,7 +123,7 @@ async def test_p5c11_p5c13_participant_reads_rules_asks_owner_joins_and_gets_a_c
     ev = await open_event(eco)
     eco.a.llm.push("ask_owner", question="이 이벤트에 참가할까요?")
     eco.a.llm.push("join_event")
-    await asst(eco.a).watch_once(ctx(eco.a))
+    await eco.a.events.watch_once(eco.a.ctx(eco.a.events))
     await settle(eco.a, eco.host)
     st = asst(eco.a).events[ev]
     assert st.joined and st.rules == RULES and eco.a.owner.asked
@@ -146,15 +146,15 @@ async def test_p5c11_p5c13_participant_reads_rules_asks_owner_joins_and_gets_a_c
 async def test_p5c11_rules_text_must_match_the_ledger(eco):
     ev = await open_event(eco)
     eco.broker.notices[ev]["rules"] = RULES + "\n3. 몰래 더한 규칙"
-    await asst(eco.a).watch_once(ctx(eco.a))
-    assert ev not in asst(eco.a).events and any("공증된 규칙과 다름" in x["text"] for x in eco.log.tail(20))
+    await eco.a.events.watch_once(eco.a.ctx(eco.a.events))
+    assert ev not in asst(eco.a).events and any("공증된 것과 다름" in x["text"] for x in eco.log.tail(20))
 
 
 async def joined(eco):
     ev = await open_event(eco)
     for p in (eco.a, eco.b):
         p.llm.push("join_event")
-        await asst(p).watch_once(ctx(p))
+        await p.events.watch_once(p.ctx(p.events))
     await settle(eco.a, eco.b, eco.host)
     for p in (eco.a, eco.b):
         eco.host.llm.push("contract", role="member", peer_pub=p.identity.pub, peer_url=p.config.url)
@@ -279,7 +279,6 @@ async def test_p5c16_an_assistant_restarted_continues_its_events(eco, tmp_path):
     await fresh.restore(ctx(eco.a))  # e.g. the peer process restarted
     st = fresh.events[ev]
     assert st.joined and st.rules == RULES and st.secrets["r-1"]["value"] == "keep me" and st.transcript == old.transcript
-    assert ev in fresh.seen
 
 
 async def test_p5c18_messages_carry_and_check_group_and_event(eco):
@@ -306,7 +305,7 @@ async def test_p5c18_messages_carry_and_check_group_and_event(eco):
 
 async def test_p5c15_assistant_reads_only_changes_and_notices_updates_and_closes(eco):
     ev = await open_event(eco)
-    await asst(eco.a).watch_once(ctx(eco.a))
+    await eco.a.events.watch_once(eco.a.ctx(eco.a.events))
     await settle(eco.a)
     assert ev in asst(eco.a).events
     n = dict(eco.broker.notices[ev])
@@ -314,11 +313,11 @@ async def test_p5c15_assistant_reads_only_changes_and_notices_updates_and_closes
     n.pop("closed", None)
     n2 = dict(n, ver=n.get("ver", 1) + 1, text="일정이 바뀌었다")
     assert (await eco.host.brokers["public"].post_notice(eco.host.identity, n2))["ok"]
-    await asst(eco.a).watch_once(ctx(eco.a))
+    await eco.a.events.watch_once(eco.a.ctx(eco.a.events))
     await settle(eco.a)
     assert any("공지 수정" in x for x in asst(eco.a).events[ev].transcript)
     await eco.host.brokers["public"].close_notice(eco.host.identity, ev)
-    await asst(eco.a).watch_once(ctx(eco.a))
+    await eco.a.events.watch_once(eco.a.ctx(eco.a.events))
     await settle(eco.a)
     assert any("공지 마감" in x for x in asst(eco.a).events[ev].transcript)
 

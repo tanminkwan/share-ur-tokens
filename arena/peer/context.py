@@ -118,6 +118,12 @@ class PlatformContext(AppContext):
     def apps_with(self, capability) -> list[tuple[object, AppContext]]:
         return [(a, self._peer.ctx(a)) for a in self._peer.apps if isinstance(a, capability)]
 
+    def app_by_id(self, app_id: str):
+        return self._peer.app_by_id(app_id)
+
+    def ctx_of(self, app) -> AppContext:
+        return self._peer.ctx(app)
+
     @property
     def inbox(self):
         return self._peer.inbox

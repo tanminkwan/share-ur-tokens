@@ -3,6 +3,9 @@ capability interfaces below. The peer connects only the capabilities an app has,
 the peer itself). See dev/app-guide.md for the full convention."""
 from __future__ import annotations
 
+import hashlib
+import inspect
+import uuid
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Protocol, runtime_checkable
 
@@ -35,6 +38,7 @@ OpHandler = Callable[["AppContext", dict, MessageHead], Awaitable[dict]]  # noqa
 class App(Protocol):
     name: str
     version: str
+    app_id: str  # a UUID that identifies this app everywhere (events name the app they need by it)
 
 
 @runtime_checkable
@@ -72,7 +76,60 @@ class Lifecycle(Protocol):
     async def start(self, ctx) -> None: ...
 
 
-CAPABILITIES = (OpProvider, OfferProvider, RoleAcceptor, EventApprover, RequestReceiver, ProfileContributor, Lifecycle)
+@runtime_checkable
+class EventHandler(Protocol):
+    """an app that runs events: the platform's event router hands it the events that name its app_id (or the assistant mode)"""
+    async def on_event(self, ctx, notice: dict, change: str) -> None: ...  # change: "new" | "updated" | "closed"
+
+
+CAPABILITIES = (OpProvider, OfferProvider, RoleAcceptor, EventApprover, RequestReceiver, ProfileContributor, Lifecycle, EventHandler)
+
+# ---------------- which app runs an event, and how ----------------
+MODES = ("assistant", "app", "app_or_assistant")
+ASSISTANT_APP_ID = "938604c1-2964-4bfc-96c4-91677f128508"  # the basic assistant: the primordial way
+
+
+def is_uuid(x) -> bool:
+    try:
+        return str(uuid.UUID(str(x))) == str(x).lower()
+    except ValueError:
+        return False
+
+
+def _v(text: str) -> tuple:
+    return tuple(int(p) for p in str(text).split(".") if p.isdigit())
+
+
+def version_ok(installed: str, required: str) -> bool:
+    """same major version, and at least the required one"""
+    a, b = _v(installed), _v(required)
+    return bool(a) and bool(b) and a[0] == b[0] and a >= b
+
+
+def app_fingerprint(app) -> str:
+    """a hash of the app's code, so a peer can tell it runs the very app an event names"""
+    try:
+        src = inspect.getsource(type(app))
+    except (OSError, TypeError):
+        src = f"{getattr(app, 'app_id', '')}:{getattr(app, 'version', '')}:{type(app).__qualname__}"
+    return hashlib.sha256(src.encode()).hexdigest()
+
+
+def app_spec(app, mode: str, pin_code: bool = False) -> dict:
+    """what an event declaration says about the app it needs"""
+    spec = {"id": app.app_id, "name": app.name, "version": app.version, "mode": mode}
+    if pin_code:
+        spec["hash"] = app_fingerprint(app)
+    return spec
+
+
+def assistant_spec(version: str = "1.0") -> dict:
+    return {"id": ASSISTANT_APP_ID, "name": "assistant", "version": version, "mode": "assistant"}
+
+
+def valid_app_spec(spec) -> bool:
+    return (isinstance(spec, dict) and is_uuid(spec.get("id")) and spec.get("mode") in MODES and bool(_v(spec.get("version", "")))
+            and set(spec) <= {"id", "name", "version", "mode", "hash"})
 
 
 def capabilities_of(app) -> list[str]:
@@ -80,6 +137,11 @@ def capabilities_of(app) -> list[str]:
 
 
 class BaseApp:
-    """optional convenience base: only a name and a version. Implement the capability methods you need."""
+    """optional convenience base: a name, a version and an app id. Implement the capability methods you need.
+    The default app_id is derived from the class path, for development only: an app you ship states a fixed UUID."""
     name = "app"
     version = "1.0"
+
+    @property
+    def app_id(self) -> str:
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, f"arena-app:{type(self).__module__}.{type(self).__qualname__}"))

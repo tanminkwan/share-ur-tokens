@@ -15,9 +15,10 @@ from ..llm import LLM
 from ..recorder.client import RecorderAPI, RecorderClient
 from .area import PublicArea
 from .builtin import RESERVED_OPS, DirectRequests, EventApprovals, RoleContracts
+from .events import EventRouter
 from .context import AppContext, PlatformContext
 from .owner import Owner
-from .plugin import SDK_VERSION, App, Lifecycle, MessageHead, OfferProvider, OpProvider, capabilities_of
+from .plugin import SDK_VERSION, App, Lifecycle, is_uuid, MessageHead, OfferProvider, OpProvider, capabilities_of
 from .profile import ProfileBuilder
 from .receipts import Receipts
 
@@ -50,7 +51,8 @@ class Peer:
         self.last_profile: dict | None = None
         self._group_ids: dict[str, str] = {}
         self._requests = DirectRequests(settings)
-        self.builtins = [RoleContracts(), EventApprovals(), self._requests]
+        self.events = EventRouter(settings)
+        self.builtins = [RoleContracts(), EventApprovals(), self._requests, self.events]
         self.apps = list(apps)
         self._contexts: dict[int, AppContext] = {}
         self._ops: dict[str, tuple[object, Callable]] = {}
@@ -59,16 +61,22 @@ class Peer:
     # ---- assembly ----
     def _register(self) -> None:
         self._names: set[str] = set()
+        self._ids: set[str] = set()
         for app in self.builtins:
             self._register_one(app, builtin=True)
         for app in self.apps:
             self._register_one(app, builtin=False)
         self._requests.load(self._contexts[id(self._requests)])
+        self.events.load(self._contexts[id(self.events)])
 
     def _register_one(self, app, builtin: bool) -> None:
         """the assembly rules every app passes (dev/app-guide.md): name+version, a capability, unique name and ops"""
         if not isinstance(app, App):
-            raise ValueError(f"{app!r} is not an app: it needs a name and a version")
+            raise ValueError(f"{app!r} is not an app: it needs a name, a version and an app_id")
+        if not is_uuid(app.app_id):
+            raise ValueError(f"app {app.name!r} needs an app_id that is a UUID, not {app.app_id!r}")
+        if app.app_id in self._ids:
+            raise ValueError(f"app_id {app.app_id} registered twice (app {app.name})")
         if not capabilities_of(app):
             raise ValueError(f"app {app.name!r} has no capability (see dev/app-guide.md)")
         wanted = str(getattr(app, "sdk", SDK_VERSION)).split(".")[0]
@@ -83,6 +91,7 @@ class Peer:
             if op in self._ops:
                 raise ValueError(f"op {op!r} registered twice (app {app.name})")
         self._names.add(app.name)
+        self._ids.add(app.app_id)
         self._contexts[id(app)] = (PlatformContext if builtin else AppContext)(self, app.name)
         for op, fn in ops.items():
             self._ops[op] = (app, fn)
@@ -114,6 +123,9 @@ class Peer:
 
     def app(self, cls):
         return next((a for a in self.apps + self.builtins if isinstance(a, cls)), None)
+
+    def app_by_id(self, app_id: str):
+        return next((a for a in self.apps + self.builtins if a.app_id == app_id), None)
 
     def recorder(self, url: str) -> RecorderAPI:
         if url not in self.known_recorders:
@@ -156,7 +168,8 @@ class Peer:
         return build_a2a_app(f"peer-{self.pen}", f"peer {self.pen}", self.config.url, self.skills(), self.handle)
 
     async def start(self) -> None:
-        for app in self.apps:
+        """start the event router (built-in) and every app that has a start"""
+        for app in self.builtins + self.apps:
             if isinstance(app, Lifecycle):
                 await app.start(self.ctx(app))
 

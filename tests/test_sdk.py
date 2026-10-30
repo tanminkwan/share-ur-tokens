@@ -18,7 +18,7 @@ async def test_function_app_has_exactly_the_given_capabilities(tmp_path):
 
     async def accept(ctx, role, request):
         return Decision(role == "helper", "ok")
-    app = function_app("hello", ops={"hi": hi}, offers=["helper"], accept_role=accept)
+    app = function_app("hello", app_id="0b1d3c3e-6f7a-4a43-9d1e-7a0c2f8e1b10", ops={"hi": hi}, offers=["helper"], accept_role=accept)
     assert capabilities_of(app) == ["OpProvider", "OfferProvider", "RoleAcceptor"]
     h = AppHarness(app, tmp_path)
     assert (await h.call("hi", {"who": "you"}, event="ev-1")) == {"ok": True, "to": "you", "event": "ev-1"}
@@ -33,7 +33,7 @@ async def test_http_service_adapter_relays_a_core_system_endpoint(tmp_path):
         if request.url.path == "/employees/42":
             return httpx.Response(200, json={"id": 42, "name": "홍길동", "dept": "HR"})
         return httpx.Response(404, json={"error": "nope"})
-    app = HttpServiceAdapter("hr-system", "1.0", "http://hr.local", {"employee": ("GET", "/employees/{id}")},
+    app = HttpServiceAdapter("hr-system", "1.0", "http://hr.local", {"employee": ("GET", "/employees/{id}")}, app_id="0b1d3c3e-6f7a-4a43-9d1e-7a0c2f8e1b11",
                              allow_groups=["g-hr"], http=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
     h = AppHarness(app, tmp_path, group_id="g-hr")  # the service peer belongs to the HR group
     r = await h.call("employee", {"path": {"id": 42}}, group="g-hr")
@@ -54,7 +54,7 @@ async def test_a2a_agent_adapter_talks_to_any_a2a_agent(tmp_path, settings):
         return {"answer": "안녕하세요", "got": msg}
     srv = await serve_background(build_a2a_app("outside-agent", "not an arena peer", url, ["chat"], text_agent), "127.0.0.1", port)
     try:
-        app = A2AAgentAdapter("helpdesk", "1.0", url)
+        app = A2AAgentAdapter("helpdesk", "1.0", url, app_id="0b1d3c3e-6f7a-4a43-9d1e-7a0c2f8e1b12")
         h = AppHarness(app, tmp_path)
         r = await h.call("ask", {"text": json.dumps({"q": "근무 시간?"}, ensure_ascii=False)})
         assert r["ok"] and json.loads(r["reply"])["answer"] == "안녕하세요"

@@ -11,7 +11,7 @@ from .plugin import BaseApp, MessageHead
 
 
 class GodRole(BaseApp):
-    name, version = "god", "1.0"
+    name, version, app_id = "god", "1.0", "caaa8085-5e8b-4581-8383-75ba77e30126"
 
     def __init__(self, settings, viewers=None):
         self.settings = settings

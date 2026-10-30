@@ -45,10 +45,10 @@ async def test_p5c20_a_restarted_peer_continues_as_itself(tmp_path, settings):
     assert p.receipts.keep(r, "publish", payload, expected_recorder=svc.identity.pub)
     req = {"request_id": "r-1", "issuer_pub": other.pub, "until": time.time() + 60, "title": "t"}
     assert (await p.handle({"op": "solicit", "request": req, "sig": other.sign(req)}))["ok"]
-    a = p.app(EventAssistant)
-    a.since = 123.0
-    a.seen.add("ev-ignored")
-    a.save_cursor(p.ctx(EventAssistant))
+    router = p.events  # the built-in event router keeps where it stopped reading each broker group
+    router.since["public"] = 123.0
+    router.seen.add("ev-ignored")
+    router._save(p.ctx(router))
     key_file = home / "identity.key"
     assert stat.S_IMODE(os.stat(key_file).st_mode) == 0o600
     pub, n_receipts = p.identity.pub, len(p.receipts.items)
@@ -62,5 +62,5 @@ async def test_p5c20_a_restarted_peer_continues_as_itself(tmp_path, settings):
     assert (await q.advertise())["ver"] == 3  # the profile version continues
     assert (await q.handle({"op": "solicit", "request": req, "sig": other.sign(req)}))["error"] == "duplicate request"
     qa = q.app(EventAssistant)
-    assert qa.since == 123.0 and "ev-ignored" in qa.seen
+    assert q.events.since["public"] == 123.0 and "ev-ignored" in q.events.seen
     assert qa.store(q.ctx(EventAssistant)).root.startswith(str(home))  # events live in the same home

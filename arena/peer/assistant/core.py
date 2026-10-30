@@ -10,19 +10,18 @@ import os
 from ...crypto import h, pen_name, verify
 from ...llm import ask_json
 from ..event_store import EventStore, FolderEventStore
-from ..plugin import Decision, MessageHead
+from ..events import announce_event
+from ..plugin import ASSISTANT_APP_ID, Decision, MessageHead, assistant_spec
 from .state import EventState, nonce
 from .tools import Tool, default_tools
 
 
 class EventAssistant:
-    name, version = "assistant", "1.0"
+    name, version, app_id = "assistant", "1.0", ASSISTANT_APP_ID
 
     def __init__(self, settings, group: str = "public", store: EventStore | None = None, tools: list[Tool] | None = None):
         self.s, self.group, self._store_given = settings, group, store
         self.events: dict[str, EventState] = {}
-        self.seen: set[str] = set()
-        self.since: float = 0.0  # broker time of the last board read: next time ask only for changes after it
         self._stores: dict[str, EventStore] = {}
         self.tools: dict[str, Tool] = {}
         for t in tools if tools is not None else default_tools():
@@ -67,10 +66,9 @@ class EventAssistant:
         async def loop():
             while True:
                 try:
-                    await self.watch_once(ctx)
                     await self.idle_check(ctx)
                 except Exception as e:
-                    ctx.log.emit("assistant", ctx.pen, f"게시판 확인 실패: {type(e).__name__}: {e}")
+                    ctx.log.emit("assistant", ctx.pen, f"점검 실패: {type(e).__name__}: {e}")
                 await asyncio.sleep(self.s.assistant_watch_sec)
         self._watch = asyncio.create_task(loop())
 
@@ -88,84 +86,45 @@ class EventAssistant:
     def save(self, ctx, st: EventState) -> None:
         self.store(ctx).save(st.event_id, st.to_dict(), st.secrets)
 
-    def save_cursor(self, ctx) -> None:
-        """where I stopped reading the board, and notices I already looked at"""
-        ctx.state.save({"since": self.since, "seen": sorted(self.seen)})
-
     async def restore(self, ctx) -> int:
         """reload the events this peer takes part in (after a restart) and continue from where it stopped"""
-        cur = ctx.state.load()
-        self.since = max(self.since, cur.get("since", 0.0))
-        self.seen |= set(cur.get("seen", []))
         n = 0
         for state, secrets in self.store(ctx).load_all():
             st = EventState.from_dict(state, secrets)
             self.events[st.event_id] = st
-            self.seen.add(st.event_id)
             n += 1
         return n
 
     # ---------------- holding an event ----------------
     async def host_event(self, ctx, *, title, kind, rules, policy, instruction, audience=None, recorder=None):
-        broker = ctx.brokers[self.group]
-        gid = await ctx.group_id(self.group)
-        rec = recorder or (await broker.find("기록", role="record", identity=ctx.identity))["peers"][0]
-        ev = "ev-" + nonce(title)[:10]
-        rules_hash = h(rules.encode())
-        decl = {"event_id": ev, "issuer": ctx.pub, "kind": kind, "policy": policy, "approvers": [], "group_id": gid, "rules_hash": rules_hash}
-        r = await ctx.recorder(rec["recorder_url"]).record("event", decl, {ctx.pub: ctx.sign(decl)})
-        if not r.get("ok"):
-            raise RuntimeError(f"event declaration refused: {r.get('error')}")
-        notice = {"notice_id": ev, "kind": kind, "title": title, "text": f"{title}: 규칙은 rules에 있다", "rules": rules, "policy": policy,
-                  "until": ctx.clock() + self.s.event_notice_ttl_sec, "issuer_pub": ctx.pub, "issuer_url": ctx.url, "event_hash": r["hash"],
-                  "recorder_pub": rec["pub"], "recorder_url": rec["recorder_url"], "group_id": gid, **({"audience": audience} if audience else {})}
-        posted = await broker.post_notice(ctx.identity, notice)
-        if not posted.get("ok"):
-            raise RuntimeError(f"notice refused: {posted.get('error')}")
-        self.seen.add(ev)
-        st = self.events[ev] = EventState(ev, "host", title, rules, rules_hash, gid, rec["recorder_url"], rec["pub"], ctx.pub, ctx.url)
+        """open an event run in the primordial way: natural-language rules, app = the basic assistant"""
+        out = await announce_event(ctx, group=self.group, title=title, kind=kind, rules=rules, policy=policy,
+                                   app=assistant_spec(self.version), audience=audience, recorder=recorder)
+        ev, rec = out["event_id"], out["recorder"]
+        st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url)
         self.save(ctx, st)
-        ctx.log.emit("assistant", ctx.pen, f"이벤트 개최 {ev} '{title}' (규칙 해시 {rules_hash[:10]})")
+        ctx.log.emit("assistant", ctx.pen, f"이벤트 개최 {ev} '{title}' (규칙 해시 {out['rules_hash'][:10]}, 방식 assistant)")
         await self.feed(ctx, ev, f"[소유자의 지시] {instruction}")
         return ev
 
-    # ---------------- reading the board (changes only) ----------------
-    async def watch_once(self, ctx):
-        r = await ctx.brokers[self.group].changed_notices(ctx.identity, self.since)
-        if not r.get("ok"):
-            return
-        self.since = r["now"]
-        try:
-            await self._read_changes(ctx, r["notices"])
-        finally:
-            self.save_cursor(ctx)
-
-    async def _read_changes(self, ctx, notices):
-        for n in notices:
-            ev = n["notice_id"]
-            st = self.events.get(ev)
-            if st is not None:
-                if n.get("closed") and not st.notice_closed:
-                    st.notice_closed = True
-                    await self.feed(ctx, ev, "[공지 마감] 개최자가 이 이벤트의 공지를 마감했다.")
-                elif n.get("ver", 1) > st.notice_ver:
-                    st.notice_ver = n.get("ver", 1)
-                    await self.feed(ctx, ev, f"[공지 수정] 버전 {st.notice_ver}: {n.get('text', '')}")
-                continue
-            if ev in self.seen or "rules" not in n or n.get("issuer_pub") == ctx.pub or n.get("closed"):
-                continue
-            self.seen.add(ev)
-            v = await ctx.recorder(n["recorder_url"]).verify(n["event_hash"])
-            if not (v.get("exists") and v.get("type") == "event" and v.get("event_id") == ev and v.get("issuer") == n["issuer_pub"]
-                    and v.get("rules_hash") == h(n["rules"].encode())):
-                ctx.log.emit("assistant", ctx.pen, f"공지 {ev}의 규칙 글이 원장에 공증된 규칙과 다름 → 무시")
-                continue
-            st = self.events[ev] = EventState(ev, "participant", n.get("title", ""), n["rules"], v["rules_hash"], n["group_id"], n["recorder_url"],
-                                              n["recorder_pub"], n["issuer_pub"], n["issuer_url"], offer_roles=list(n.get("policy", {}).get("roles", [])),
-                                              notice_ver=n.get("ver", 1))
-            st.peers[n["issuer_pub"]] = n["issuer_url"]
+    # ---------------- events handed over by the platform's event router ----------------
+    async def on_event(self, ctx, notice, change):
+        ev = notice["notice_id"]
+        st = self.events.get(ev)
+        if change == "new" and st is None:
+            st = self.events[ev] = EventState(ev, "participant", notice.get("title", ""), notice["rules"], h(notice["rules"].encode()),
+                                              notice["group_id"], notice["recorder_url"], notice["recorder_pub"], notice["issuer_pub"],
+                                              notice["issuer_url"], offer_roles=list(notice.get("policy", {}).get("roles", [])),
+                                              notice_ver=notice.get("ver", 1))
+            st.peers[notice["issuer_pub"]] = notice["issuer_url"]
             self.save(ctx, st)
-            await self.feed(ctx, ev, f"[새 공지] '{n.get('title', '')}' (개최자 pub={n['issuer_pub']}). 규칙의 해시가 원장과 같음을 확인했다.")
+            await self.feed(ctx, ev, f"[새 공지] '{notice.get('title', '')}' (개최자 pub={notice['issuer_pub']}). 규칙과 실행 방식이 원장에 공증된 것과 같음을 확인했다.")
+        elif st is not None and change == "updated":
+            st.notice_ver = notice.get("ver", st.notice_ver)
+            await self.feed(ctx, ev, f"[공지 수정] 버전 {st.notice_ver}: {notice.get('text', '')}")
+        elif st is not None and change == "closed" and not st.notice_closed:
+            st.notice_closed = True
+            await self.feed(ctx, ev, "[공지 마감] 개최자가 이 이벤트의 공지를 마감했다.")
 
     async def idle_check(self, ctx):
         """an open event with no input for a while: wake up and ask myself whether the rules leave something to do"""

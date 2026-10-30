@@ -10,7 +10,7 @@ from .plugin import BaseApp, EventApprover, MessageHead, RequestReceiver, RoleAc
 
 class RoleContracts(BaseApp):
     """op engage: a peer is asked to take a role for one event; the app that knows that role decides"""
-    name, version = "platform.roles", "1.0"
+    name, version, app_id = "platform.roles", "1.0", "5211b58e-dac1-4ea9-be56-97781d20fee6"
 
     def ops(self):
         return {"engage": self._engage}
@@ -33,7 +33,7 @@ class RoleContracts(BaseApp):
 
 class EventApprovals(BaseApp):
     """op approve: sign an event declaration if I am listed as an approver and an approving app agrees"""
-    name, version = "platform.approvals", "1.0"
+    name, version, app_id = "platform.approvals", "1.0", "2de7bd30-f595-426d-a073-6dd3f9400c1f"
 
     def ops(self):
         return {"approve": self._approve}
@@ -52,7 +52,7 @@ class EventApprovals(BaseApp):
 
 class DirectRequests(BaseApp):
     """op solicit (receive) and send(): signed requests to chosen peers without a notice board; inbox kept across restarts"""
-    name, version = "platform.requests", "1.0"
+    name, version, app_id = "platform.requests", "1.0", "678ebd71-aa0c-4718-9a76-4aa7948e5950"
 
     def __init__(self, settings):
         self.inbox: deque = deque(maxlen=settings.solicit_inbox_size)

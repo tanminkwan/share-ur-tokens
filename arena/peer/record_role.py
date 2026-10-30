@@ -12,7 +12,7 @@ ROLE = "record"
 
 
 class RecordRole(BaseApp):
-    name, version = "record", "1.0"
+    name, version, app_id = "record", "1.0", "7353aa43-64e7-48fc-bf42-b9dc840fff9e"
 
     def __init__(self, service: RecorderService, url: str, decide: Callable[..., Decision] | None = None):
         self.service, self.url, self.decide = service, url, decide

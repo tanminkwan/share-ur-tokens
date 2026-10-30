@@ -10,7 +10,7 @@ from tests.test_peer import broker, make_peer  # noqa: F401
 
 
 class OnlyOps:
-    name, version = "only-ops", "1.0"
+    name, version, app_id = "only-ops", "1.0", "0b1d3c3e-6f7a-4a43-9d1e-7a0c2f8e1b01"
 
     def __init__(self):
         self.seen = []
@@ -24,7 +24,7 @@ class OnlyOps:
 
 
 class OffersAndAccepts:
-    name, version = "role-x", "1.0"
+    name, version, app_id = "role-x", "1.0", "0b1d3c3e-6f7a-4a43-9d1e-7a0c2f8e1b02"
 
     def offers(self):
         return ["x"]
@@ -56,10 +56,10 @@ async def test_p5d1_p5d3_apps_get_a_context_and_the_head_not_the_peer(tmp_path, 
 async def test_p5d4_platform_ops_are_builtin_apps_and_reserved(tmp_path, settings, broker):  # noqa: F811
     p = make_peer(tmp_path, settings, broker)
     assert {"engage", "approve", "solicit"} <= set(p.skills())
-    assert [b.name for b in p.builtins] == ["platform.roles", "platform.approvals", "platform.requests"]
+    assert [b.name for b in p.builtins] == ["platform.roles", "platform.approvals", "platform.requests", "platform.events"]
 
     class Hijack:
-        name, version = "hijack", "1.0"
+        name, version, app_id = "hijack", "1.0", "0b1d3c3e-6f7a-4a43-9d1e-7a0c2f8e1b03"
 
         def ops(self):
             async def engage(ctx, msg, head):
@@ -72,16 +72,16 @@ async def test_p5d4_platform_ops_are_builtin_apps_and_reserved(tmp_path, setting
 
 def test_p5d5_assembly_rules(tmp_path, settings, broker):  # noqa: F811
     class NoVersion:
-        name = "nv"
+        name, app_id = "nv", "0b1d3c3e-6f7a-4a43-9d1e-7a0c2f8e1b04"
 
         def ops(self):
             return {}
 
     class NoCapability:
-        name, version = "nc", "1.0"
+        name, version, app_id = "nc", "1.0", "0b1d3c3e-6f7a-4a43-9d1e-7a0c2f8e1b05"
     for d in ("a", "b", "c"):
         (tmp_path / d).mkdir()
-    with pytest.raises(ValueError, match="needs a name and a version"):
+    with pytest.raises(ValueError, match="needs a name, a version and an app_id"):
         make_peer(tmp_path / "a", settings, broker, apps=[NoVersion()])
     with pytest.raises(ValueError, match="no capability"):
         make_peer(tmp_path / "b", settings, broker, apps=[NoCapability()])

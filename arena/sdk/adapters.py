@@ -15,13 +15,13 @@ from ..peer.plugin import Decision, MessageHead
 from ..signing import SignatureError, verify_message
 
 
-def function_app(name: str, version: str = "1.0", *, ops: dict | None = None, offers: list[str] | None = None,
+def function_app(name: str, version: str = "1.0", *, app_id: str, ops: dict | None = None, offers: list[str] | None = None,
                  accept_role: Callable[..., Awaitable[Decision | None]] | None = None,
                  approve_event: Callable[..., Awaitable[Decision | None]] | None = None,
                  on_request: Callable[..., Awaitable[None]] | None = None, profile_extra: dict | None = None,
                  start: Callable[..., Awaitable[None]] | None = None, sdk: str = "1"):
     """build an app from functions; it has only the capabilities you give it"""
-    ns: dict = {"name": name, "version": version, "sdk": sdk}
+    ns: dict = {"name": name, "version": version, "app_id": app_id, "sdk": sdk}
     if ops is not None:
         ns["ops"] = lambda self: dict(ops)
     if offers is not None:
@@ -52,10 +52,10 @@ class HttpServiceAdapter:
     routes: {op: (method, path)}; a message {"path": {...}, "query": {...}, "body": {...}} fills the request.
     The peer does what the system cannot: check who asks (optional signed messages), which group asks, and be found."""
 
-    def __init__(self, name: str, version: str, base_url: str, routes: dict[str, tuple[str, str]], *, offers: list[str] | None = None,
+    def __init__(self, name: str, version: str, base_url: str, routes: dict[str, tuple[str, str]], *, app_id: str, offers: list[str] | None = None,
                  headers: dict | None = None, timeout: float = 30.0, allow_groups: list[str] | None = None,
                  require_signed: bool = False, http: httpx.AsyncClient | None = None, sdk: str = "1"):
-        self.name, self.version, self.sdk = name, version, sdk
+        self.name, self.version, self.app_id, self.sdk = name, version, app_id, sdk
         self.base_url, self.routes, self.headers, self.timeout = base_url.rstrip("/"), dict(routes), headers or {}, timeout
         self._offers = list(offers if offers is not None else [f"service:{name}"])
         self.allow_groups, self.require_signed, self._http = allow_groups, require_signed, http
@@ -100,9 +100,9 @@ class HttpServiceAdapter:
 class A2AAgentAdapter:
     """let arena peers use any A2A agent: op `ask` sends {"text"} to the agent in plain text and returns its reply"""
 
-    def __init__(self, name: str, version: str, agent_url: str, *, op: str = "ask", offers: list[str] | None = None,
+    def __init__(self, name: str, version: str, agent_url: str, *, app_id: str, op: str = "ask", offers: list[str] | None = None,
                  timeout: float = 60.0, ask=ask_agent, sdk: str = "1"):
-        self.name, self.version, self.sdk = name, version, sdk
+        self.name, self.version, self.app_id, self.sdk = name, version, app_id, sdk
         self.agent_url, self.op, self.timeout, self._ask = agent_url, op, timeout, ask
         self._offers = list(offers if offers is not None else [f"agent:{name}"])
 

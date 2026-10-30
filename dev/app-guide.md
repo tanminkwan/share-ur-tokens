@@ -30,6 +30,7 @@ from arena.sdk import BaseApp, Context, MessageHead
 
 class Greeter(BaseApp):
     name, version, sdk = "greeter", "0.1.0", "1"
+    app_id = "5f0c8a52-2c1e-4c55-8f3d-1a2b3c4d5e6f"   # 고정 UUID: 이벤트가 이 앱을 이 값으로 지정한다
 
     def ops(self):
         return {"greeter.hello": self.hello}
@@ -46,6 +47,7 @@ def make_app(settings):          # 팩토리: 설정을 받아 앱을 돌려준�
 | 조건 | 어기면 |
 |---|---|
 | `name`(peer 안에서 유일), `version`이 있다 | 조립 시 오류 |
+| `app_id`(UUID)가 있고 peer 안에서 유일하다. **배포하는 앱은 한 번 만든 UUID를 고정해 적는다**(`python -c "import uuid; print(uuid.uuid4())"`). `BaseApp`의 기본값(클래스 경로에서 만든 값)은 개발용이다 | 조립 시 오류 |
 | 능력 인터페이스를 **하나 이상** 구현한다 | 조립 시 오류 |
 | `sdk`를 밝히면 SDK 주 버전이 같아야 한다 | 조립 시 오류 |
 | op 이름이 다른 앱과 겹치지 않는다 | 조립 시 오류 |
@@ -62,6 +64,7 @@ def make_app(settings):          # 팩토리: 설정을 받아 앱을 돌려준�
 | `RequestReceiver` | `on_request(ctx, request, sender)` | 직접 요청이 받은 편지함에 들어온 뒤(뒤에서 실행, 보낸 쪽은 기다리지 않음) |
 | `ProfileContributor` | `profile_extra() -> dict` | 프로필을 게시할 때 덧붙일 항목 |
 | `Lifecycle` | `start(ctx)` | peer가 시작하거나 앱이 실행 중에 설치될 때 |
+| `EventHandler` | `on_event(ctx, notice, change)` | 이벤트 배정기가 이 앱을 지정한 이벤트를 넘길 때(`change`: `new`·`updated`·`closed`) |
 
 ## 5. 문맥(Context): 앱이 쓸 수 있는 것
 
@@ -103,6 +106,28 @@ def make_app(settings):          # 팩토리: 설정을 받아 앱을 돌려준�
 - 앱 상태는 `ctx.state`(작은 dict)와 `ctx.data_dir`(파일)에 둔다. 둘 다 peer의 홈 아래라 재시작 뒤에도 남는다.
 - 비밀값은 `data_dir` 안에 권한 0600 파일로 둔다.
 - 메모리에만 두는 상태는 재시작하면 사라진다는 전제로 짠다.
+
+## 8-1. 이벤트에 앱 지정
+
+이벤트를 게시할 때는 **어떤 앱이 어떤 방식으로 처리하는지**를 명시한다. 이 지정은 원장의 이벤트 선언에 들어가 공증된다.
+
+```python
+from arena.peer.events import announce_event
+from arena.sdk import app_spec   # 또는 직접 {"id", "name", "version", "mode", "hash"?}
+
+await announce_event(ctx, group="public", title="...", kind="...", rules=자연어_규칙, policy={...},
+                     app=app_spec(MyApp(), mode="app_or_assistant", pin_code=False))
+```
+
+| 실행 방식(`mode`) | 뜻 |
+|---|---|
+| `assistant` | 앱 없이 각 peer의 기본 비서가 자연어 규칙으로 처리한다(원초적 방식) |
+| `app` | 지정한 앱(`id`)이 설치된 peer만 참여한다 |
+| `app_or_assistant` | 앱이 있으면 앱이, 없으면 기본 비서가 처리한다 |
+
+받는 쪽은 플랫폼의 **이벤트 배정기**(내장 앱)가 처리한다. 배정기는 공지의 규칙 해시와 앱 지정이 원장과 같은지 확인하고, `app_id`로 앱을 찾는다. 버전은 주 버전이 같고 지정 버전 이상이어야 하며, `hash`가 있으면 내 앱의 코드 해시(`app_fingerprint`)와 같아야 한다. 맞는 앱이 없으면 넘기지 않고 이유를 로그에 남긴다.
+
+앱 배포 peer(선택): 지정된 앱이 없을 때 앱 식별자로 앱을 받아 오는 peer를 누구나 만들 수 있다. 쓸지는 각 peer가 정하며, 받은 코드는 코드 해시·배포자 서명·소유자 승인을 거쳐 설치한다(5단계 마지막에 만든다).
 
 ## 9. 설정
 
@@ -152,7 +177,8 @@ async def test_hello(tmp_path):
 
 ## 14. 점검표
 
-- [ ] `name`, `version`, `sdk`가 있고 능력 인터페이스를 하나 이상 구현했다
+- [ ] `name`, `version`, `sdk`, 고정 `app_id`(UUID)가 있고 능력 인터페이스를 하나 이상 구현했다
+- [ ] 이벤트를 열 때 앱 지정(`app`)과 실행 방식을 명시했다
 - [ ] 문맥만 쓰고 peer 내부에 기대지 않는다
 - [ ] op 이름에 앱 이름을 붙였고 예약 op를 쓰지 않는다
 - [ ] 응답은 `{"ok": ...}` 모양이다

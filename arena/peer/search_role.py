@@ -28,7 +28,7 @@ def visible(notice: dict, labels) -> bool:
 
 
 class SearchRole(BaseApp):
-    name, version = "search", "1.0"
+    name, version, app_id = "search", "1.0", "494f468e-1a43-4341-b63a-fb4d92e824ff"
 
     def __init__(self, embedder: Embedder, settings, index: VectorIndex | None = None):
         self.embedder, self.settings, self.index = embedder, settings, index or MemoryVectorIndex()
