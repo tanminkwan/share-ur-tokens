@@ -3,7 +3,8 @@
   compat   OpenAI-compatible /v1/chat/completions (Samsung SDS Cloud AI service) with json_schema output
   claude   Claude API with structured output
 
-Failures (empty content, not JSON, HTTP errors) are retried ARENA_LLM_RETRIES times, then LLMError.
+Failures (empty content, not JSON, HTTP errors) are retried ARENA_LLM_RETRIES times, then LLMError. When the service says
+it is busy (429, 5xx) the client pauses first: ARENA_LLM_RETRY_BACKOFF_SEC, doubling, or the service's Retry-After (capped).
 `ask_json(llm, log, actor, fallback, ...)` is the convenience wrapper that logs and returns a fallback instead.
 """
 from __future__ import annotations
@@ -41,10 +42,21 @@ def _messages(user, messages):
     return list(messages) if messages else [{"role": "user", "content": user}]
 
 
+def busy_pause(settings: Settings, busy_count: int, retry_after: str | None) -> float:
+    """how long to wait before asking a busy service again"""
+    try:
+        wanted = float(retry_after) if retry_after else None
+    except ValueError:
+        wanted = None
+    if wanted is None:
+        wanted = settings.llm_retry_backoff_sec * (2 ** busy_count)
+    return min(wanted, settings.llm_retry_max_wait_sec)
+
+
 class CompatLLM:
-    def __init__(self, settings: Settings, http: httpx.AsyncClient | None = None):
+    def __init__(self, settings: Settings, http: httpx.AsyncClient | None = None, sleep: Callable = asyncio.sleep):
         settings.require("llm_base_url", "llm_api_key", "llm_model_agent")
-        self.settings, self._http = settings, http
+        self.settings, self._http, self._sleep = settings, http, sleep
         self._sem = asyncio.Semaphore(settings.llm_concurrency)
 
     async def _post(self, body):
@@ -61,12 +73,17 @@ class CompatLLM:
                 "messages": [{"role": "system", "content": system}] + _messages(user, messages),
                 "response_format": {"type": "json_schema", "json_schema": {"name": "out", "strict": True, "schema": schema}},
                 "reasoning_effort": effort or s.llm_effort}
-        last, attempts = None, s.llm_retries + 1
+        last, attempts, busy = None, s.llm_retries + 1, 0
         async with self._sem:
             while attempts > 0:
                 attempts -= 1
                 try:
                     r = await self._post(body)
+                    if (r.status_code == 429 or r.status_code >= 500) and attempts > 0:  # busy: pause, then ask again
+                        await self._sleep(busy_pause(s, busy, r.headers.get("retry-after")))
+                        busy += 1
+                        last = httpx.HTTPStatusError(f"busy {r.status_code}", request=r.request, response=r)
+                        continue
                     if r.status_code == 400 and "reasoning_effort" in body:  # endpoint without that knob: retry plain
                         body.pop("reasoning_effort")
                         attempts += 1
