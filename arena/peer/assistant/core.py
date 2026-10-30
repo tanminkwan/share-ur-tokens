@@ -13,7 +13,7 @@ from ...llm import ask_json
 from ..event_store import EventStore, FolderEventStore
 from ..events import announce_event
 from ..plugin import ASSISTANT_APP_ID, Decision, MessageHead
-from .state import EventState, nonce
+from .state import EventState, commit_hash, nonce
 from .tools import Tool, default_tools
 
 
@@ -134,6 +134,39 @@ class EventAssistant:
                 return p["pub"], st.peers[p["pub"]]
         return pub, None
 
+    # ---------------- identification and checks enforced by code ----------------
+    REVEAL_KEYS = {"author", "label", "value", "salt", "publish_hash"}
+
+    def _reveals(self, obj) -> list[dict]:
+        if isinstance(obj, dict):
+            if self.REVEAL_KEYS <= set(obj):
+                return [obj]
+            return [r for v in obj.values() for r in self._reveals(v)]
+        if isinstance(obj, list):
+            return [r for v in obj for r in self._reveals(v)]
+        return []
+
+    async def verify_reveals(self, ctx, st, obj) -> list[tuple[bool, str]]:
+        """every reveal record inside obj, checked against the ledger: published by its author, in this event, hash matches"""
+        out = []
+        for r in self._reveals(obj):
+            v = await ctx.recorder(st.recorder_url).verify(str(r["publish_hash"]))
+            if not (v.get("exists") and v.get("type") == "publish" and v.get("author") == r["author"] and v.get("event_id") == st.event_id):
+                out.append((False, f"라벨 {r['label']}: 그 등록이 원장에 없거나 다른 사람·다른 이벤트의 등록"))
+            elif v.get("content_hash") != commit_hash(str(r["label"]), r["value"], str(r["salt"]), r["author"]):
+                out.append((False, f"라벨 {r['label']}: 공개값이 먼저 등록한 해시와 맞지 않음"))
+            else:
+                out.append((True, f"라벨 {r['label']}: 일치"))
+        return out
+
+    @staticmethod
+    def _summary(results) -> str:
+        if not results:
+            return ""
+        bad = [why for ok, why in results if not ok]
+        return (f"\n[코드 확인] 공개값 {len(results)}건 모두 원장과 일치" if not bad
+                else f"\n[코드 확인] 공개값 {len(results)}건 중 원장과 맞지 않음: {'; '.join(bad)}")
+
     # ---------------- persistence ----------------
     def store(self, ctx) -> EventStore:
         if self._store_given is not None:
@@ -219,7 +252,8 @@ class EventAssistant:
         state = (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 내가 받은 서명 요청: {', '.join(st.pending) or '없음'} / "
                  f"내가 제안한 공동 확인: {', '.join(st.proposals) or '없음'} / 참가 신청: {'함' if st.joined else '안 함'} / 닫힘: {st.closed} / "
                  f"아는 peer: {', '.join(h(p) for p in st.peers) or '없음'} / "
-                 f"이 이벤트에서 맺은 역할 계약 {len(st.contracts)}건: {', '.join(f'{c[0]}={h(c[1])}' for c in st.contracts) or '없음'}")
+                 f"이 이벤트에서 맺은 역할 계약 {len(st.contracts)}건: {', '.join(f'{c[0]}={h(c[1])}' for c in st.contracts) or '없음'}"
+                 + (f" / 참가 신청자(코드 확인) {len(st.applicants)}명: {', '.join(h(p) for p in st.applicants) or '없음'}" if st.role == "host" else ""))
         return (f"당신은 peer '{ctx.pen}'의 비서 에이전트입니다. 이벤트 '{st.title}'(event_id {st.event_id}, broker 그룹 {st.group_id})에 "
                 f"{'개최자' if st.role == 'host' else '참가자'}로 참여합니다. 아래 이벤트 규칙을 정확히 따르세요. 규칙에 없는 일은 하지 말고, "
                 "확실하지 않으면 note로 적은 뒤 wait 하세요. 소유자(사람)에게 묻는 말은 한국어로 씁니다. "
@@ -322,9 +356,18 @@ class EventAssistant:
         if not self._head_ok(st, msg, head):
             return {"ok": False, "error": "group or event does not match this event"}
         st.peers[who] = msg.get("url")
-        pen = pen_name(who, ctx.settings.pen_name_prefix, ctx.settings.pen_name_len)
-        await self.feed(ctx, st.event_id, f"[메시지] 보낸 이 {pen} pub={who} url={msg.get('url')}\n{msg.get('text', '')}\n"
-                                          f"data={json.dumps(msg.get('data', {}), ensure_ascii=False)}")
+        data = msg.get("data", {}) or {}
+        notes = ""
+        if isinstance(data, dict) and data.get("type") == "join":  # identification by code: a join counts only with this event's rules
+            if data.get("rules_hash") == st.rules_hash and st.role == "host":
+                if who not in st.applicants:
+                    st.applicants.append(who)
+                notes += f"\n[코드 확인] 참가 신청: 규칙 해시 일치, 신청자 {len(st.applicants)}명"
+            else:
+                notes += "\n[코드 확인] 참가 신청이 아님: 규칙 해시가 다르다"
+        notes += self._summary(await self.verify_reveals(ctx, st, data))
+        await self.feed(ctx, st.event_id, f"[메시지] 보낸 이 pub={who}\n{msg.get('text', '')}\n"
+                                          f"data={json.dumps(data, ensure_ascii=False)}{notes}")
         return {"ok": True}
 
     async def _op_attest_request(self, ctx, msg, head: MessageHead):
@@ -333,10 +376,12 @@ class EventAssistant:
         if not who or not st or not self._head_ok(st, msg, head) or who not in p.get("parties", []) or ctx.pub not in p.get("parties", []) \
                 or p.get("event_id") != st.event_id or p.get("group_id") != st.group_id:
             return {"ok": False, "error": "not a valid signature request for me"}
-        st.pending[msg["request_id"]] = {"payload": p, "from_pub": who, "from_url": msg.get("url")}
+        checks = await self.verify_reveals(ctx, st, p.get("value"))
+        st.pending[msg["request_id"]] = {"payload": p, "from_pub": who, "from_url": msg.get("url"), "reveals_ok": all(ok for ok, _ in checks)}
         st.peers[who] = msg.get("url")
         await self.feed(ctx, st.event_id, f"[서명 요청] request_id={msg['request_id']} 제안자 pub={who}\n"
-                                          f"kind={p.get('kind')} subject={p.get('subject')} parties={p.get('parties')}\nvalue={json.dumps(p.get('value'), ensure_ascii=False)}")
+                                          f"kind={p.get('kind')} subject={p.get('subject')} parties={p.get('parties')}\n"
+                                          f"value={json.dumps(p.get('value'), ensure_ascii=False)}{self._summary(checks)}")
         return {"ok": True}
 
     async def _op_attest_signature(self, ctx, msg, head: MessageHead):

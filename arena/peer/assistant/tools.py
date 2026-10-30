@@ -56,6 +56,8 @@ async def contract(A, ctx, st, role, peer):
     peer_pub, peer_url = await A.resolve_peer(ctx, st, peer)
     if not peer_pub or not peer_url:
         return {"ok": False, "error": f"{peer}를 찾지 못했다(필명이나 공개키를 확인)"}
+    if peer_pub not in st.applicants:  # enforced by code: only peers whose signed join carried this event's rules hash
+        return {"ok": False, "error": f"참가 신청한 peer만 계약할 수 있다(신청자: {len(st.applicants)}명)"}
     c = {"event_id": st.event_id, "role": role, "issuer": ctx.pub, "contractor": peer_pub, "nonce": nonce(peer_pub, role),
          "group_id": st.group_id, "rules_hash": st.rules_hash}
     eng = await ctx.call(peer_url, {"op": "engage", "role": role, "contract": c, "request": {"event_id": st.event_id, "rules_hash": st.rules_hash}},
@@ -110,8 +112,11 @@ async def commit(A, ctx, st, label, value):
 
 
 async def my_reveal(A, ctx, st, label):
+    """a reveal record in the platform's fixed shape, so the receiving side's code can check it against the ledger"""
     s = st.secrets.get(label)
-    return {"label": label, **{k: s[k] for k in ("value", "salt", "commit", "publish_hash")}} if s else {"error": f"먼저 등록한 라벨 {label}이 없다"}
+    if not s:
+        return {"error": f"먼저 등록한 라벨 {label}이 없다"}
+    return {"author": ctx.pub, "label": label, "value": s["value"], "salt": s["salt"], "publish_hash": s["publish_hash"]}
 
 
 async def check_reveal(A, ctx, st, publish_hash, author, label, value, salt):
@@ -135,6 +140,9 @@ async def propose_attest(A, ctx, st, kind, subject, value, parties):
             return {"error": f"당사자 {x}를 찾지 못했다"}
         resolved.append({"pub": pub, "url": url})
     parties = resolved
+    bad = [why for ok, why in await A.verify_reveals(ctx, st, value) if not ok]
+    if bad:  # enforced by code: never propose a result whose reveals do not match the ledger
+        return {"error": f"value 안의 공개값이 원장과 맞지 않는다(코드 확인): {'; '.join(bad)}"}
     pubs = [x["pub"] for x in parties]
     p = {"event_id": st.event_id, "kind": kind, "subject": subject, "value": value, "parties": pubs, "nonce": nonce(kind, subject),
          "group_id": st.group_id}
@@ -153,9 +161,12 @@ async def propose_attest(A, ctx, st, kind, subject, value, parties):
 
 
 async def cosign(A, ctx, st, request_id):
-    req = st.pending.pop(request_id, None)
+    req = st.pending.get(request_id)
     if not req:
         return {"error": f"서명 요청 {request_id}이 없다"}
+    if req.get("reveals_ok") is False:  # enforced by code
+        return {"error": "이 요청의 공개값이 원장과 맞지 않아 서명할 수 없다(코드 확인). decline으로 거절하라"}
+    st.pending.pop(request_id)
     return await A.post(ctx, st, req["from_url"], "attest_signature", {"request_id": request_id, "attest_sig": ctx.sign(req["payload"])})
 
 
@@ -199,7 +210,8 @@ def default_tools() -> list[Tool]:
         Tool("publish_text", "{text}: 글을 원장에 먼저 등록한다. 결과 content_hash, publish_hash", _obj(text=S), publish_text),
         Tool("commit", "{label, value}: 값에 비밀값을 붙인 해시를 원장에 먼저 등록하고 값은 숨겨 둔다. 결과 label, commit, publish_hash",
              _obj(label=S, value=S), commit),
-        Tool("my_reveal", "{label}: 내가 먼저 등록한 값과 비밀값을 꺼낸다(상대에게 보낼 공개값)", _obj(label=S), my_reveal),
+        Tool("my_reveal", "{label}: 내가 먼저 등록한 값의 공개값 묶음(author, label, value, salt, publish_hash)을 꺼낸다. 상대에게는 이 묶음을 고치지 말고 그대로 보낸다",
+             _obj(label=S), my_reveal),
         Tool("check_reveal", "{publish_hash, author, label, value, salt}: 상대(필명)가 보낸 공개값이 상대가 먼저 등록한 해시와 맞는지 원장으로 확인한다. 결과 match",
              _obj(publish_hash=S, author=S, label=S, value=S, salt=S), check_reveal),
         Tool("verify", "{hash}: 원장 항목이 있는지와 공개 정보를 확인한다", _obj(hash=S), verify_entry, after_close=True),

@@ -403,3 +403,57 @@ async def test_p5c26_repeated_identical_actions_and_participant_only_tools(eco):
     await settle(host)
     assert len(host.owner.asked) == 1  # the same call twice in a row is not run again
     assert sum("이미 했다" in line for line in asst(host).events[ev].transcript) == 2
+
+
+async def test_p5c27_contracts_only_with_applicants_checked_by_code(eco):
+    ev = await open_event(eco)
+    await settle(eco.host)
+    stranger = eco.peer("stranger2")
+    await stranger.advertise()
+    eco.a.llm.push("join_event")
+    await eco.a.events.watch_once(eco.a.ctx(eco.a.events))
+    await settle(eco.a, eco.host)
+    st = asst(eco.host).events[ev]
+    assert st.applicants == [eco.a.identity.pub]  # recorded by code from the signed join with the right rules hash
+    assert any("[코드 확인] 참가 신청" in x for x in st.transcript)
+    eco.host.llm.push("contract", role="member", peer=stranger.pen)  # never applied
+    eco.host.llm.push("contract", role="member", peer=eco.a.pen)
+    await asst(eco.host).feed(ctx(eco.host), ev, "계약")
+    await settle(eco.host)
+    contracts = [x["payload"]["contractor"] for x in eco.svc.ledger.chain if x["type"] == "contract"]
+    assert contracts == [eco.a.identity.pub]
+    assert any("참가 신청한 peer만" in x for x in st.transcript)
+
+
+async def test_p5c27_reveal_records_are_checked_by_code_and_bad_ones_block_signing(eco):
+    ev = await joined(eco)
+    a, b = eco.a, eco.b
+    a.llm.push("commit", label="r-1", value="바위")
+    await asst(a).feed(ctx(a), ev, "등록")
+    await settle(a)
+    good = await asst(a).tools["my_reveal"].run(asst(a), ctx(a), asst(a).events[ev], label="r-1")
+    assert set(good) >= {"author", "label", "value", "salt", "publish_hash"}
+    bad = dict(good, value="보")  # a reveal that does not match its commit
+    # a message carrying reveal records: the code checks them and says so in b's input
+    a.llm.push("send", to=b.pen, text="공개", data={"mine": good})
+    await asst(a).feed(ctx(a), ev, "공개")
+    await settle(a, b)
+    tb = "\n".join(asst(b).events[ev].transcript)
+    assert "[코드 확인] 공개값 1건 모두 원장과 일치" in tb
+    # a co-signed attest whose value holds a mismatching reveal: proposing is refused by code
+    a.llm.push("propose_attest", kind="pair", subject="r", value={"a": bad}, parties=[a.pen, b.pen])
+    await asst(a).feed(ctx(a), ev, "제안")
+    await settle(a, b)
+    assert any("공개값이 원장과 맞지 않" in x for x in asst(a).events[ev].transcript) and not asst(b).events[ev].pending
+    # and if a forged request arrives anyway, cosign is refused by code
+    st_b = asst(b).events[ev]
+    p = {"event_id": ev, "kind": "pair", "subject": "r2", "value": {"a": bad}, "parties": [a.identity.pub, b.identity.pub], "nonce": "n", "group_id": "public"}
+    req = asst(a).sign_body(ctx(a), {"op": "attest_request", "event_id": ev, "group_id": "public", "request_id": "forged", "payload": p, "url": a.config.url})
+    assert (await b.handle(req))["ok"]
+    await settle(b)
+    assert "[코드 확인] 공개값 1건 중 원장과 맞지 않음" in "\n".join(st_b.transcript)
+    b.llm.push("cosign", request_id="forged")
+    await asst(b).feed(ctx(b), ev, "서명")
+    await settle(a, b)
+    assert any("서명할 수 없다" in x for x in st_b.transcript)
+    assert not [x for x in eco.svc.ledger.chain if x["type"] == "attest" and x["payload"]["subject"] == "r2"]

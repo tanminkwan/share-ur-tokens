@@ -44,9 +44,10 @@ BEATS = {"가위": "보", "바위": "가위", "보": "바위"}
 
 
 def expected_winner(r, a, b):
-    if r["a_move"] == r["b_move"]:
+    ma, mb = r["a"]["value"], r["b"]["value"]
+    if ma == mb:
         return ""
-    return a if BEATS.get(r["a_move"]) == r["b_move"] else b
+    return a if BEATS.get(ma) == mb else b
 
 
 def pen(pub):
@@ -141,10 +142,10 @@ async def test_rps_app_free_acceptance(live, tmp_path):
             assert set(m["sigs"]) == set(p["parties"]) == {v["a"], v["b"]}
             for r in v["rounds"]:
                 for side in ("a", "b"):
-                    who, label = v[side], f"{p['subject']}-{r['round']}"
-                    pub_e = next(e for e in mine if e["hash"] == r[f"{side}_publish_hash"])
-                    assert pub_e["payload"]["author"] == who
-                    assert pub_e["payload"]["content_hash"] == commit_hash(label, r[f"{side}_move"], r[f"{side}_salt"], who)
+                    rec = r[side]  # the reveal record exactly as the platform produced it
+                    pub_e = next(e for e in mine if e["hash"] == rec["publish_hash"])
+                    assert pub_e["payload"]["author"] == rec["author"] == v[side]
+                    assert pub_e["payload"]["content_hash"] == commit_hash(rec["label"], rec["value"], rec["salt"], rec["author"])
             assert v["winner"] == expected_winner(v["rounds"][-1], v["a"], v["b"])
         # RPS-2 games went between the players only
         player_urls = {pp.config.url for pp in players}
