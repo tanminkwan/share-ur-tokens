@@ -10,7 +10,7 @@ from typing import Callable
 from ..crypto import commit_hash
 from ..peer.plugin import valid_run
 
-POLICY_LISTS = ("roles", "conflict_roles", "hidden_roles", "reveal_values")
+POLICY_LISTS = ("roles", "conflict_roles", "hidden_roles", "reveal_values", "assigned_kinds", "attest_kinds")
 POLICY_MAPS = ("verdict_roles", "attest_roles")
 POLICY_KEYS = set(POLICY_LISTS) | set(POLICY_MAPS)
 ISSUER = "issuer"  # policy value meaning "the event issuer" rather than a contracted role
@@ -62,6 +62,15 @@ def published(chain) -> set:
 def roles_of(chain, event_id, pub) -> set:
     return {x["payload"]["role"] for x in chain
             if x["type"] == "contract" and x["payload"].get("event_id") == event_id and x["payload"].get("contractor") == pub}
+
+
+def assignments(chain, event_id) -> dict:
+    """subject -> assigned parties, from the issuer's assign entries of one event"""
+    out = {}
+    for x in chain:
+        if x["type"] == "assign" and x["payload"].get("event_id") == event_id:
+            out.update(x["payload"]["subjects"])
+    return out
 
 
 def valid_policy(pol) -> bool:
@@ -203,7 +212,16 @@ def _attest_rule(chain, e, now, s):
            and x["payload"].get("subject") == p.get("subject") for x in chain):
         return "already attested (kind, subject) in this event"
     decl = events(chain)[ev]
-    need = decl.get("policy", {}).get("attest_roles", {}).get(p.get("kind"))
+    pol = decl.get("policy", {})
+    if pol.get("attest_kinds") and p.get("kind") not in pol["attest_kinds"]:  # opt-in: without the list, kinds are free
+        return f"kind '{p.get('kind')}' is not one of the event's kinds {pol['attest_kinds']}"
+    if p.get("kind") in pol.get("assigned_kinds", []):
+        assigned = assignments(chain, ev).get(p.get("subject"))
+        if assigned is None:
+            return f"subject '{p.get('subject')}' was never assigned in this event"
+        if sorted(p["parties"]) != sorted(assigned):
+            return f"parties differ from the parties assigned to '{p.get('subject')}'"
+    need = pol.get("attest_roles", {}).get(p.get("kind"))
     if need == ISSUER and p["parties"] != [decl["issuer"]]:
         return f"attest '{p.get('kind')}' must be by the event issuer alone"
     if need and need != ISSUER and not all(need in roles_of(chain, ev, who) for who in p["parties"]):
@@ -233,6 +251,28 @@ def _reveal_rule(chain, e, now, s):
     allowed = events(chain)[p["event_id"]].get("policy", {}).get("reveal_values")
     if allowed and p.get("value") not in allowed:
         return f"value is not one of the event's allowed values {allowed}"
+
+
+# ---------------- assign ----------------
+def _assign_shape(chain, e, now, s):
+    subj = e["payload"].get("subjects")
+    if not isinstance(subj, dict) or not subj:
+        return "subjects must map each subject to its parties"
+    for k, v in subj.items():
+        if not isinstance(k, str) or not k or not isinstance(v, list) or not v or len(set(v)) != len(v) or not all(isinstance(x, str) for x in v):
+            return f"bad parties for subject {k!r}"
+
+
+def _assign_rule(chain, e, now, s):
+    p = e["payload"]
+    if p.get("issuer") != events(chain)[p["event_id"]]["issuer"]:
+        return "only the event issuer can assign"
+    done = assignments(chain, p["event_id"])
+    for k, parties in p["subjects"].items():
+        if k in done:
+            return f"subject {k!r} already assigned"
+        if not all(roles_of(chain, p["event_id"], x) for x in parties):
+            return f"every party of {k!r} must hold a contract in this event"
 
 
 # ---------------- close ----------------
@@ -276,6 +316,8 @@ for _t in (
               public=lambda p, c: {"author": p["author"], "label": p.get("label"), "value": p.get("value"), "salt": p.get("salt"),
                                    "commit": p.get("commit")},
               counters={"revealed": 0}, contribute=_count("revealed", "author")),
+    EntryType("assign", lambda p: [p.get("issuer")], event_ref="required", shape=_assign_shape, rules=(_assign_rule,),
+              public=lambda p, c: {"issuer": p["issuer"], "subjects": p["subjects"]}),
     EntryType("close", lambda p: [p.get("issuer")], event_ref="required", rules=(_close_rule,),
               public=lambda p, c: {"issuer": p["issuer"], "result_hash": p.get("result_hash")}, counters={"closed": 0},
               contribute=_count("closed", "issuer")),

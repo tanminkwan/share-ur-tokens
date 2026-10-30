@@ -225,6 +225,25 @@ async def decline(A, ctx, st, request_id, reason):
     return await A.post(ctx, st, req["from_url"], "attest_signature", {"request_id": request_id, "declined": True, "reason": reason})
 
 
+async def assign(A, ctx, st, subjects):
+    if not isinstance(subjects, dict) or not subjects:
+        return {"error": "subjects_json은 {주제: [필명, ...]} 모양의 JSON 객체여야 한다"}
+    out = {}
+    for k, parties in subjects.items():
+        pubs = []
+        for x in parties if isinstance(parties, list) else [parties]:
+            pub, _ = await A.resolve_peer(ctx, st, x, need_url=False)
+            if not pub:
+                return {"error": f"{x}를 찾지 못했다"}
+            pubs.append(pub)
+        out[str(k)] = pubs
+    p = {"event_id": st.event_id, "issuer": ctx.pub, "subjects": out, "group_id": st.group_id}
+    r = await _record(A, ctx, st, "assign", p)
+    if r.get("ok"):
+        st.assignments.update(out)
+    return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error")}
+
+
 async def close_event(A, ctx, st, result_hash):
     v = await ctx.recorder(st.recorder_url).verify(result_hash)  # checked by code: the result must be on the ledger, in this event
     if not (v.get("exists") and v.get("event_id") == st.event_id):
@@ -275,6 +294,8 @@ def default_tools() -> list[Tool]:
              _obj(kind=S, subject=S, value_json=S, parties={"type": "array", "items": S}), propose_attest),
         Tool("cosign", "{request_id}: 받은 서명 요청에 서명해 돌려준다(내용이 내가 본 것과 같을 때만)", _obj(request_id=S), cosign),
         Tool("decline", "{request_id, reason}: 받은 서명 요청을 거절하고 이유를 알린다", _obj(request_id=S, reason=S), decline),
+        Tool("assign", "{subjects_json}: 주제(예: 경기 번호)마다 맡을 당사자를 원장에 배정한다. subjects_json은 {\"주제\": [필명, ...]} JSON 문자열. "
+             "배정된 종류의 공동 확인은 원장이 배정된 당사자에게서만 받는다", _obj(subjects_json=S), assign, host_only=True),
         Tool("close_event", "{result_hash}: 이 이벤트를 원장에서 닫고 공지를 마감한다", _obj(result_hash=S), close_event, host_only=True),
         Tool("note", "{text}: 나중을 위해 메모를 남긴다", _obj(text=S), note, after_close=True),
         Tool("wait", "{}: 이번 입력에 대해 할 일을 다 했다. 다음 입력을 기다린다", None, wait, after_close=True),

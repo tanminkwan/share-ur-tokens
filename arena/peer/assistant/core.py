@@ -149,6 +149,8 @@ class EventAssistant:
             return []
         entries = r.get("entries", []) if r.get("ok") else []
         for e in entries:
+            if e["type"] == "assign":
+                st.assignments.update(e.get("subjects", {}))
             for k in self.PEOPLE:
                 for pub in (e.get(k) if isinstance(e.get(k), list) else [e.get(k)]):
                     if isinstance(pub, str) and HEX64.fullmatch(pub) and pub not in st.roster:
@@ -353,7 +355,10 @@ class EventAssistant:
         tools = "\n".join(f"- {n} {self.tools[n].description}" for n in self._tools_for(st))
         revealed = [k for k, v in st.secrets.items() if v.get("reveal_hash")]
         sent = [f"{k}→{'·'.join(h(p) for p in v)}" for k, v in st.sent_reveals.items()]
-        state = (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 원장에 공개한 내 라벨: {', '.join(revealed) or '없음'} / "
+        mine = [k for k, v in st.assignments.items() if ctx.pub in v]
+        assigned = (f"배정(원장): {'; '.join(f'{k}=' + '·'.join(h(p) for p in v) for k, v in st.assignments.items())} / "
+                    f"내 배정: {', '.join(mine) or '없음'} / ") if st.assignments else ""
+        state = assigned + (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 원장에 공개한 내 라벨: {', '.join(revealed) or '없음'} / "
                  f"내가 보낸 공개값: {', '.join(sent) or '없음'} / 내가 받은 서명 요청: {', '.join(st.pending) or '없음'} / "
                  f"내가 제안한 공동 확인: {', '.join(st.proposals) or '없음'} / 참가 신청: {'함' if st.joined else '안 함'} / 닫힘: {st.closed} / "
                  f"아는 peer: {', '.join(h(p) for p in st.peers) or '없음'} / "
@@ -418,7 +423,7 @@ class EventAssistant:
             return {"error": f"인자가 맞지 않음: {', '.join(missing)} 없음"}
         if tool.participant_only and st.role == "host":
             return {"error": "참가자만 쓰는 도구"}
-        for k in ("data_json", "value_json"):
+        for k in ("data_json", "value_json", "subjects_json"):
             if k in args:
                 try:
                     args[k[:-5]] = json.loads(args.pop(k) or "{}")

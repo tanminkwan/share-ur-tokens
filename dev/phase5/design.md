@@ -293,3 +293,22 @@ flowchart LR
     N -- 있음 --> F["[원장 새 기록] 입력"]
     N -- 없음 --> I[멈춤 점검<br/>간격 두 배씩]
 ```
+
+
+## 13. 배정 (실제 실행 10에서 발견)
+
+여러 경기를 한꺼번에 치르면 "나는 어느 경기에서 누구와 붙는가"를 LLM이 기억해야 했다. 실행 10에서는 대진표와 다른 상대와 경기를 치르고 그 결과에 서명까지 했다. 배정을 원장 항목으로 만들고, 배정된 종류의 공동 확인은 원장이 배정과 대조한다. 심사위원 배정, 짝 지정처럼 다른 이벤트에도 그대로 쓰인다.
+
+```mermaid
+sequenceDiagram
+    participant H as 개최자
+    participant R as recorder (원장)
+    participant A as 선수 A의 비서
+    H->>R: assign {subjects: {m1: [A, B], m2: [A, C], m3: [B, C]}}
+    Note over R: 발행자만, 주제마다 한 번, 계약된 사람만
+    A->>R: GET /events/id → 코드가 "내 배정: m1, m2"를 지금 상태에 적음
+    A->>R: attest {kind match, subject m1, parties [A, B]}
+    Note over R: assigned_kinds의 종류는 배정된 당사자와 같아야 기록
+```
+
+실행 시간 상한: 실행 10은 세 경기에 비긴 판이 여럿 나오고 LLM 서비스 바쁨(429)으로 쉬는 시간이 겹쳐 900초 안에 끝나지 않았다. 인수 테스트의 상한을 1500초로 늘렸다(플랫폼 동작은 바뀌지 않음).
