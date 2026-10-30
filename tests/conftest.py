@@ -19,6 +19,7 @@ def make_env(tmp_path, **over):
         "ARENA_SEARCH_MAX_K": "50",
         "ARENA_NEIGHBOR_TIMEOUT_SEC": "2",
         "ARENA_HTTP_TIMEOUT_SEC": "5",
+        "ARENA_LABEL_AUTO": "false",  # unit tests opt in to capability labels explicitly
     }
     env.update({k: str(v) for k, v in over.items()})
     return env

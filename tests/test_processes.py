@@ -183,3 +183,16 @@ async def test_p3d4_overseer_peer_process_reads_and_audits(tmp_path, procs):
     assert snap["integrity"]["agree"] and snap["stats"]["entries"] == 2 and snap["stats"]["by_type"] == {"publish": 1, "share": 1}
     assert any(x["pub"] == ov.pub and x["strengths"].startswith("관전용 절대자 peer") for x in snap["peers"])
     assert (await t.call(ourl, dict({"op": "overseer_snapshot"}, **sign_message(Identity.generate(), "overseer_snapshot"))))["ok"] is False
+
+
+async def test_p4e3_recorder_process_serves_track_records(tmp_path, procs):
+    port = free_port()
+    url = f"http://127.0.0.1:{port}"
+    env = make_env(tmp_path, ARENA_RECORDER_PORT=port)
+    start(procs, "arena.recorder", env, tmp_path, url)
+    R, cast = RecorderClient(url, Settings.load(env=env, dotenv_path=None)), Cast()
+    for e in (cast.event(approvers=[cast.approver]), cast.contract(), cast.contract(role="keeper", contractor=cast.keeper, nonce="k")):
+        assert (await R.record(*e))["ok"]
+    t = await R.track(cast.judge.pub)
+    assert t["ok"] and t["track"]["roles"] == {"judge": 1}
+    assert (await R.track(cast.approver.pub))["track"]["approvals"] == 1

@@ -2,13 +2,15 @@
 and a list of apps. Platform ops: engage (role contract) and approve (event approval); apps add the rest."""
 from __future__ import annotations
 
+import asyncio
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable
 
 from ..a2a import Transport, build_a2a_app
 from ..config import Settings
-from ..crypto import Identity, pen_name
+from ..crypto import Identity, pen_name, verify
 from ..events import EventLog
 from ..llm import LLM
 from ..recorder.client import RecorderAPI, RecorderClient
@@ -35,7 +37,10 @@ class Peer:
         self.pen = pen_name(identity.pub, settings.pen_name_prefix, settings.pen_name_len)
         self.receipts, self.profiles = Receipts(), ProfileBuilder()
         self.recorder_factory: Callable[[str], RecorderAPI] = lambda url: RecorderClient(url, settings)
-        self._ops = {"engage": self._engage, "approve": self._approve}
+        self.known_recorders: list[str] = list(settings.peer_track_recorders)
+        self.inbox: deque = deque(maxlen=settings.solicit_inbox_size)
+        self.last_profile: dict | None = None
+        self._ops = {"engage": self._engage, "approve": self._approve, "solicit": self._solicit}
         for app in self.apps:
             for op, fn in app.ops().items():
                 if op in self._ops:
@@ -59,7 +64,13 @@ class Peer:
         return next((a for a in self.apps if isinstance(a, cls)), None)
 
     def recorder(self, url: str) -> RecorderAPI:
+        if url not in self.known_recorders:
+            self.known_recorders.append(url)
         return self.recorder_factory(url)
+
+    def current_labels(self) -> list[str]:
+        """labels on my posted profile (person-set + capability labels), or the person-set ones before the first post"""
+        return list(self.last_profile["labels"]) if self.last_profile else list(self.config.labels)
 
     def a2a_app(self):
         return build_a2a_app(f"peer-{self.pen}", f"peer {self.pen}", self.config.url, self.skills(), self.handle)
@@ -89,12 +100,47 @@ class Peer:
             r = await broker.advertise(self.identity, profile)
             if not r.get("ok"):
                 self.log.emit("profile", self.pen, f"{group} 게시 실패: {r.get('error')}")
-        self.log.emit("profile", self.pen, f"프로필 게시(v{profile['ver']}): {profile['summary'][:100]}")
+        self.last_profile = profile
+        caps = [c["label"] for c in profile.get("capabilities", [])]
+        self.log.emit("profile", self.pen, f"프로필 게시(v{profile['ver']}): {profile['summary'][:100]}" + (f" | 역량 라벨: {', '.join(caps)}" if caps else ""))
         return profile
 
     async def add_experience(self, note: str) -> None:
         self.area.add_note(note)
         await self.advertise()
+
+    # ---- direct requests without a notice board ----
+    async def solicit(self, targets: list[str], request: dict) -> dict:
+        """sign a request and send it to the chosen peers at once; returns each target's acknowledgement"""
+        sig = self.sign(request)
+
+        async def one(url):
+            try:
+                return await self.call(url, {"op": "solicit", "request": request, "sig": sig})
+            except Exception as e:
+                return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        acks = await asyncio.gather(*(one(u) for u in targets))
+        ok = sum(bool(a.get("ok")) for a in acks)
+        self.log.emit("solicit", self.pen, f"직접 요청 {request.get('request_id')} → {len(targets)}명 중 {ok}명 수신")
+        return dict(zip(targets, acks))
+
+    async def _solicit(self, msg: dict) -> dict:
+        r, sig = msg.get("request", {}), msg.get("sig", "")
+        issuer = r.get("issuer_pub", "")
+        if not verify(issuer, r, sig):
+            return {"ok": False, "error": "bad signature"}
+        if r.get("until", 0) <= self.clock():
+            return {"ok": False, "error": "request expired"}
+        labels = set(self.current_labels())
+        if not all(f"{k}:{v}" in labels for k, v in r.get("audience", {}).items()):  # the broker's audience rule
+            return {"ok": False, "error": "audience mismatch"}
+        if any(x["request"].get("request_id") == r.get("request_id") and x["sender"] == issuer for x in self.inbox):
+            return {"ok": False, "error": "duplicate request"}
+        self.inbox.append({"request": r, "sender": issuer, "ts": self.clock()})
+        self.log.emit("solicit", self.pen, f"직접 요청 받음 {r.get('request_id')}: {str(r.get('title', ''))[:40]}")
+        for app in self.apps:
+            asyncio.create_task(app.on_request(self, r, issuer))
+        return {"ok": True, "received": True}
 
     # ---- platform ops ----
     async def _engage(self, msg: dict) -> dict:

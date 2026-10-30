@@ -12,8 +12,9 @@ def nonce(*parts):
     return h(canon([*parts, time.time()]))[:12]
 
 
-async def open_event(w, text=CALL):
-    """organizer: recorder contract -> CEO approval -> event declaration -> reviewer contract -> notice"""
+async def open_event(w, text=CALL, reviewer=None, post=True):
+    """organizer: recorder contract -> CEO approval -> event declaration -> reviewer contract -> notice.
+    reviewer: a pre-checked candidate (else the broker's top review hit); post=False builds the notice but does not post it"""
     org, out = w.org, {"approved": False}
     rec_hit = (await org.brokers[OPEN].find("원장 기록 보관 열람 통제", role="record", identity=org.identity))["peers"][0]
     R = org.recorder(rec_hit["recorder_url"])
@@ -29,7 +30,7 @@ async def open_event(w, text=CALL):
         return out
     ev_rec = await R.record("event", event, {org.identity.pub: org.sign(event), ceo_hit["pub"]: apr["sig"]})
     cr = await R.record("contract", c_rec, {org.identity.pub: org.sign(c_rec), rec_hit["pub"]: eng["sig"]})
-    rev_hit = (await org.brokers[REVIEW].find("공모 심사 평가 기준", role="review", identity=org.identity))["peers"][0]
+    rev_hit = reviewer or (await org.brokers[REVIEW].find("공모 심사 평가 기준", role="review", identity=org.identity))["peers"][0]
     c_rev = {"event_id": ev_id, "role": "review", "issuer": org.identity.pub, "contractor": rev_hit["pub"], "nonce": nonce("rev")}
     eng2 = await org.call(rev_hit["url"], {"op": "engage", "role": "review", "contract": c_rev, "request": {"text": text}})
     assert eng2["ok"], eng2
@@ -41,7 +42,7 @@ async def open_event(w, text=CALL):
               "event_hash": ev_rec["hash"], "approver_pub": ceo_hit["pub"],
               "recorder_pub": rec_hit["pub"], "recorder_url": rec_hit["recorder_url"],
               "contracts": [{"role": "record", "hash": cr["hash"]}, {"role": "review", "hash": cv["hash"]}]}
-    posted = await org.brokers[OPEN].post_notice(org.identity, notice)
+    posted = await org.brokers[OPEN].post_notice(org.identity, notice) if post else None
     out.update(approved=True, event_hash=ev_rec["hash"], reviewer=rev_hit, notice=notice, posted=posted)
     return out
 

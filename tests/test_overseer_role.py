@@ -98,5 +98,5 @@ async def test_p3c6_snapshot_op_only_for_viewers_and_cached(setup, settings):
 
 
 def test_p3c7_overseer_has_no_write_or_content_ops(setup):
-    assert set(setup["ov"].skills()) == {"engage", "approve", "overseer_snapshot"}
+    assert set(setup["ov"].skills()) == {"engage", "approve", "solicit", "overseer_snapshot"}  # platform ops + read-only snapshot
     assert setup["ov"].offers() == []

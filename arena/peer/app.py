@@ -34,5 +34,9 @@ class PeerApp:
     async def approve_event(self, peer, event: dict, request: dict) -> Decision | None:
         return None
 
+    async def on_request(self, peer, request: dict, sender: str) -> None:
+        """a direct request (no notice board) arrived and was accepted into the inbox; runs in the background"""
+        return None
+
     async def start(self, peer) -> None:
         pass

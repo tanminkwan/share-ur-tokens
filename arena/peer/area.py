@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable, Protocol
+from urllib.parse import urlparse
 
 from ..config import Settings
 
@@ -18,6 +19,7 @@ class Doc:
 
 
 class PublicArea(Protocol):
+    async def refresh(self) -> bool: ...
     def documents(self, include_owner_only: bool = False) -> list[Doc]: ...
     def lines(self, include_owner_only: bool = False) -> list[str]: ...
     def add_note(self, text: str, doc: str | None = None) -> None: ...
@@ -30,6 +32,9 @@ def _clean(line: str) -> str:
 class LocalFolderArea:
     def __init__(self, root: str, settings: Settings):
         self.root, self.settings = root, settings
+
+    async def refresh(self):
+        return True  # the folder is read on every call
 
     def documents(self, include_owner_only=False):
         if not os.path.isdir(self.root):
@@ -56,3 +61,34 @@ class LocalFolderArea:
         os.makedirs(self.root, exist_ok=True)
         with open(os.path.join(self.root, name), "a", encoding="utf-8") as f:
             f.write(f"- {' '.join(text.split())}\n")
+
+
+# ---------------- opening a public area by address ----------------
+_FACTORIES: dict[str, Callable[..., PublicArea]] = {}
+
+
+def register_area(scheme: str, factory: Callable[..., PublicArea]) -> None:
+    """add a storage kind (e.g. a cloud bucket) without touching the platform: factory(address, settings, **kw)"""
+    _FACTORIES[scheme] = factory
+
+
+def open_area(address: str, settings: Settings, **kw) -> PublicArea:
+    scheme = urlparse(address).scheme
+    if scheme not in _FACTORIES:
+        raise ValueError(f"unknown public area address: {address!r} (known: {', '.join(sorted(s or 'path' for s in _FACTORIES))})")
+    return _FACTORIES[scheme](address, settings, **kw)
+
+
+def _local(address, settings, **kw):
+    return LocalFolderArea(urlparse(address).path if address.startswith("file://") else address, settings)
+
+
+def _url(address, settings, **kw):
+    from .url_area import UrlArea
+    return UrlArea(address, settings, **kw)
+
+
+for _s in ("", "file"):
+    register_area(_s, _local)
+for _s in ("http", "https"):
+    register_area(_s, _url)

@@ -8,7 +8,7 @@ from typing import Callable, Iterable
 
 from ..config import Settings
 from ..crypto import Identity, pen_name, verify
-from ..ledger import JsonlStore, Ledger, LedgerStore, events
+from ..ledger import JsonlStore, Ledger, LedgerStore, contribution, events
 
 
 class RecorderService:
@@ -52,6 +52,13 @@ class RecorderService:
             hidden = events(self.ledger.chain).get(p["event_id"], {}).get("policy", {}).get("hidden_roles", [])
             out.update(role=p["role"], issuer=p["issuer"], contractor=None if p["role"] in hidden else p["contractor"])
         return out
+
+    def track(self, pub: str) -> dict:
+        """public track record of one key: counts only, no counterparties, no content hashes"""
+        if not self.settings.recorder_public_track:
+            return {"ok": False, "error": "track records are not public on this recorder"}
+        empty = {"published": 0, "received_by": 0, "verdicts_received": {}, "verdicts_given": {}, "roles": {}, "events": 0, "approvals": 0}
+        return {"ok": True, "pub": pub, "track": contribution(self.ledger.chain).get(pub, empty)}
 
     def audit(self) -> dict:
         return {"ok": True, "status": self.ledger.audit(), "length": len(self.ledger.chain), "head": self.ledger.head()}

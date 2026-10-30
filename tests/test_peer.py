@@ -57,7 +57,7 @@ async def test_pb8_ops_from_apps_and_unknown_op(tmp_path, settings, broker):
     p = make_peer(tmp_path, settings, broker, apps=[EchoApp()])
     assert await p.handle({"op": "hello", "who": "me"}) == {"ok": True, "hello": "me"}
     assert await p.handle({"op": "nope"}) == {"ok": False, "error": "unknown op: nope"}
-    assert set(p.skills()) == {"engage", "approve", "hello"}
+    assert set(p.skills()) == {"engage", "approve", "solicit", "hello"}
     assert p.offers() == ["x", "judge"]
 
 

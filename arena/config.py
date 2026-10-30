@@ -27,6 +27,15 @@ def _opt(v: str) -> str | None:
     return v or None
 
 
+def _bool(v: str) -> bool:
+    t = v.strip().lower()
+    if t in ("1", "true", "yes", "on"):
+        return True
+    if t in ("0", "false", "no", "off"):
+        return False
+    raise ValueError("true 또는 false여야 합니다")
+
+
 def F(key: str, default: Any, parse: Callable[[str], Any], doc: str):
     meta = {"key": key, "parse": parse, "doc": doc, "default": default}
     if isinstance(default, list):
@@ -144,3 +153,17 @@ class Settings(EnvSettings):
     overseer_viewers: list[str] = F("ARENA_OVERSEER_VIEWERS", [], _list, "관전 결과를 볼 수 있는 공개키(쉼표 구분)")
     overseer_cache_sec: float = F("ARENA_OVERSEER_CACHE_SEC", 1.0, float, "관전 결과 캐시(초)")
     overseer_top_flows: int = F("ARENA_OVERSEER_TOP_FLOWS", 5, int, "공유 흐름 상위 개수")
+    # phase 4: public area by address, direct requests, track records, capability labels
+    area_cache_sec: float = F("ARENA_AREA_CACHE_SEC", 60.0, float, "URL 공개 영역을 다시 가져오기 전 캐시(초)")
+    area_http_token: str | None = F("ARENA_AREA_HTTP_TOKEN", None, _opt, "URL 공개 영역 인증 토큰(Bearer, 비면 인증 없음)")
+    area_http_timeout_sec: float = F("ARENA_AREA_HTTP_TIMEOUT_SEC", 10.0, float, "URL 공개 영역 가져오기 제한 시간(초)")
+    area_local_notes_dir: str = F("ARENA_AREA_LOCAL_NOTES_DIR", "data/area-notes", str, "URL 공개 영역의 경험 노트·소유자 메모를 쓰는 로컬 폴더")
+    solicit_inbox_size: int = F("ARENA_SOLICIT_INBOX_SIZE", 200, int, "직접 요청 받은 편지함 크기")
+    recorder_public_track: bool = F("ARENA_RECORDER_PUBLIC_TRACK", True, _bool, "recorder가 공개키별 실적 집계를 공개할지(GET /track/{pub})")
+    peer_track_recorders: list[str] = F("ARENA_PEER_TRACK_RECORDERS", [], _list, "내 실적을 확인할 recorder 주소(쉼표 구분, 쓴 recorder는 자동으로 더해짐)")
+    label_auto: bool = F("ARENA_LABEL_AUTO", True, _bool, "역량 라벨 자율 갱신을 켤지")
+    label_role_prefix: str = F("ARENA_LABEL_ROLE_PREFIX", "역할:", str, "원장 근거 역량 라벨 접두사")
+    label_field_prefix: str = F("ARENA_LABEL_FIELD_PREFIX", "분야:", str, "지식 근거 역량 라벨 접두사")
+    label_role_min: int = F("ARENA_LABEL_ROLE_MIN", 1, int, "역할 라벨을 붙이는 최소 계약 수")
+    label_field_max: int = F("ARENA_LABEL_FIELD_MAX", 5, int, "분야 라벨 최대 개수")
+    label_evidence_min_len: int = F("ARENA_LABEL_EVIDENCE_MIN_LEN", 8, int, "분야 라벨 근거 문장의 최소 길이")
