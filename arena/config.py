@@ -3,7 +3,8 @@
     s = Settings.load()                       # os.environ + ./.env
     s = Settings.load(env={...}, dotenv_path=None)  # tests: fully isolated
 
-Add a setting by adding one Field below; `.env.example` must list it (a test checks).
+EnvSettings is the mechanism; Settings holds the platform's keys. Apps and the demo declare their own
+EnvSettings subclasses the same way. Add a setting by adding one F(...) field; `.env.example` must list it (a test checks).
 """
 from __future__ import annotations
 
@@ -33,8 +34,49 @@ def F(key: str, default: Any, parse: Callable[[str], Any], doc: str):
     return field(default=default, metadata=meta)
 
 
+class EnvSettings:
+    """mechanism shared by every settings class (platform, apps, demo)"""
+
+    @classmethod
+    def env_keys(cls) -> list[str]:
+        return [f.metadata["key"] for f in fields(cls)]
+
+    @classmethod
+    def describe(cls) -> list[tuple[str, Any, str]]:
+        return [(f.metadata["key"], f.metadata["default"], f.metadata["doc"]) for f in fields(cls)]
+
+    @classmethod
+    def load(cls, env: dict | None = None, dotenv_path: str | None = ".env"):
+        merged: dict[str, str] = {}
+        if dotenv_path and os.path.exists(dotenv_path):
+            merged.update({k: v for k, v in dotenv_values(dotenv_path).items() if v is not None})
+        merged.update(os.environ if env is None else env)
+        values = {}
+        for f in fields(cls):
+            key = f.metadata["key"]
+            raw = merged.get(key)
+            if raw is None or raw == "":
+                d = f.metadata["default"]
+                values[f.name] = list(d) if isinstance(d, list) else d
+                continue
+            try:
+                values[f.name] = f.metadata["parse"](raw)
+            except (TypeError, ValueError) as e:
+                raise ConfigError(f"{key} 값이 잘못되었습니다: {raw!r} ({e})") from e
+        return cls(**values)
+
+    def require(self, *names: str) -> None:
+        by_name = {f.name: f.metadata["key"] for f in fields(self)}
+        missing = [by_name[n] for n in names if getattr(self, n) in (None, "", [])]
+        if missing:
+            raise ConfigError("필수 설정이 없습니다: " + ", ".join(missing))
+
+    def key_of(self, name: str) -> str:
+        return next(f.metadata["key"] for f in fields(self) if f.name == name)
+
+
 @dataclass
-class Settings:
+class Settings(EnvSettings):
     # network
     host: str = F("ARENA_HOST", "127.0.0.1", str, "서비스가 듣는 주소")
     http_timeout_sec: float = F("ARENA_HTTP_TIMEOUT_SEC", 60.0, float, "클라이언트 기본 제한 시간(초)")
@@ -62,46 +104,22 @@ class Settings:
     # display
     pen_name_prefix: str = F("ARENA_PEN_NAME_PREFIX", "필명-", str, "표시용 이름 접두사")
     pen_name_len: int = F("ARENA_PEN_NAME_LEN", 6, int, "표시용 이름에 쓰는 공개키 글자 수")
-    # llm (used from phase 2)
-    llm_base_url: str | None = F("ARENA_LLM_BASE_URL", None, _opt, "OpenAI 호환 엔드포인트(삼성SDS Cloud AI 서비스)")
+    # llm
+    llm_backend: str = F("ARENA_LLM_BACKEND", "compat", str, "LLM 백엔드: compat(OpenAI 호환, 삼성SDS Cloud AI 서비스) 또는 claude")
+    llm_base_url: str | None = F("ARENA_LLM_BASE_URL", None, _opt, "OpenAI 호환 엔드포인트 주소")
     llm_api_key: str | None = F("ARENA_LLM_API_KEY", None, _opt, "그 엔드포인트의 API 키")
+    llm_claude_api_key: str | None = F("ARENA_LLM_CLAUDE_API_KEY", None, _opt, "Claude API 키(백엔드가 claude일 때)")
     llm_model_agent: str | None = F("ARENA_LLM_MODEL_AGENT", None, _opt, "비서 에이전트용 모델")
-    llm_model_persona: str | None = F("ARENA_LLM_MODEL_PERSONA", None, _opt, "페르소나용 모델")
+    llm_model_persona: str | None = F("ARENA_LLM_MODEL_PERSONA", None, _opt, "페르소나(사람 역할)용 모델")
     llm_concurrency: int = F("ARENA_LLM_CONCURRENCY", 6, int, "LLM 동시 호출 상한")
-
-    @classmethod
-    def env_keys(cls) -> list[str]:
-        return [f.metadata["key"] for f in fields(cls)]
-
-    @classmethod
-    def describe(cls) -> list[tuple[str, Any, str]]:
-        return [(f.metadata["key"], f.metadata["default"], f.metadata["doc"]) for f in fields(cls)]
-
-    @classmethod
-    def load(cls, env: dict | None = None, dotenv_path: str | None = ".env") -> "Settings":
-        merged: dict[str, str] = {}
-        if dotenv_path and os.path.exists(dotenv_path):
-            merged.update({k: v for k, v in dotenv_values(dotenv_path).items() if v is not None})
-        merged.update(os.environ if env is None else env)
-        values = {}
-        for f in fields(cls):
-            key = f.metadata["key"]
-            raw = merged.get(key)
-            if raw is None or raw == "":
-                d = f.metadata["default"]
-                values[f.name] = list(d) if isinstance(d, list) else d
-                continue
-            try:
-                values[f.name] = f.metadata["parse"](raw)
-            except (TypeError, ValueError) as e:
-                raise ConfigError(f"{key} 값이 잘못되었습니다: {raw!r} ({e})") from e
-        return cls(**values)
-
-    def require(self, *names: str) -> None:
-        by_name = {f.name: f.metadata["key"] for f in fields(self)}
-        missing = [by_name[n] for n in names if getattr(self, n) in (None, "", [])]
-        if missing:
-            raise ConfigError("필수 설정이 없습니다: " + ", ".join(missing))
-
-    def key_of(self, name: str) -> str:
-        return next(f.metadata["key"] for f in fields(self) if f.name == name)
+    llm_retries: int = F("ARENA_LLM_RETRIES", 2, int, "빈 응답·JSON 아님·HTTP 오류일 때 다시 묻는 횟수")
+    llm_max_tokens: int = F("ARENA_LLM_MAX_TOKENS", 6000, int, "응답 최대 토큰")
+    llm_timeout_sec: float = F("ARENA_LLM_TIMEOUT_SEC", 240.0, float, "LLM 호출 제한 시간(초)")
+    llm_effort: str = F("ARENA_LLM_EFFORT", "low", str, "기본 추론 강도(reasoning_effort)")
+    # peer
+    a2a_timeout_sec: float = F("ARENA_A2A_TIMEOUT_SEC", 120.0, float, "peer 사이 A2A 호출 제한 시간(초)")
+    profile_ttl_sec: float = F("ARENA_PROFILE_TTL_SEC", 604800.0, float, "프로필 만기(초)")
+    profile_lines_max: int = F("ARENA_PROFILE_LINES_MAX", 12, int, "프로필 요약에 넣는 공개 영역 최근 줄 수")
+    area_notes_file: str = F("ARENA_AREA_NOTES_FILE", "notes.md", str, "공개 영역에서 경험 노트를 덧붙이는 파일")
+    area_owner_prefix: str = F("ARENA_AREA_OWNER_PREFIX", "_", str, "이 글자로 시작하는 문서는 소유자 전용")
+    event_log_size: int = F("ARENA_EVENT_LOG_SIZE", 2000, int, "관측 로그 보관 건수")
