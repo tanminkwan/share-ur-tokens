@@ -293,12 +293,27 @@ class EventAssistant:
             if not entries:
                 continue
             first, top = st.ledger_seen == 0, max(e["seq"] for e in entries)
-            new = [e for e in entries if e["seq"] > st.ledger_seen and not any(e.get(k) == ctx.pub for k in self.MINE)]
+            new = [e for e in entries if e["seq"] > st.ledger_seen and not any(e.get(k) == ctx.pub for k in self.MINE) and self.concerns_me(ctx, st, e)]
             st.ledger_seen = max(st.ledger_seen, top)
             self.save(ctx, st)
             if new and not first:
                 lines = [self.progress_line(ctx, st, e) for e in new]
                 await self.feed(ctx, st.event_id, "[원장 새 기록] 이 이벤트의 원장에 다른 사람의 기록이 올랐다(코드가 읽음).\n" + "\n".join(lines))
+
+    WAKE_HOST = ("attest",)  # results are what a host collects; its own moves come by message or tool result
+
+    def concerns_me(self, ctx, st, e) -> bool:
+        """a new ledger entry worth a turn: one naming me, or (host) a joint confirmation, or (participant, when the event has
+        assignments) one by someone I share an assignment with or by the issuer; without assignments, every entry"""
+        named = [e.get("contractor"), *(e.get("parties") or []), *[p for v in (e.get("subjects") or {}).values() for p in v]]
+        if ctx.pub in named:
+            return True
+        if st.role == "host":
+            return e["type"] in self.WAKE_HOST
+        mates = {p for v in st.assignments.values() if ctx.pub in v for p in v} - {ctx.pub}
+        if not st.assignments:
+            return True
+        return e.get("author") in mates or e.get("issuer") == st.issuer_pub or bool(set(e.get("parties") or []) & mates)
 
     async def idle_check(self, ctx):
         """an open event with no input for a while: wake up and ask myself whether the rules leave something to do"""

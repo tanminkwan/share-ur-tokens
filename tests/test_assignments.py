@@ -68,3 +68,30 @@ async def test_p5c41_the_state_line_shows_assignments_and_mine(eco):
     line = asst(b)._system(ctx(b), st_b)
     assert f"s1={a.pen}·{b.pen}" in line and "내 배정: s1" in line and "s2" in line.split("내 배정:")[0]
     assert "내 배정: s1 /" in line or line.split("내 배정: ")[1].startswith("s1")
+
+
+async def test_p5c42_ledger_wake_ups_only_for_what_concerns_me(eco):
+    """run 11: 142 of 232 turns were waits, many on ledger entries of matches the agent was not in"""
+    import dataclasses
+    from tests.test_reveal_carry import _commit
+    ev = await opened(eco)
+    host, a, b = eco.host, eco.a, eco.b
+    host.llm.push("assign", subjects_json=json.dumps({"s1": [a.pen], "s2": [b.pen]}))
+    await asst(host).feed(ctx(host), ev, "배정하라")
+    await settle(host)
+    for p in (host, a, b):
+        asst(p).s = dataclasses.replace(asst(p).s, assistant_ledger_watch_sec=0.0)
+        await asst(p).ledger_check(ctx(p))
+    n_a, n_h = len(asst(a).events[ev].transcript), len(asst(host).events[ev].transcript)
+    await _commit(b, ev, "s2-1", "x")  # b's own subject: neither a nor the host needs to wake up
+    for p in (a, host):
+        await asst(p).ledger_check(ctx(p))
+    await settle(a, host)
+    assert not [x for x in asst(a).events[ev].transcript[n_a:] if "[원장 새 기록]" in x]
+    assert not [x for x in asst(host).events[ev].transcript[n_h:] if "[원장 새 기록]" in x]
+    # a joint confirmation wakes the host (results are what the host collects)
+    p = {"event_id": ev, "kind": "pair", "subject": "s2", "value": {}, "parties": [b.identity.pub], "nonce": "n", "group_id": "public"}
+    assert (await eco.svc.record("attest", p, {b.identity.pub: b.identity.sign(p)}))["ok"]
+    await asst(host).ledger_check(ctx(host))
+    await settle(host)
+    assert [x for x in asst(host).events[ev].transcript[n_h:] if "[원장 새 기록]" in x]

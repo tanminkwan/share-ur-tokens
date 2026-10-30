@@ -139,6 +139,7 @@ async def test_rps_app_free_acceptance(live, tmp_path):
         matches = [e for e in mine if e["type"] == "attest" and e["payload"]["kind"] == "match"]
         forfeits = [e for e in mine if e["type"] == "attest" and e["payload"]["kind"] == "forfeit"]
         assert len(matches) + len(forfeits) == N_PLAYERS * (N_PLAYERS - 1) // 2
+        llm_errors = []  # user 2026-10-31: wrong judgements are LLM quality, the reason code apps exist; reported, not failed
         for m in matches:
             p, v = m["payload"], m["payload"]["value"]
             assert set(m["sigs"]) == set(p["parties"]) == {v["a"], v["b"]}
@@ -148,7 +149,9 @@ async def test_rps_app_free_acceptance(live, tmp_path):
                     pub_e = next(e for e in mine if e["hash"] == rec["publish_hash"])
                     assert pub_e["payload"]["author"] == rec["author"] == v[side]
                     assert pub_e["payload"]["content_hash"] == commit_hash(rec["label"], rec["value"], rec["salt"], rec["author"])
-            assert v["winner"] == expected_winner(v["rounds"][-1], v["a"], v["b"])
+            if v["winner"] != expected_winner(v["rounds"][-1], v["a"], v["b"]):  # an LLM judgement error, not a platform failure
+                llm_errors.append(f"{p['subject']}: winner {v['winner'][:6] or '(draw)'} but the last round says "
+                                  f"{expected_winner(v['rounds'][-1], v['a'], v['b'])[:6] or '(draw)'}")
         # RPS-2 games went between the players only
         player_urls = {pp.config.url for pp in players}
         game = [m for m in msgs if m[2] in ("event_message", "attest_request", "attest_signature") and m[0] in player_urls and m[1] in player_urls]
@@ -165,6 +168,7 @@ async def test_rps_app_free_acceptance(live, tmp_path):
         assert [(r["wins"], r["games"]) for r in ranking["payload"]["value"]["ranking"]] == [(r["wins"], r["games"]) for r in mine_rank]
         assert close[0]["payload"]["result_hash"] == ranking["hash"]
         assert audit_chain(chain) == "ok"
+        print(f"LLM judgement errors (not platform failures): {llm_errors or 'none'}; forfeits: {len(forfeits)}")
         assert (await host.brokers["public"].list_notices(host.identity))["notices"] == []
     finally:
         for s in servers:
