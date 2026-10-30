@@ -115,6 +115,9 @@ async def publish_text(A, ctx, st, text):
 
 
 async def commit(A, ctx, st, label, value):
+    allowed = st.policy.get("reveal_values")
+    if allowed and value not in allowed:  # enforced by code; the ledger refuses such a reveal too
+        return {"error": f"값은 이벤트가 정한 것 중 하나여야 한다: {', '.join(allowed)} (받은 값: {value})"}
     if label in st.secrets:
         return {"error": f"라벨 {label}은 이미 먼저 등록했다", **{k: st.secrets[label][k] for k in ("commit", "publish_hash")}}
     salt = nonce(label)

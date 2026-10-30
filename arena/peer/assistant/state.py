@@ -35,6 +35,8 @@ class EventState:
     peers: dict = field(default_factory=dict)        # pub -> url learned from messages and contracts
     contracts: list = field(default_factory=list)    # [role, contractor pub] this host has contracted (kept by code)
     applicants: list = field(default_factory=list)   # pubs whose signed join carried this event's rules hash (checked by code)
+    policy: dict = field(default_factory=dict)       # the event's policy block (roles, allowed revealed values, ...)
+    ledger_seen: int = 0                             # the last ledger seq of this event the assistant has looked at
     sent_reveals: dict = field(default_factory=dict)  # my label -> handles I sent its reveal record to (kept by code)
     reveals: dict = field(default_factory=dict)      # "author pub|label" -> a received reveal record the code checked against the ledger
     roster: list = field(default_factory=list)       # pubs seen in this event's ledger entries (shown as handles)
@@ -50,7 +52,7 @@ class EventState:
     task: asyncio.Task | None = None
 
     KEEP = ("event_id", "role", "title", "rules", "rules_hash", "group_id", "recorder_url", "recorder_pub", "issuer_pub", "issuer_url",
-            "offer_roles", "transcript", "pending", "proposals", "peers", "contracts", "applicants", "sent_reveals", "reveals", "roster", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed",
+            "offer_roles", "transcript", "pending", "proposals", "peers", "contracts", "applicants", "policy", "ledger_seen", "sent_reveals", "reveals", "roster", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed",
             "last_input_at", "idle_checks")
 
     def to_dict(self) -> dict:

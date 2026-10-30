@@ -1,0 +1,121 @@
+[assistant] 필명-675513: 이벤트 개최 ev-1cec151f20 'peer 가위바위보 대회' (규칙 해시 cc6da50285, 방식 assistant)
+[assistant] 필명-675513: 참여 중인 이벤트 1건을 로컬에서 불러와 이어 감
+[assistant] 필명-675513: [ev-1cec151f20] event_progress → {"ok": true, "progress": ["1 event {\"mode\": \"assistant\", \"issuer\": \"필명-675513\", \"kind\": \"가위바위보\"} (항목 #36628c
+[decide   ] 필명-a30f89: 소유자에게 물음 'peer 가위바위보 대회에 참가하시겠습니까?' → 예: 친선 대회라 참가한다
+[assistant] 필명-a30f89: [ev-1cec151f20] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-675513: [ev-1cec151f20] 기다림: 소유자가 대회를 진행하라 명령했으므로 현재는 참가 신청을 기다려야 합니다. 아직 참가자가 없으니 아무 행동도 하지 않고 대기합니다.
+[decide   ] 필명-9c7cb9: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-9c7cb9: [ev-1cec151f20] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c390f7: 소유자에게 물음 '‘peer 가위바위보 대회’에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-c390f7: [ev-1cec151f20] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-31cc72: 소유자에게 물음 '필명-31cc72이 'peer 가위바위보 대회'에 참가해도 될까요?' → 아니오: 이번에는 쉬겠다
+[assistant] 필명-31cc72: [ev-1cec151f20] ask_owner → {"yes": false, "why": "이번에는 쉬겠다"}
+[assistant] 필명-a30f89: [ev-1cec151f20] join_event → {"ok": true}
+[assistant] 필명-9c7cb9: [ev-1cec151f20] join_event → {"ok": true}
+[assistant] 필명-c390f7: [ev-1cec151f20] join_event → {"ok": true}
+[decide   ] 필명-675513: 소유자에게 물음 '이벤트에 참가를 허락해 주시겠습니까?' → 예: 친선 대회라 참가한다
+[assistant] 필명-675513: [ev-1cec151f20] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-a30f89: [ev-1cec151f20] 기다림: 이미 참가 신청을 완료했으니, 현재는 개최자가 대진표를 공개하고 나에게 match 정보를 보낼 때까지 기다려야 합니다.
+[assistant] 필명-31cc72: [ev-1cec151f20] note → {"ok": true}
+[assistant] 필명-31cc72: [ev-1cec151f20] 기다림: Owner declined participation, so I cannot join or proceed with any event actions.
+[assistant] 필명-c390f7: [ev-1cec151f20] 기다림: 이벤트에 참가 신청을 마쳤고, 현재는 대진표가 발표되기를 기다려야 합니다. 규칙에 따라 대진표가 공개될 때까지 별다른 행동을 할 필요가 없으며, 다음 지시를 기다리는 것이 맞습니다
+[assistant] 필명-9c7cb9: [ev-1cec151f20] 기다림: I have applied to join the event and received confirmation. The next step is to wait for the organiz
+[contract ] 필명-a30f89: 'player' 역할 계약 수락: 참가 신청한 이벤트, 같은 규칙
+[assistant] 필명-675513: [ev-1cec151f20] contract → {"ok": true, "hash": "a5f7c8d6405ac680ac812e7185ab24c5165e80e3ba7c8e9eceed3b7afccc2092", "error": null, "contracts_so_fa
+[contract ] 필명-9c7cb9: 'player' 역할 계약 수락: 참가 신청한 이벤트, 같은 규칙
+[assistant] 필명-675513: [ev-1cec151f20] contract → {"ok": true, "hash": "c0520d0d8635eef086f4b792837c54a59f632646c525fdcf1d94d392f1ebc36d", "error": null, "contracts_so_fa
+[assistant] 필명-675513: [ev-1cec151f20] publish_text → {"error": "인자가 맞지 않음: text 없음"}
+[assistant] 필명-675513: [ev-1cec151f20] publish_text → {"ok": true, "content_hash": "635ff89e308210ddb37a2dc76475f988444dd3fc43eaa924e99f9fbe281924e5", "publish_hash": "419ea4
+[assistant] 필명-675513: [ev-1cec151f20] solicit → {"request_id": "ev-1cec151f20-46a1d5e1", "acks": {"http://127.0.0.1:42145": true, "http://127.0.0.1:60303": true, "http:
+[assistant] 필명-675513: [ev-1cec151f20] 기다림: All required steps (participation, contracts, publishing schedule, notifying peers) have been comple
+[assistant] 필명-675513: [ev-1cec151f20] 기다림: All required organizer steps have been completed: participation permission obtained, contracts made 
+[assistant] 필명-a30f89: [ev-1cec151f20] commit → {"ok": true, "label": "m1-1", "commit": "73f11dd034fd9549d05de068a674b7ef78054bf63feca977181fc7efb4628f8d", "publish_has
+[assistant] 필명-31cc72: [ev-1cec151f20] 기다림: Owner declined participation, so I have no permission to join or take any further actions in this ev
+[assistant] 필명-9c7cb9: [ev-1cec151f20] commit → {"ok": true, "label": "m3-1", "commit": "a905bfdd0121aeeb0fef80a7689294178b586f037de707035ba88ff3d091c48c", "publish_has
+[assistant] 필명-c390f7: [ev-1cec151f20] commit → {"ok": true, "label": "m3-1", "commit": "12c1bc8c95a30b018366546efb1f68cf7413bc097acc5bfb2c6596b146d58b42", "publish_has
+[assistant] 필명-675513: [ev-1cec151f20] 기다림: All organizer duties (permission, contracts, publishing schedule, notifying peers) are done. The pee
+[assistant] 필명-9c7cb9: [ev-1cec151f20] send → {"ok": true}
+[assistant] 필명-a30f89: [ev-1cec151f20] send → {"ok": true}
+[assistant] 필명-9c7cb9: [ev-1cec151f20] 기다림: I have committed my move for match m3-1 and sent the commit hash to the opponent (필명-c390f7). The ne
+[contract ] 필명-c390f7: 'player' 역할 계약 수락: 참가 신청한 이벤트, 같은 규칙
+[assistant] 필명-a30f89: [ev-1cec151f20] 기다림: I've committed my move for match m1 round 1 and sent the commit info to opponent #9c7cb9dbc7. Accord
+[assistant] 필명-675513: [ev-1cec151f20] contract → {"ok": true, "hash": "b730eb58d43861039a8dd3388af0a2bebeea17fdccfd4d7522e95bded47fa0a9", "error": null, "contracts_so_fa
+[assistant] 필명-675513: [ev-1cec151f20] 기다림: All organizer duties are complete: permission granted, contracts with all three peers made, schedule
+[assistant] 필명-c390f7: [ev-1cec151f20] send → {"ok": true}
+[assistant] 필명-a30f89: [ev-1cec151f20] 기다림: Opponent #9c7cb9 has not yet committed their move for match m1 round 1. According to the rules, afte
+[assistant] 필명-9c7cb9: [ev-1cec151f20] verify → {"ok": true, "exists": false, "type": null, "seal_ok": false, "event_id": null, "group_id": null, "content_of": {"hash":
+[assistant] 필명-c390f7: [ev-1cec151f20] 기다림: I have completed my commit for match m3 and notified the opponent. The next step is for the opponent
+[assistant] 필명-9c7cb9: [ev-1cec151f20] note → {"ok": true}
+[assistant] 필명-675513: [ev-1cec151f20] 기다림: The current ledger shows that only the first commit of match m1 by a30f89 has been made. The opponen
+[assistant] 필명-c390f7: [ev-1cec151f20] verify → {"error": "인자가 맞지 않음: hash 없음"}
+[assistant] 필명-9c7cb9: [ev-1cec151f20] 기다림: Opponent's commit for m1-1 is not yet on the ledger. I should wait for it to appear before proceedin
+[assistant] 필명-c390f7: [ev-1cec151f20] verify → {"ok": true, "exists": false, "type": null, "seal_ok": false, "event_id": null, "group_id": null, "content_of": {"hash":
+[assistant] 필명-9c7cb9: [ev-1cec151f20] verify → {"ok": true, "exists": false, "type": null, "seal_ok": false, "event_id": null, "group_id": null, "content_of": {"hash":
+[assistant] 필명-c390f7: [ev-1cec151f20] verify → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-9c7cb9: [ev-1cec151f20] verify → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-c390f7: [ev-1cec151f20] 기다림: I have already committed my move for match m3-1 and informed my opponent (peer #9c7cb9). According t
+[assistant] 필명-9c7cb9: [ev-1cec151f20] 기다림: We have already committed our move for match m3 round 1 and sent the commit hash to opponent 필명-c390
+[assistant] 필명-c390f7: [ev-1cec151f20] reveal → {"ok": true, "label": "m3-1", "value": "rock", "hash": "38b004620c2d3b473fa019ed0a188c9191a55d751192f51d4b09228cb9ff8d3e
+[assistant] 필명-9c7cb9: [ev-1cec151f20] commit → {"error": "인자가 맞지 않음: label, value 없음"}
+[assistant] 필명-c390f7: [ev-1cec151f20] send → {"ok": false, "error": "#9c7cb9dbc7? wait, opponent peer is 필명-9c7cb9 (hash #9c7cb9). Use exact peer ID: \"필명-9c7cb9\" o
+[assistant] 필명-9c7cb9: [ev-1cec151f20] commit → {"ok": true, "label": "m1-1", "commit": "d41b69d19fd7f046a4d5fd108547af0d37d3ba7826037f6955596099fa03d59f", "publish_has
+[assistant] 필명-c390f7: [ev-1cec151f20] send → {"ok": true}
+[assistant] 필명-9c7cb9: [ev-1cec151f20] send → {"ok": true}
+[assistant] 필명-c390f7: [ev-1cec151f20] 기다림: I have already committed and revealed my move for match m3‑1 and informed the opponent. The opponent
+[assistant] 필명-9c7cb9: [ev-1cec151f20] 기다림: I have committed my move for match m1-1 and sent the commit hash to the opponent (필명-a30f89). Accord
+[assistant] 필명-a30f89: [ev-1cec151f20] verify → {"ok": true, "exists": false, "type": null, "seal_ok": false, "event_id": null, "group_id": null, "content_of": {"hash":
+[assistant] 필명-a30f89: [ev-1cec151f20] 기다림: Opponent #9c7cb9 has not yet committed their move for match m1 round 1. According to the rules, I mu
+[assistant] 필명-9c7cb9: [ev-1cec151f20] reveal → {"error": "인자가 맞지 않음: label 없음"}
+[assistant] 필명-9c7cb9: [ev-1cec151f20] reveal → {"ok": true, "label": "m3-1", "value": "바위", "hash": "c955336d8b69071cae684c8dcf7a9092b4d818c04d0cb044e5a3f5a0ad6e1007",
+[assistant] 필명-9c7cb9: [ev-1cec151f20] commit → {"error": "인자가 맞지 않음: label, value 없음"}
+[assistant] 필명-9c7cb9: [ev-1cec151f20] commit → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-9c7cb9: [ev-1cec151f20] commit → {"ok": true, "label": "m3-2", "commit": "2a91e1b2fe884e7aede411b23426c86cf7be2bb95ad4e1ebabc3ed92725536cb", "publish_has
+[assistant] 필명-9c7cb9: [ev-1cec151f20] 기다림: We have committed and revealed our move for round 1 of match m3 and sent the commit. The opponent ha
+[assistant] 필명-31cc72: [ev-1cec151f20] 기다림: owner has declined participation, and I am not a contracted player in this event. There are no pendi
+[assistant] 필명-675513: [ev-1cec151f20] reveal → {"error": "먼저 등록한 라벨 m1-1이 없다"}
+[assistant] 필명-675513: [ev-1cec151f20] 기다림: All organizer steps are done. For match m1, the opponent (필명-9c7cb9) still needs to commit their mov
+[assistant] 필명-9c7cb9: [ev-1cec151f20] 기다림: For match m3, round 1 resulted in a tie (both rock). I have already committed my move for round 2 (m
+[assistant] 필명-a30f89: [ev-1cec151f20] reveal → {"ok": true, "label": "m1-1", "value": "가위", "hash": "f848f46991f71d8bc1d4bd2b8b6dc0e564ebd443bb8c1634f153e9e1b77c89fd",
+[assistant] 필명-a30f89: [ev-1cec151f20] 기다림: I have committed and revealed my move for match m1 round 1. According to the rules, after I reveal, 
+[assistant] 필명-c390f7: [ev-1cec151f20] 기다림: Both players have revealed their moves for round 1 of match m3 and it is a tie (both chose 바위/rock).
+[assistant] 필명-a30f89: [ev-1cec151f20] 기다림: Opponent #9c7cb9 has not yet revealed their move for match m1 round 1. According to the rules, after
+[assistant] 필명-9c7cb9: [ev-1cec151f20] 기다림: 현재 상태를 정리하면:
+[assistant] 필명-31cc72: [ev-1cec151f20] 기다림: I have no player contract and the owner declined participation. There are no pending actions for me.
+[assistant] 필명-675513: [ev-1cec151f20] 기다림: 현재 상태를 보면:
+[assistant] 필명-c390f7: [ev-1cec151f20] 기다림: 현재 m3 경기 1판이 비겼으므로 다음 판(2판)의 진행이 필요합니다. 규칙에 따르면 a(필명-9c7cb9)가 먼저 commit을 해야 하고, 그 다음에 b(필명-c390f7)인 
+[assistant] 필명-9c7cb9: [ev-1cec151f20] 기다림: 현재 나는 m3 경기의 라운드 2(m3-2)에서 ‘보’를 commit 했고, 아직 상대(필명-c390f7) 가 reveal 하지 않았다. 규칙에 따라 a는 b의 reveal가 원장
+[assistant] 필명-a30f89: [ev-1cec151f20] 기다림: I have completed my commit and reveal for match m1 round 1. The opponent (#9c7cb9) has not yet revea
+[assistant] 필명-31cc72: [ev-1cec151f20] 기다림: Owner declined participation, I have no player contract and no pending actions in the event.
+[assistant] 필명-675513: [ev-1cec151f20] 기다림: All organizer steps are completed. The only pending action is waiting for 필명-9c7cb9 to reveal their 
+[assistant] 필명-c390f7: [ev-1cec151f20] 기다림: 현재 m3 경기 1판이 비겼고, 규칙에 따라 a(필명-9c7cb9)가 다음 판(m3-2)의 commit을 먼저 해야 합니다. 아직 a의 commit이 원장에 없으므로 나는 기다려야
+[assistant] 필명-a30f89: [ev-1cec151f20] 기다림: I have completed my commit and reveal for match m1 round 1. The opponent #9c7cb9 has not yet reveale
+[assistant] 필명-9c7cb9: [ev-1cec151f20] send → {"ok": true}
+[assistant] 필명-9c7cb9: [ev-1cec151f20] 기다림: I have committed my move for round 2 of match m3 (label m3-2) and sent the commit hash to the oppone
+[assistant] 필명-c390f7: [ev-1cec151f20] verify → {"error": "인자가 맞지 않음: hash 없음"}
+[assistant] 필명-c390f7: [ev-1cec151f20] verify → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-c390f7: [ev-1cec151f20] commit → {"ok": true, "label": "m3-2", "commit": "d746daa34c240a2ff6e698694ab2e8426840900cb07db72769d95ab4569db214", "publish_has
+[assistant] 필명-c390f7: [ev-1cec151f20] 기다림: 현재 m3 경기의 2번째 판에서는 a인 필명-9c7cb9가 먼저 commit을 해야 합니다. 아직 그들의 commit이 원장에 나타나지 않았으며, 내가 즉시 commit을 진행하면
+[assistant] 필명-c390f7: [ev-1cec151f20] 기다림: 현재 m3 경기의 2번째 판에서 a(필명-9c7cb9)가 아직 commit을 하지 않았으며, 나는 b(필명-c390f7)로서 이미 commit을 수행했지만 규칙에 따라 a가 먼저 
+[assistant] 필명-c390f7: [ev-1cec151f20] 기다림: 현재 m3 경기의 2번째 판에서는 a(필명-9c7cb9)가 아직 commit을 하지 않았습니다. 나는 b(필명-c390f7)로서 이미 commit을 했으므로, a의 commit 및
+[assistant] 필명-c390f7: [ev-1cec151f20] 기다림: 현재 m3 경기 2번째 판에서 a(필명-9c7cb9)가 아직 commit을 하지 않았음. 나는 b(필명-c390f7)로서 이미 commit을 수행했으므로 a의 commit 및 re
+elapsed 902.8s, entries 15: ['event', 'contract', 'contract', 'publish', 'publish', 'publish', 'publish', 'contract', 'reveal', 'publish', 'reveal', 'publish', 'reveal', 'publish']
+E           AssertionError: the event did not close in time
+tests/live/test_rps_acceptance.py:125: AssertionError
+exit=1
+
+=== ledger ===
+0 genesis {}
+1 event {"kind": "가위바위보"}
+2 contract {"role": "player", "contractor": "a30f8995250aa7b9d626b19c327ad092f1b6bd574ee1221b6b2803000bfc7c96"}
+3 contract {"role": "player", "contractor": "9c7cb9dbc7e4f0fda25320798e598d55a06c4d2a7924269ec76c2b9ae7df760c"}
+4 publish {"author": "675513b810f7b16bcedce113fa532f2b661a5eb99e0976d9bef341c3fedb90d4"}
+5 publish {"author": "a30f8995250aa7b9d626b19c327ad092f1b6bd574ee1221b6b2803000bfc7c96", "label": "m1-1"}
+6 publish {"author": "9c7cb9dbc7e4f0fda25320798e598d55a06c4d2a7924269ec76c2b9ae7df760c", "label": "m3-1"}
+7 publish {"author": "c390f7a421cc72ccd6567c56a9f08ed95892db0ed3450db85c6f563874603d3d", "label": "m3-1"}
+8 contract {"role": "player", "contractor": "c390f7a421cc72ccd6567c56a9f08ed95892db0ed3450db85c6f563874603d3d"}
+9 reveal {"author": "c390f7a421cc72ccd6567c56a9f08ed95892db0ed3450db85c6f563874603d3d", "label": "m3-1", "value": "rock"}
+10 publish {"author": "9c7cb9dbc7e4f0fda25320798e598d55a06c4d2a7924269ec76c2b9ae7df760c", "label": "m1-1"}
+11 reveal {"author": "9c7cb9dbc7e4f0fda25320798e598d55a06c4d2a7924269ec76c2b9ae7df760c", "label": "m3-1", "value": "바위"}
+12 publish {"author": "9c7cb9dbc7e4f0fda25320798e598d55a06c4d2a7924269ec76c2b9ae7df760c", "label": "m3-2"}
+13 reveal {"author": "a30f8995250aa7b9d626b19c327ad092f1b6bd574ee1221b6b2803000bfc7c96", "label": "m1-1", "value": "가위"}
+14 publish {"author": "c390f7a421cc72ccd6567c56a9f08ed95892db0ed3450db85c6f563874603d3d", "label": "m3-2"}

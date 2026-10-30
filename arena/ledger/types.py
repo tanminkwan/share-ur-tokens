@@ -10,7 +10,7 @@ from typing import Callable
 from ..crypto import commit_hash
 from ..peer.plugin import valid_run
 
-POLICY_LISTS = ("roles", "conflict_roles", "hidden_roles")
+POLICY_LISTS = ("roles", "conflict_roles", "hidden_roles", "reveal_values")
 POLICY_MAPS = ("verdict_roles", "attest_roles")
 POLICY_KEYS = set(POLICY_LISTS) | set(POLICY_MAPS)
 ISSUER = "issuer"  # policy value meaning "the event issuer" rather than a contracted role
@@ -230,6 +230,9 @@ def _reveal_rule(chain, e, now, s):
         return "revealed value and salt do not match the registered hash"
     if any(x["type"] == "reveal" and x["payload"].get("commit") == p["commit"] for x in chain):
         return "this registration is already revealed"
+    allowed = events(chain)[p["event_id"]].get("policy", {}).get("reveal_values")
+    if allowed and p.get("value") not in allowed:
+        return f"value is not one of the event's allowed values {allowed}"
 
 
 # ---------------- close ----------------

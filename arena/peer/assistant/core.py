@@ -68,8 +68,12 @@ class EventAssistant:
             ctx.log.emit("assistant", ctx.pen, f"참여 중인 이벤트 {restored}건을 로컬에서 불러와 이어 감")
 
         async def loop():
+            last_ledger = 0.0
             while True:
                 try:
+                    if ctx.clock() - last_ledger >= self.s.assistant_ledger_watch_sec:
+                        last_ledger = ctx.clock()
+                        await self.ledger_check(ctx)
                     await self.idle_check(ctx)
                 except Exception as e:
                     ctx.log.emit("assistant", ctx.pen, f"점검 실패: {type(e).__name__}: {e}")
@@ -153,11 +157,11 @@ class EventAssistant:
 
     async def progress_lines(self, ctx, st) -> list[str]:
         """one short line per entry, the latest ones only; handles and short refs instead of 64-hex"""
-        lines = []
-        for e in (await self.progress_entries(ctx, st))[-self.s.assistant_progress_max:]:
-            rest = {k: v for k, v in e.items() if k not in ("seq", "type", "hash", "rules_hash") and v not in (None, [], "")}
-            lines.append(self.shorten(ctx, st, f"{e['seq']} {e['type']} {json.dumps(rest, ensure_ascii=False)} (항목 {e['hash']})"))
-        return lines
+        return [self.progress_line(ctx, st, e) for e in (await self.progress_entries(ctx, st))[-self.s.assistant_progress_max:]]
+
+    def progress_line(self, ctx, st, e) -> str:
+        rest = {k: v for k, v in e.items() if k not in ("seq", "type", "hash", "rules_hash", "salt") and v not in (None, [], "")}
+        return self.shorten(ctx, st, f"{e['seq']} {e['type']} {json.dumps(rest, ensure_ascii=False)} (항목 {e['hash']})")
 
     # ---------------- identification and checks enforced by code ----------------
     REVEAL_KEYS = {"author", "label", "value", "salt", "publish_hash"}
@@ -250,7 +254,8 @@ class EventAssistant:
         out = await announce_event(ctx, group=self.group, title=title, kind=kind, rules=rules, policy=policy,
                                    mode="assistant", apps=[], audience=audience, recorder=recorder)
         ev, rec = out["event_id"], out["recorder"]
-        st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url)
+        st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url,
+                                          policy=dict(policy))
         self.save(ctx, st)
         ctx.log.emit("assistant", ctx.pen, f"이벤트 개최 {ev} '{title}' (규칙 해시 {out['rules_hash'][:10]}, 방식 assistant)")
         await self.feed(ctx, ev, f"[소유자의 지시] {instruction}")
@@ -263,7 +268,7 @@ class EventAssistant:
         if change == "new" and st is None:
             st = self.events[ev] = EventState(ev, "participant", notice.get("title", ""), notice["rules"], h(notice["rules"].encode()),
                                               notice["group_id"], notice["recorder_url"], notice["recorder_pub"], notice["issuer_pub"],
-                                              notice["issuer_url"], offer_roles=list(notice.get("policy", {}).get("roles", [])),
+                                              notice["issuer_url"], offer_roles=list(notice.get("policy", {}).get("roles", [])), policy=dict(notice.get("policy", {})),
                                               notice_ver=notice.get("ver", 1))
             st.peers[notice["issuer_pub"]] = notice["issuer_url"]
             self.save(ctx, st)
@@ -274,6 +279,24 @@ class EventAssistant:
         elif st is not None and change == "closed" and not st.notice_closed:
             st.notice_closed = True
             await self.feed(ctx, ev, "[공지 마감] 개최자가 이 이벤트의 공지를 마감했다.")
+
+    MINE = ("author", "issuer")
+
+    async def ledger_check(self, ctx):
+        """new entries of others in my open events' ledger wake me up (each entry once); the first look only remembers where it is"""
+        for st in list(self.events.values()):
+            if st.closed:
+                continue
+            entries = await self.progress_entries(ctx, st)
+            if not entries:
+                continue
+            first, top = st.ledger_seen == 0, max(e["seq"] for e in entries)
+            new = [e for e in entries if e["seq"] > st.ledger_seen and not any(e.get(k) == ctx.pub for k in self.MINE)]
+            st.ledger_seen = max(st.ledger_seen, top)
+            self.save(ctx, st)
+            if new and not first:
+                lines = [self.progress_line(ctx, st, e) for e in new]
+                await self.feed(ctx, st.event_id, "[원장 새 기록] 이 이벤트의 원장에 다른 사람의 기록이 올랐다(코드가 읽음).\n" + "\n".join(lines))
 
     async def idle_check(self, ctx):
         """an open event with no input for a while: wake up and ask myself whether the rules leave something to do"""
@@ -288,8 +311,28 @@ class EventAssistant:
                                                   f"확인하고, 있으면 하라. 다른 사람이 이미 한 일을 기다리고 있지 않은지도 보라.\n[진행 현황] (원장, 코드가 읽음)\n{progress}", idle=True)
 
     # ---------------- the agent loop ----------------
+    async def learn_keys(self, ctx, st, text: str) -> None:
+        """64-hex values in an input that may be public keys I do not know yet: look them up in the event's ledger and on
+        the broker, so the LLM sees one name (the handle) for one person from the start"""
+        unknown = set(HEX64.findall(text)) - self._known_pubs(ctx, st) - set(st.aliases.values())
+        if not unknown:
+            return
+        await self.progress_entries(ctx, st)  # adds everyone named in this event's ledger to the roster
+        unknown -= set(st.roster)
+        if not unknown:
+            return
+        try:
+            profiles = (await ctx.brokers[self.group].list_profiles(identity=ctx.identity)).get("profiles", [])
+        except Exception:
+            profiles = []
+        for p in profiles:
+            if p["pub"] in unknown:
+                st.roster.append(p["pub"])
+                st.peers.setdefault(p["pub"], p.get("url"))
+
     async def feed(self, ctx, event_id: str, text: str, idle: bool = False):
         st = self.events[event_id]
+        await self.learn_keys(ctx, st, text)
         st.inbox.append(text)
         st.last_input_at = ctx.clock()
         if not idle:
@@ -319,7 +362,8 @@ class EventAssistant:
         return (f"당신은 peer '{ctx.pen}'의 비서 에이전트입니다. 이벤트 '{st.title}'(event_id {st.event_id}, broker 그룹 {st.group_id})에 "
                 f"{'개최자' if st.role == 'host' else '참가자'}로 참여합니다. 아래 이벤트 규칙을 정확히 따르세요. 규칙에 없는 일은 하지 말고, "
                 "확실하지 않으면 note로 적은 뒤 wait 하세요. 소유자(사람)에게 묻는 말은 한국어로 씁니다. "
-                "peer는 필명(필명-xxxxxx)으로, 해시는 #로 시작하는 짧은 참조로 부르며, 도구에도 그대로 넣으면 됩니다.\n\n[이벤트 규칙]\n" + st.rules +
+                "peer는 필명(필명-xxxxxx)으로, 해시는 #로 시작하는 짧은 참조로 부르며, 도구에도 그대로 넣으면 됩니다.\n\n[이벤트 규칙]\n" + st.rules
+                + (f"\n[등록 값] 이 이벤트에서 등록(commit)하는 값은 다음 중 하나다: {', '.join(st.policy['reveal_values'])}" if st.policy.get("reveal_values") else "") +
                 f"\n\n[나] {h(ctx.pub)}\n[개최자] {h(st.issuer_pub)}\n[지금 상태] {state}\n\n[쓸 수 있는 도구]\n{tools}\n\n"
                 "먼저 도구 하나를 고르면, 그 도구의 인자를 따로 묻습니다. 이번 입력에 대해 규칙이 정한 일을 다 했으면 wait를 고르세요.")
 

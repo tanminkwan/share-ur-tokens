@@ -25,7 +25,8 @@ from tests.test_processes import Proc, free_port
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 RULES = (ROOT / "dev" / "acceptance-rps-rules.md").read_text(encoding="utf-8")
-POLICY = {"roles": ["player"], "attest_roles": {"match": "player", "forfeit": "issuer", "ranking": "issuer"}}
+POLICY = {"roles": ["player"], "attest_roles": {"match": "player", "forfeit": "issuer", "ranking": "issuer"},
+          "reveal_values": ["가위", "바위", "보"]}  # event data, like the roles: the values a move may take
 INSTRUCTION = "규칙에 따라 이 대회를 끝까지 진행하라. 참가 신청이 오면 player 계약을 맺고, 선수가 3명이 되면 대진표를 만들어 보내라."
 N_PLAYERS, TIMEOUT = 3, 900
 
