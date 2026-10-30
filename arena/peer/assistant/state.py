@@ -37,6 +37,7 @@ class EventState:
     peers: dict = field(default_factory=dict)        # pub -> url learned from messages and contracts
     contracts: list = field(default_factory=list)    # [role, contractor pub] this host has contracted (kept by code)
     applicants: list = field(default_factory=list)   # pubs whose signed join carried this event's rules hash (checked by code)
+    roster: list = field(default_factory=list)       # pubs seen in this event's ledger entries (shown as handles)
     aliases: dict = field(default_factory=dict)      # what the LLM sees -> the real value: 필명-xxxxxx -> public key, #ab12.. -> hash
     last_action: list = field(default_factory=list)  # [tool, args] of the last tool run (to refuse an identical repeat)
     joined: bool = False
@@ -49,7 +50,7 @@ class EventState:
     task: asyncio.Task | None = None
 
     KEEP = ("event_id", "role", "title", "rules", "rules_hash", "group_id", "recorder_url", "recorder_pub", "issuer_pub", "issuer_url",
-            "offer_roles", "transcript", "pending", "proposals", "peers", "contracts", "applicants", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed",
+            "offer_roles", "transcript", "pending", "proposals", "peers", "contracts", "applicants", "roster", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed",
             "last_input_at", "idle_checks")
 
     def to_dict(self) -> dict:

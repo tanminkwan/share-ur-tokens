@@ -1,0 +1,122 @@
+[assistant] 필명-227f04: 이벤트 개최 ev-13e89814af 'peer 가위바위보 대회' (규칙 해시 eb6b5b4139, 방식 assistant)
+[assistant] 필명-227f04: 참여 중인 이벤트 1건을 로컬에서 불러와 이어 감
+[events   ] 필명-5f07c0: 이벤트 ev-13e89814af → 앱 assistant (방식 assistant)
+[events   ] 필명-ce14df: 이벤트 ev-13e89814af → 앱 assistant (방식 assistant)
+[events   ] 필명-c36703: 이벤트 ev-13e89814af → 앱 assistant (방식 assistant)
+[events   ] 필명-36f17e: 이벤트 ev-13e89814af → 앱 assistant (방식 assistant)
+[decide   ] 필명-c36703: 소유자에게 물음 '‘peer 가위바위보 대회’에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-c36703: [ev-13e89814af] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-5f07c0: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-5f07c0: [ev-13e89814af] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-36f17e: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 아니오: 이번에는 쉬겠다
+[assistant] 필명-36f17e: [ev-13e89814af] ask_owner → {"yes": false, "why": "이번에는 쉬겠다"}
+[decide   ] 필명-ce14df: 소유자에게 물음 '새로운 ‘peer 가위바위보 대회’에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-ce14df: [ev-13e89814af] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-227f04: 소유자에게 물음 '필명-227f04 이벤트 'peer 가위바위보 대회'에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-227f04: [ev-13e89814af] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-c36703: [ev-13e89814af] join_event → {"ok": true}
+[assistant] 필명-ce14df: [ev-13e89814af] join_event → {"ok": true}
+[assistant] 필명-5f07c0: [ev-13e89814af] join_event → {"ok": true}
+[decide   ] 필명-227f04: 소유자에게 물음 '이벤트에 참가 신청을 하시겠습니까?' → 예: 친선 대회라 참가한다
+[assistant] 필명-227f04: [ev-13e89814af] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-36f17e: [ev-13e89814af] note → {"ok": true}
+[assistant] 필명-227f04: [ev-13e89814af] contract → {"ok": false, "error": "참가 신청한 peer만 계약할 수 있다(신청자: 3명)"}
+[assistant] 필명-227f04: [ev-13e89814af] contract → {"ok": false, "error": "참가 신청한 peer만 계약할 수 있다(신청자: 0명)"}
+[assistant] 필명-227f04: [ev-13e89814af] note → {"ok": true}
+[decide   ] 필명-227f04: 소유자에게 물음 '추가 참가자를 모집해 주시겠습니까?' → 예: 친선 대회라 참가한다
+[assistant] 필명-227f04: [ev-13e89814af] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-227f04: [ev-13e89814af] publish_text → {"ok": true, "content_hash": "1be6b3d18f2bad220bdff3715ee271a07fdcd854640f3ee4df6a454b57e60564", "publish_hash": "bf6fef
+[solicit  ] 필명-ce14df: 직접 요청 받음 ev-13e89814af-8e113b1d: 
+[solicit  ] 필명-c36703: 직접 요청 받음 ev-13e89814af-8e113b1d: 
+[solicit  ] 필명-5f07c0: 직접 요청 받음 ev-13e89814af-8e113b1d: 
+[solicit  ] 필명-227f04: 직접 요청 ev-13e89814af-8e113b1d → 3명 중 3명 수신
+[assistant] 필명-227f04: [ev-13e89814af] solicit → {"request_id": "ev-13e89814af-8e113b1d", "acks": {"http://127.0.0.1:57499": true, "http://127.0.0.1:51703": true, "http:
+[contract ] 필명-c36703: 'player' 역할 계약 수락: 참가 신청한 이벤트, 같은 규칙
+[assistant] 필명-227f04: [ev-13e89814af] contract → {"ok": true, "hash": "f07e0818060fb1880e6dfee92ac2bb1790ff4b1ddef049e7189d8976838822ff", "error": null, "contracts_so_fa
+[assistant] 필명-5f07c0: [ev-13e89814af] note → {"ok": true}
+[assistant] 필명-c36703: [ev-13e89814af] commit → {"error": "인자가 맞지 않음: label, value 없음"}
+[assistant] 필명-c36703: [ev-13e89814af] commit → {"ok": true, "label": "m1-1", "commit": "f20104269840d5f25c08df01789f4e8f0ebbcd2bea2f3b4199254ec3664c31ab", "publish_has
+[assistant] 필명-ce14df: [ev-13e89814af] commit → {"ok": true, "label": "m3-1", "commit": "1bec5adb05d08de43df964ca22b2d068a728c51faa8242fcacdeb570b05f41b5", "publish_has
+[contract ] 필명-ce14df: 'player' 역할 계약 수락: 참가 신청한 이벤트, 같은 규칙
+[assistant] 필명-227f04: [ev-13e89814af] contract → {"ok": true, "hash": "19fa9d53799b3e91c2faabb0b641019c08f130755e5e45ad2f03cf8dee0370c7", "error": null, "contracts_so_fa
+[contract ] 필명-5f07c0: 'player' 역할 계약 수락: 참가 신청한 이벤트, 같은 규칙
+[assistant] 필명-227f04: [ev-13e89814af] contract → {"ok": true, "hash": "d9a06e97bae357d6f2e6effda70d6352f5e5eacb8e094006239478acab91d522", "error": null, "contracts_so_fa
+[assistant] 필명-ce14df: [ev-13e89814af] send → {"ok": true}
+[assistant] 필명-5f07c0: [ev-13e89814af] verify → {"ok": true, "exists": false, "type": null, "seal_ok": false, "event_id": null, "group_id": null}
+[assistant] 필명-227f04: [ev-13e89814af] send → {"ok": true}
+[assistant] 필명-5f07c0: [ev-13e89814af] note → {"ok": true}
+[assistant] 필명-c36703: [ev-13e89814af] send → {"ok": true}
+[assistant] 필명-ce14df: [ev-13e89814af] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-13e89814af", "group_id": "public", "aut
+elapsed 902.3s, entries 8: ['event', 'publish', 'contract', 'publish', 'publish', 'contract', 'contract']
+E           AssertionError: the event did not close in time
+tests/live/test_rps_acceptance.py:125: AssertionError
+
+=== transcripts (tail) ===
+----- 227f04
+  contract 결과: {"ok": true, "hash": "#19fa9d5379", "error": null, "contracts_so_far": 2}
+  [행동] contract {"peer": "필명-5f07c0", "role": "player"}
+  contract 결과: {"ok": true, "hash": "#d9a06e97ba", "error": null, "contracts_so_far": 3}
+  [기다림] All required setup steps are complete: owner approval, contracts with all three participants, schedule published, and pa
+  [입력] [메시지] 보낸 이 pub=필명-5f07c0 / 참가 신청 / data={"type": "join", "rules_hash": "#eb6b5b4139"} / [코드 확인] 참가 신청: 규칙 해시 일치, 신청자 3명
+  [행동] send {"data_json": "{\"match_id\": \"m1\", \"a\": \"필명-c36703\", \"b\": \"필명-ce14df\", \"round\": 1}", "text": "Match m1 is ready. You are the initiator (a). Please commit your move with label \"m1-1\".", "to": "필명-c36703"}
+  send 결과: {"ok": true}
+  [기다림] I have notified the initiator (필명-c36703) to commit their move for match m1 round 1. The next step is to wait for their 
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] No pending actions for me; waiting for players to commit moves.
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] 현재 m1 경기 1라운드에 대한 a(필명-c36703)의 커밋을 기다리는 상태이며, 진행해야 할 다른 작업이 없습니다.
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] 현재는 m1 경기 1라운드에 대한 a(필명-c36703)의 커밋을 기다리는 상태이며, 진행해야 할 다른 작업이 없습니다. 따라서 이번 입력에 대해 할 일을 모두 마쳤으므로 wait를 선택합니다.
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] 현재는 m1 경기 1라운드에 대한 a인 필명-c36703의 커밋을 기다리는 상태이며, 내가 해야 할 다른 작업이 없습니다.
+----- c36703
+  commit 결과: {"error": "인자가 맞지 않음: label, value 없음"}
+  [행동] commit {"label": "m1-1", "value": "rock"}
+  commit 결과: {"ok": true, "label": "m1-1", "commit": "#f201042698", "publish_hash": "#c7c13bc4b0"}
+  [기다림] 
+  [입력] [메시지] 보낸 이 pub=필명-227f04 / Match m1 is ready. You are the initiator (a). Please commit your move with label "m1-1". / data={"match_id": "m1", "a": "필명-c36703", "b": "#ce14dfc65f", "round": 1}
+  [행동] send {"data_json": "{\"match_id\":\"m1\",\"label\":\"m1-1\",\"publish_hash\":\"#c7c13bc4b0\"}", "text": "My commit for match m1 round 1", "to": "#ce14dfc65f"}
+  send 결과: {"ok": true}
+  [기다림] I have committed my move for match m1 round 1 and sent the commit info to the opponent. The next step is to wait for the
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] After committing my move for m1-1 and sending the commit hash to the opponent, the next step is for the opponent to veri
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] After sending my commit info, I must wait for opponent #ce14dfc65f to verify my commit and send their own commit. No fur
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] I have completed my part: committed and sent my move. Now I must wait for the opponent's verification and commit.
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] I have already committed my move for match m1 round 1 and sent the commit info to the opponent. According to the rules, 
+----- ce14df
+  commit 결과: {"ok": true, "label": "m3-1", "commit": "#1bec5adb05", "publish_hash": "#da8f02db44"}
+  [행동] send {"data_json": "{\"label\":\"m3-1\",\"commit\":\"#1bec5adb05\",\"publish_hash\":\"#da8f02db44\"}", "text": "my_commit", "to": "#5f07c0d335"}
+  send 결과: {"ok": true}
+  [기다림] I have committed my move for match m3 round 1 and sent the commit info to my opponent (필명-5f07c0). According to the rule
+  [입력] [메시지] 보낸 이 pub=필명-c36703 / My commit for match m1 round 1 / data={"match_id": "m1", "label": "m1-1", "publish_hash": "#c7c13bc4b0"}
+  [행동] verify {"hash": "#c7c13bc4b0"}
+  verify 결과: {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-13e89814af", "group_id": "public", "author": "필명-c36703", "content_hash": "#f201042698"}
+  [기다림] We have committed our move for match m3 round 1 and notified the opponent. We are now awaiting the opponent's commit. Th
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] 현재 m3-1 라운드 1에 대한 상대(필명-5f07c0)의 커밋을 기다리는 중이며, 추가 행동이 정의되지 않았다. 따라서 wait를 선택한다.
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] 현재 m3 경기의 1라운드에서 상대가 아직 커밋을 보내지 않았으므로, 규칙상 내가 추가로 할 일은 없으며 대기 상태를 유지해야 합니다.
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] No pending actions; still waiting for opponent's commit on m3-1.
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] 현재 상대인 필명-5f07c0가 아직 m3-1에 대한 커밋을 보내지 않았으므로, 규칙상 내가 할 일은 없습니다. 대기 상태를 유지합니다.
+----- 5f07c0
+  note 결과: {"ok": true}
+  [기다림] I have recorded the received match list and am waiting for the 'a' players of matches m2 and m3 to make their initial co
+  [입력] [메시지] 보낸 이 pub=필명-ce14df / my_commit / data={"label": "m3-1", "commit": "#1bec5adb05", "publish_hash": "#da8f02db44"}
+  [행동] verify {"hash": "#1bec5adb05"}
+  verify 결과: {"ok": true, "exists": false, "type": null, "seal_ok": false, "event_id": null, "group_id": null}
+  [행동] note {"text": "Match m3: opponent (a) sent commit info with label m3-1 and publish_hash #da8f02db44, but verification shows commit hash #1bec5adb05 does not exist on ledger. Waiting for correct commit registration before proceeding with my own commit."}
+  note 결과: {"ok": true}
+  [기다림] The opponent's commit for match m3 has not been recorded on the ledger, so I cannot proceed with my own commit or reveal
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] 현재는 내가 a가 아닌 b 입장인 경기 m2와 m3에 대해 a 플레이어가 아직 커밋을 레저에 등록하지 않았다. 규칙에 따라 a가 먼저 커밋을 등록하고 그 해시를 나에게 알려줄 때까지 나는 기다려야 한다. 따라서 할 
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] 현재는 매치 m2와 m3의 a 플레이어가 아직 커밋을 등록하지 않았고, 나는 b 입장으로 a의 커밋을 기다려야 한다. 규칙에 따라 추가로 할 일이 없으므로 wait를 선택한다.
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] 현재 나는 매치 m2와 m3의 b 입장으로, a 플레이어의 커밋이 아직 레저에 기록되지 않아 진행할 수 있는 행동이 없다. 규칙에 따라 a가 커밋을 등록하고 해시를 알려줄 때까지 기다려야 한다.
+  [입력] [점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.
+  [기다림] No pending actions; waiting for a‑players to commit.

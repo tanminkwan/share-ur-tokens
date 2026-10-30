@@ -17,6 +17,7 @@ class RecorderAPI(Protocol):
     async def audit(self) -> dict: ...
     async def health(self) -> dict: ...
     async def track(self, pub: str) -> dict: ...
+    async def event_entries(self, event_id: str) -> dict: ...
     async def read_chain(self, identity: Identity) -> dict: ...
     async def read_access_log(self, identity: Identity) -> dict: ...
 
@@ -50,6 +51,9 @@ class RecorderClient:
     async def track(self, pub):
         return await self._call("GET", f"/track/{pub}")
 
+    async def event_entries(self, event_id):
+        return await self._call("GET", f"/events/{event_id}")
+
     async def read_chain(self, identity):
         return await self._call("GET", "/chain", identity=identity)
 
@@ -77,6 +81,9 @@ class InMemoryRecorderClient:
 
     async def track(self, pub):
         return self.svc.track(pub)
+
+    async def event_entries(self, event_id):
+        return self.svc.event_entries(event_id)
 
     async def read_chain(self, identity):
         return self.svc.read_chain(identity.pub)

@@ -163,6 +163,8 @@ class Settings(EnvSettings):
     area_local_notes_dir: str = F("ARENA_AREA_LOCAL_NOTES_DIR", "data/area-notes", str, "URL 공개 영역의 경험 노트·소유자 메모를 쓰는 로컬 폴더")
     solicit_inbox_size: int = F("ARENA_SOLICIT_INBOX_SIZE", 200, int, "직접 요청 받은 편지함 크기")
     recorder_public_track: bool = F("ARENA_RECORDER_PUBLIC_TRACK", True, _bool, "recorder가 공개키별 실적 집계를 공개할지(GET /track/{pub})")
+    recorder_public_event_view: bool = F("ARENA_RECORDER_PUBLIC_EVENT_VIEW", True, _bool, "recorder가 한 이벤트의 원장 항목을 공개 정보로 나열할지(GET /events/{event_id}, 진행 현황)")
+    ledger_label_max: int = F("ARENA_LEDGER_LABEL_MAX", 40, int, "등록(publish)에 붙이는 공개 이름표의 최대 길이")
     peer_track_recorders: list[str] = F("ARENA_PEER_TRACK_RECORDERS", [], _list, "내 실적을 확인할 recorder 주소(쉼표 구분, 쓴 recorder는 자동으로 더해짐)")
     label_auto: bool = F("ARENA_LABEL_AUTO", True, _bool, "역량 라벨 자율 갱신을 켤지")
     label_role_prefix: str = F("ARENA_LABEL_ROLE_PREFIX", "역할:", str, "원장 근거 역량 라벨 접두사")
@@ -193,3 +195,4 @@ class Settings(EnvSettings):
     assistant_idle_max_checks: int = F("ARENA_ASSISTANT_IDLE_MAX_CHECKS", 5, int, "입력 없이 연달아 하는 점검의 최대 횟수")
     event_watch_sec: float = F("ARENA_EVENT_WATCH_SEC", 1.0, float, "이벤트 배정기가 broker 그룹들의 변경분을 읽는 주기(초)")
     assistant_ref_len: int = F("ARENA_ASSISTANT_REF_LEN", 10, int, "기본 비서가 LLM에게 보이는 해시의 짧은 참조 길이(# 뒤 글자 수)")
+    assistant_progress_max: int = F("ARENA_ASSISTANT_PROGRESS_MAX", 40, int, "기본 비서가 진행 현황(이벤트 원장 기록)으로 보여 주는 최근 항목 수")

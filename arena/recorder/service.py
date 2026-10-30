@@ -56,6 +56,14 @@ class RecorderService:
         out.update(public_view(e, self.ledger.chain))  # each entry type decides what may be shown
         return out
 
+    def event_entries(self, event_id: str) -> dict:
+        """public: one event's entries in order, each in its public view only (the event's progress, open to anyone)"""
+        if not self.settings.recorder_public_event_view:
+            return {"ok": False, "error": "event views are not public on this recorder"}
+        out = [{"seq": e["seq"], "hash": e["hash"], "type": e["type"], **public_view(e, self.ledger.chain)}
+               for e in self.ledger.chain if e["payload"].get("event_id") == event_id]
+        return {"ok": True, "event_id": event_id, "entries": out}
+
     def track(self, pub: str) -> dict:
         """public track record of one key: counts only, no counterparties, no content hashes"""
         if not self.settings.recorder_public_track:

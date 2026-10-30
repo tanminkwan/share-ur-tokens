@@ -129,11 +129,20 @@ def _contract_public(p, chain):
 
 
 # ---------------- publish ----------------
+def _publish_shape(chain, e, now, s):
+    label = e["payload"].get("label")
+    if label is not None and (not isinstance(label, str) or not label or len(label) > s.ledger_label_max):
+        return f"label must be a non-empty string of at most {s.ledger_label_max} characters"
+
+
 def _publish_rule(chain, e, now, s):
     p = e["payload"]
     if p.get("content_hash") in published(chain):
         return "content already published (first publisher wins)"
     ev = p.get("event_id")
+    if p.get("label") is not None and any(x["type"] == "publish" and x["payload"].get("label") == p["label"] and x["payload"].get("author") == p["author"]
+                                          and x["payload"].get("event_id") == ev for x in chain):
+        return "label already used by this author in this event (one registration per label)"
     if ev is not None:
         conflict = set(events(chain)[ev].get("policy", {}).get("conflict_roles", []))
         if conflict & roles_of(chain, ev, p.get("author")):
@@ -230,8 +239,9 @@ for _t in (
               counters={"events": 0, "approvals": 0}, contribute=_event_contribute),
     EntryType("contract", lambda p: [p.get("issuer"), p.get("contractor")], event_ref="required", unique_nonce=True, rules=(_contract_rule,),
               public=_contract_public, counters={"roles": defaultdict(int)}, contribute=_map_count("roles", "contractor", "role")),
-    EntryType("publish", lambda p: [p.get("author")], event_ref="optional", rules=(_publish_rule,),
-              public=lambda p, c: {"author": p["author"], "content_hash": p["content_hash"]}, counters={"published": 0},
+    EntryType("publish", lambda p: [p.get("author")], event_ref="optional", shape=_publish_shape, rules=(_publish_rule,),
+              public=lambda p, c: {"author": p["author"], "content_hash": p["content_hash"], **({"label": p["label"]} if "label" in p else {})},
+              counters={"published": 0},
               contribute=_count("published", "author"), index=_publish_index),
     EntryType("share", lambda p: [p.get("provider"), p.get("consumer")], needs_content=True, unique_nonce=True,
               counters={"received_by": set()}, contribute=_share_contribute),

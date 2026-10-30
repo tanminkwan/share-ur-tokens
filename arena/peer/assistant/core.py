@@ -81,7 +81,7 @@ class EventAssistant:
 
     # ---------------- what the LLM sees: handles and short refs, never 64-hex strings ----------------
     def _known_pubs(self, ctx, st) -> set:
-        pubs = {ctx.pub, st.issuer_pub, *st.peers, *(c[1] for c in st.contracts)}
+        pubs = {ctx.pub, st.issuer_pub, *st.peers, *(c[1] for c in st.contracts), *st.roster}
         for req in st.pending.values():
             pubs |= set(req["payload"].get("parties", []))
         return pubs
@@ -133,6 +133,31 @@ class EventAssistant:
                 st.peers.setdefault(p["pub"], p.get("url"))
                 return p["pub"], st.peers[p["pub"]]
         return pub, None
+
+    # ---------------- the event's progress, read from the ledger by code ----------------
+    PEOPLE = ("author", "contractor", "issuer", "parties", "approvers")
+
+    async def progress_entries(self, ctx, st) -> list[dict]:
+        """this event's entries in public view; everyone named in them joins the roster (so they show as handles)"""
+        try:
+            r = await ctx.recorder(st.recorder_url).event_entries(st.event_id)
+        except Exception:
+            return []
+        entries = r.get("entries", []) if r.get("ok") else []
+        for e in entries:
+            for k in self.PEOPLE:
+                for pub in (e.get(k) if isinstance(e.get(k), list) else [e.get(k)]):
+                    if isinstance(pub, str) and HEX64.fullmatch(pub) and pub not in st.roster:
+                        st.roster.append(pub)
+        return entries
+
+    async def progress_lines(self, ctx, st) -> list[str]:
+        """one short line per entry, the latest ones only; handles and short refs instead of 64-hex"""
+        lines = []
+        for e in (await self.progress_entries(ctx, st))[-self.s.assistant_progress_max:]:
+            rest = {k: v for k, v in e.items() if k not in ("seq", "type", "hash", "rules_hash") and v not in (None, [], "")}
+            lines.append(self.shorten(ctx, st, f"{e['seq']} {e['type']} {json.dumps(rest, ensure_ascii=False)} (항목 {e['hash']})"))
+        return lines
 
     # ---------------- identification and checks enforced by code ----------------
     REVEAL_KEYS = {"author", "label", "value", "salt", "publish_hash"}
@@ -226,7 +251,9 @@ class EventAssistant:
                 continue
             if now - st.last_input_at >= self.s.assistant_idle_sec * (2 ** st.idle_checks):
                 st.idle_checks += 1
-                await self.feed(ctx, st.event_id, "[점검] 한동안 새 입력이 없다. 규칙상 지금 내가 해야 할 일이 남았는지 확인하고, 있으면 하라.", idle=True)
+                progress = "\n".join(await self.progress_lines(ctx, st)) or "없음"
+                await self.feed(ctx, st.event_id, "[점검] 한동안 새 입력이 없다. 아래 원장 기록을 보고 규칙상 지금 내가 해야 할 일이 남았는지 "
+                                                  f"확인하고, 있으면 하라. 다른 사람이 이미 한 일을 기다리고 있지 않은지도 보라.\n[진행 현황] (원장, 코드가 읽음)\n{progress}", idle=True)
 
     # ---------------- the agent loop ----------------
     async def feed(self, ctx, event_id: str, text: str, idle: bool = False):
@@ -275,6 +302,7 @@ class EventAssistant:
             name = d.get("tool", "wait")
             if name == "wait":
                 st.transcript.append(f"[기다림] {d.get('thought', '')[:120]}")
+                ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] 기다림: {d.get('thought', '')[:100]}")
                 self.save(ctx, st)
                 return
             tool, args = self.tools.get(name), {}

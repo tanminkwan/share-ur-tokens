@@ -103,7 +103,7 @@ async def commit(A, ctx, st, label, value):
         return {"error": f"라벨 {label}은 이미 먼저 등록했다", **{k: st.secrets[label][k] for k in ("commit", "publish_hash")}}
     salt = nonce(label)
     c = commit_hash(label, value, salt, ctx.pub)
-    p = {"author": ctx.pub, "content_hash": c, "event_id": st.event_id, "group_id": st.group_id}
+    p = {"author": ctx.pub, "content_hash": c, "event_id": st.event_id, "group_id": st.group_id, "label": label}  # the label is public, the value is not
     r = await _record(A, ctx, st, "publish", p)
     if not r.get("ok"):
         return {"ok": False, "error": r.get("error")}
@@ -129,7 +129,18 @@ async def check_reveal(A, ctx, st, publish_hash, author, label, value, salt):
 
 
 async def verify_entry(A, ctx, st, hash):
-    return await ctx.recorder(st.recorder_url).verify(hash)
+    v = await ctx.recorder(st.recorder_url).verify(hash)
+    if v.get("exists"):
+        return v
+    held = next((e for e in await A.progress_entries(ctx, st) if e.get("content_hash") == hash), None)  # a content hash, not an entry hash?
+    if held:
+        v["content_of"] = {k: held[k] for k in ("hash", "type", "author", "label") if k in held}
+        v["note"] = "이 값은 원장 항목 해시가 아니라 내용 해시다. 그 내용을 담은 원장 항목은 content_of.hash"
+    return v
+
+
+async def event_progress(A, ctx, st):
+    return {"ok": True, "progress": await A.progress_lines(ctx, st)}
 
 
 async def propose_attest(A, ctx, st, kind, subject, value, parties):
@@ -214,7 +225,9 @@ def default_tools() -> list[Tool]:
              _obj(label=S), my_reveal),
         Tool("check_reveal", "{publish_hash, author, label, value, salt}: 상대(필명)가 보낸 공개값이 상대가 먼저 등록한 해시와 맞는지 원장으로 확인한다. 결과 match",
              _obj(publish_hash=S, author=S, label=S, value=S, salt=S), check_reveal),
-        Tool("verify", "{hash}: 원장 항목이 있는지와 공개 정보를 확인한다", _obj(hash=S), verify_entry, after_close=True),
+        Tool("verify", "{hash}: 원장 항목이 있는지와 공개 정보를 확인한다(내용 해시를 넣으면 그 내용을 담은 항목을 알려 준다)", _obj(hash=S), verify_entry, after_close=True),
+        Tool("event_progress", "{}: 이 이벤트의 원장 기록(계약, 등록과 이름표, 공동 확인, 닫힘)을 순서대로 본다. 누가 무엇을 했는지 확인할 때 쓴다",
+             None, event_progress, after_close=True),
         Tool("propose_attest", "{kind, subject, value_json, parties: [필명...]}: 공동 확인을 제안한다(value_json은 JSON 문자열). "
              "당사자가 나 혼자면 바로 기록하고, 아니면 다른 당사자에게 서명 요청을 보낸다",
              _obj(kind=S, subject=S, value_json=S, parties={"type": "array", "items": S}), propose_attest),
