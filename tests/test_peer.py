@@ -146,3 +146,12 @@ async def test_pb11_receipts_check_the_recorder_seal():
     forged = dict(resp, hash="0" * 64)
     assert not Receipts.sealed_by(forged, rec.pub)
     assert len(r.items) == 1 and r.items[0]["kind"] == "publish"
+
+
+async def test_pb16_peer_builds_recorder_clients_by_url(tmp_path, settings, broker):
+    from arena.recorder.client import RecorderClient
+    p = make_peer(tmp_path, settings, broker)
+    assert isinstance(p.recorder("http://rec:1"), RecorderClient)
+    sentinel = object()
+    p.recorder_factory = lambda url: sentinel
+    assert p.recorder("http://x") is sentinel

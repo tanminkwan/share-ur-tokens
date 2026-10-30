@@ -50,7 +50,7 @@ export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드�
 
 ```
 .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m pytest              # 테스트
+.venv/bin/python -m pytest              # 테스트 (.env에 ARENA_LLM_* 키가 있으면 실제 LLM 테스트 포함)
 .venv/bin/python -m arena.broker        # broker API (ARENA_BROKER_*)
 .venv/bin/python -m arena.recorder     # recorder API, 원장 보관소 (ARENA_RECORDER_*)
 ```
@@ -67,8 +67,8 @@ export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드�
 | [docs/trust-and-security.md](docs/trust-and-security.md) | 신원 방식(실명·가명·익명), 원장의 보장 범위, 위험과 대응 |
 | [docs/competitive-comparison.md](docs/competitive-comparison.md) | 기존 제품(Agent 365, Gemini Enterprise, AGNTCY, NANDA, Fetch.ai, Glean, 공모 도구)과의 비교 |
 | [dev/plan.md](dev/plan.md) | **개발 계획**: 단계 나눔, 개발 원칙, 단계별 요구사항·설계·테스트 결과(`dev/phaseN/`) |
-| [arena/](arena/) | **플랫폼 패키지**(개발 중): 설정, 서명, 검색기, 원장, broker·recorder API 서비스 |
-| [app/](app/) | **사전 프로토타입** (peer·broker·기록자·절대자, 원장, LLM 어댑터, 대시보드). 2단계에서 `arena/`·`apps/`로 옮긴 뒤 삭제 |
+| [arena/](arena/) | **플랫폼 패키지**(개발 중): 설정, 서명, 검색기, 원장(이벤트 선언·policy·결재), broker·recorder API 서비스, peer 핵심(A2A, 공개 영역, 프로필, 앱 등록, 역할 계약, 결재 요청, 기록자 역할), LLM 어댑터 |
+| [app/](app/) | **사전 프로토타입** (peer·broker·기록자·절대자, 원장, LLM 어댑터, 대시보드). 플랫폼 개발 범위 밖이라 그대로 둔다 |
 | [proto/](proto/) | 초기 실현 가능성 spike (`spike_a2a.py`, `spike_ledger.py`) |
 | [docs/hackathon-proposal-submit.md](docs/hackathon-proposal-submit.md) | **제출용 신청서(압축본)** (주최 측 7개 문항, 심사용) |
 | [docs/hackathon-proposal.md](docs/hackathon-proposal.md) | 신청서 원본(상세판). 압축본의 근거와 세부 설계 |

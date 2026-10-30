@@ -34,3 +34,26 @@ class FakeOwner:
         self.tasks.append((task, context))
         w = self.writes.pop(0)
         return w(task, context) if callable(w) else w
+
+
+class RoutedLLM:
+    """answers by the first required key of the requested schema (e.g. summary, decision, accept, selected, note, thought).
+    A route is a dict, a callable(kwargs)->dict, or a list consumed in order (the last item repeats)."""
+
+    def __init__(self, **routes):
+        self.routes, self.calls = dict(routes), []
+
+    async def ask_json(self, **kw):
+        key = kw["schema"]["required"][0]
+        self.calls.append((key, kw))
+        if key not in self.routes:
+            raise LLMError(f"no route for {key}")
+        a = self.routes[key]
+        if isinstance(a, list):
+            a = a.pop(0) if len(a) > 1 else a[0]
+        if isinstance(a, Exception):
+            raise a
+        return a(kw) if callable(a) else a
+
+    def asked(self, key):
+        return [kw for k, kw in self.calls if k == key]

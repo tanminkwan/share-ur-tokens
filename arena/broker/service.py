@@ -90,9 +90,9 @@ class BrokerService:
                  and (not role or role in p.get("offers", [])) and all(l in p.get("labels", []) for l in labels)]
         ranked = self.searcher.rank(q, [f"{p['summary']} {' '.join(p.get('offers', []))}" for p in cands])
         s = self.settings
-        hits = [{"pub": cands[i]["pub"], "pen_name": pen_name(cands[i]["pub"], s.pen_name_prefix, s.pen_name_len),
-                 "url": cands[i]["url"], "offers": cands[i].get("offers", []), "labels": cands[i].get("labels", []),
-                 "summary": cands[i]["summary"], "score": score, "broker": self.name} for i, score in ranked[:k]]
+        hits = [dict(cands[i], offers=cands[i].get("offers", []), labels=cands[i].get("labels", []),
+                     pen_name=pen_name(cands[i]["pub"], s.pen_name_prefix, s.pen_name_len), score=score, broker=self.name)
+                for i, score in ranked[:k]]
         if not local:
             query = {"q": q, "role": role, "labels": labels, "exclude": list(exclude), "k": k}
             for url in self.neighbors:

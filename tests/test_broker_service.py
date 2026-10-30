@@ -116,7 +116,14 @@ async def test_r4_4_find_by_text_role_label_exclude_k(net, clock, settings):
     assert len(await net.brokers[0].find(Caller.anonymous(), "기록", k=2)) == 2
     assert len(await net.brokers[0].find(Caller.anonymous(), "기록")) <= settings.search_k
     h0 = hits[0]
-    assert set(h0) == {"pub", "pen_name", "url", "offers", "labels", "summary", "score", "broker"}
+    assert {"pub", "pen_name", "url", "offers", "labels", "summary", "score", "broker", "ver", "until"} <= set(h0)
+
+
+async def test_pa10_search_hits_carry_app_profile_fields(b0, clock):
+    me = Identity.generate()
+    await b0.advertise(ad(me, dict(profile("http://r", "기록 보관", offers=["record"], now=clock()), recorder_url="http://rec:9")))
+    hit = (await b0.find(Caller.anonymous(), "기록", role="record"))[0]
+    assert hit["recorder_url"] == "http://rec:9" and hit["pub"] == me.pub
 
 
 async def test_r4_4_k_is_capped(b0, clock, settings):

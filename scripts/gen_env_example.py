@@ -1,4 +1,4 @@
-"""Write .env.example from every settings class (platform, apps, demo). Run after adding a setting:
+"""Write .env.example from the settings classes. Run after adding a setting:
     .venv/bin/python scripts/gen_env_example.py"""
 import importlib
 import pathlib
@@ -6,8 +6,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-CLASSES = [("arena.config", "Settings", "플랫폼"), ("apps.idea_contest.config", "ContestSettings", "아이디어 경연 앱"),
-           ("demo.config", "DemoSettings", "시연 장치")]
+CLASSES = [("arena.config", "Settings", "플랫폼")]
 
 
 def main():

@@ -11,6 +11,7 @@ from ..config import Settings
 from ..crypto import Identity, pen_name
 from ..events import EventLog
 from ..llm import LLM
+from ..recorder.client import RecorderAPI, RecorderClient
 from .app import PeerApp
 from .area import PublicArea
 from .owner import Owner
@@ -33,6 +34,7 @@ class Peer:
         self.llm, self.transport, self.log, self.brokers, self.apps, self.clock = llm, transport, log, brokers, list(apps), clock
         self.pen = pen_name(identity.pub, settings.pen_name_prefix, settings.pen_name_len)
         self.receipts, self.profiles = Receipts(), ProfileBuilder()
+        self.recorder_factory: Callable[[str], RecorderAPI] = lambda url: RecorderClient(url, settings)
         self._ops = {"engage": self._engage, "approve": self._approve}
         for app in self.apps:
             for op, fn in app.ops().items():
@@ -55,6 +57,9 @@ class Peer:
 
     def app(self, cls):
         return next((a for a in self.apps if isinstance(a, cls)), None)
+
+    def recorder(self, url: str) -> RecorderAPI:
+        return self.recorder_factory(url)
 
     def a2a_app(self):
         return build_a2a_app(f"peer-{self.pen}", f"peer {self.pen}", self.config.url, self.skills(), self.handle)

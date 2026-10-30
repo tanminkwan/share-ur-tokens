@@ -20,7 +20,7 @@ class Doc:
 class PublicArea(Protocol):
     def documents(self, include_owner_only: bool = False) -> list[Doc]: ...
     def lines(self, include_owner_only: bool = False) -> list[str]: ...
-    def add_note(self, text: str) -> None: ...
+    def add_note(self, text: str, doc: str | None = None) -> None: ...
 
 
 def _clean(line: str) -> str:
@@ -48,7 +48,11 @@ class LocalFolderArea:
     def lines(self, include_owner_only=False):
         return [c for d in self.documents(include_owner_only) for c in map(_clean, d.text.splitlines()) if c]
 
-    def add_note(self, text):
+    def add_note(self, text, doc=None):
+        """append one line; doc defaults to the public notes file (pass an owner-only name for private memos)"""
+        name = doc or self.settings.area_notes_file
+        if os.path.basename(name) != name or not name.endswith(".md"):
+            raise ValueError(f"bad document name: {name!r}")
         os.makedirs(self.root, exist_ok=True)
-        with open(os.path.join(self.root, self.settings.area_notes_file), "a", encoding="utf-8") as f:
+        with open(os.path.join(self.root, name), "a", encoding="utf-8") as f:
             f.write(f"- {' '.join(text.split())}\n")

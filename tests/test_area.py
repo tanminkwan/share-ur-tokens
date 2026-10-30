@@ -21,3 +21,14 @@ def test_pb4_add_note_appends_to_the_notes_file(tmp_path, settings):
     area.add_note("두 번째")
     assert area.lines()[-2:] == ["심사를 해 보니 기준표가 중요했다", "두 번째"]
     assert (tmp_path / "new" / settings.area_notes_file).exists()
+
+
+def test_pb15_owner_only_memo_stays_out_of_public_lines(tmp_path, settings):
+    area = LocalFolderArea(str(tmp_path), settings)
+    area.add_note("공개 경험")
+    area.add_note("비서의 판단 메모", doc="_journal.md")
+    assert area.lines() == ["공개 경험"]
+    assert "비서의 판단 메모" in area.lines(include_owner_only=True)
+    import pytest
+    with pytest.raises(ValueError):
+        area.add_note("x", doc="../escape.md")
