@@ -164,4 +164,14 @@ notarized: [{'pub': 'a84638ef604d5198095b90d02d4010a93d3b3307d24e377ba9189b464c0
 recomputed: [{'pub': 'a84638ef604d5198095b90d02d4010a93d3b3307d24e377ba9189b464c00f84b', 'wins': 2, 'games': 2, 'rate': 1.0}, {'pub': '49b787c54e707f378552ad9b6d9c488adecc6698e8b6a68b65c5de1e9ea7e6ba', 'wins': 1, 'games': 2, 'rate': 0.5}, {'pub': 'e9c50a239c40c7da59072b447d62c5747684490f668be5ab232279050363a047', 'wins': 0, 'games': 2, 'rate': 0.0}]
 exit=0
 
-=== ledger: publishes and attests ===
+=== ledger (read during the analysis; the pytest temp folder was cleaned up afterwards) ===
+5 publish host (bracket text, no label)
+6 publish 49b787 m1-1 | 7 e9c50a m3-1 | 8 a84638 m3-1 | 9 e9c50a m3-2 | 10 a84638 m3-2
+11 attest match m3 (e9c50a vs a84638, two rounds, co-signed)
+12 publish e9c50a m1-1 | 13 49b787 m2-1 | 14 a84638 m2-1 | 15 e9c50a m1-2 | 16 49b787 m1-2
+17 attest forfeit m1 by the host alone: winner 49b787
+   cause: e9c50a's agent retyped its m1-1 reveal and pasted salt 6f78730d4f67a98d (its m3-1 salt);
+   the real m1-1 salt was e3bc2fc034bf9736. The ledger check refused it correctly; the player then declared its own forfeit.
+18 attest match m2 (49b787 vs a84638, co-signed): winner a84638
+19 attest ranking final by the host: a84638 2/2, 49b787 1/2, e9c50a 0/2
+20 close result_hash = entry 19
