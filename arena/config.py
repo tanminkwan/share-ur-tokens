@@ -188,3 +188,4 @@ class Settings(EnvSettings):
     event_store_dir: str = F("ARENA_EVENT_STORE_DIR", "data/events", str, "기본 비서가 참여 중인 이벤트를 저장하는 로컬 폴더(peer별 하위 폴더)")
     broker_state_file: str = F("ARENA_BROKER_STATE_FILE", "data/broker-state.json", str, "broker가 프로필·공지·가입 허가를 저장하는 파일(단독 실행)")
     recorder_access_log_file: str = F("ARENA_RECORDER_ACCESS_LOG_FILE", "data/recorder-access.jsonl", str, "recorder 열람 접근 기록 파일(단독 실행)")
+    broker_failback_sec: float = F("ARENA_BROKER_FAILBACK_SEC", 30.0, float, "secondary broker로 넘어간 뒤 primary를 다시 시도하기까지(초)")

@@ -225,3 +225,24 @@ async def test_p5c21_broker_process_keeps_state_across_restart(tmp_path, procs):
     assert (await B.health())["pub"] == pub_before and (await B.health())["profiles"] == 1
     assert [p["pub"] for p in (await B.find("기록", role="record"))["peers"]] == [me.pub]
     assert [n["notice_id"] for n in (await B.list_notices(me))["notices"]] == ["keep"]
+
+
+async def test_p5c22_peer_moves_to_the_secondary_broker_process(tmp_path, procs):
+    from arena.broker.failover import FailoverBrokerClient
+    pa, pb = free_port(), free_port()
+    ua, ub = f"http://127.0.0.1:{pa}", f"http://127.0.0.1:{pb}"
+    base = make_env(tmp_path)
+    start(procs, "arena.broker", dict(base, ARENA_BROKER_PORT=str(pa), ARENA_BROKER_NAME="A", ARENA_BROKER_NEIGHBORS=ub,
+                                       ARENA_BROKER_KEY_FILE=str(tmp_path / "a.key"), ARENA_BROKER_STATE_FILE=str(tmp_path / "a.json")), tmp_path, ua)
+    start(procs, "arena.broker", dict(base, ARENA_BROKER_PORT=str(pb), ARENA_BROKER_NAME="B", ARENA_BROKER_NEIGHBORS=ua,
+                                       ARENA_BROKER_KEY_FILE=str(tmp_path / "b.key"), ARENA_BROKER_STATE_FILE=str(tmp_path / "b.json")), tmp_path, ub)
+    s = Settings.load(env=base, dotenv_path=None)
+    fo = FailoverBrokerClient.from_urls([ua, ub], s)
+    me, issuer = Identity.generate(), Identity.generate()
+    assert (await fo.advertise(me, profile("http://me", "기록 보관", offers=["record"], now=time.time())))["ok"]
+    assert (await fo.post_notice(issuer, notice(issuer, "n1", now=time.time())))["ok"]
+    procs[0].stop()  # the primary process dies
+    got = await fo.list_notices(me)
+    assert got["ok"] and [n["notice_id"] for n in got["notices"]] == ["n1"]
+    assert (await fo.health())["name"] == "B"
+    assert [p["pub"] for p in (await fo.find("기록", role="record"))["peers"]] == [me.pub]

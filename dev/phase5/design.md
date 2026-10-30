@@ -125,3 +125,25 @@ flowchart LR
 
 - `Peer(..., home=PeerHome(...))`면 위 상태를 읽고 쓴다. 홈이 없으면 예전처럼 메모리에만 둔다(단위 테스트).
 - 제네시스의 god·기록자 peer는 제네시스 폴더 아래 `homes/`를 홈으로 쓴다(키는 제네시스에 서명된 키 파일 그대로).
+
+
+## 6. broker 장애 대비 (`arena/broker/failover.py`)
+
+```mermaid
+sequenceDiagram
+    participant P as peer (FailoverBrokerClient)
+    participant A as broker A (primary)
+    participant B as broker B (secondary, 같은 그룹)
+    P->>A: 프로필 게시, 공지 목록 ...
+    Note over A: A가 멈춤
+    P-xA: 공지 목록 (연결 오류)
+    P->>B: 마지막 프로필 다시 게시
+    P->>B: 같은 요청 다시 (변경분은 처음부터)
+    B-->>P: 응답 (부르는 쪽은 모름)
+    Note over A: A가 살아남
+    P->>A: ARENA_BROKER_FAILBACK_SEC 뒤 다시 시도 → 프로필 다시 게시, primary로 돌아감
+```
+
+- `FailoverBrokerClient(clients)`는 `BrokerAPI`를 그대로 따르므로 peer와 기본 비서는 바뀌지 않는다.
+- 공지는 같은 그룹의 broker끼리 공유되므로 secondary에도 있다. 프로필은 각 peer의 기본 broker에만 있으므로 넘어갈 때 다시 게시한다.
+- 설정 형식: `ARENA_SEARCH_PEER_BROKERS=public=http://a:9110|http://b:9111`.

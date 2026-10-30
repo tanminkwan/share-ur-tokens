@@ -6,7 +6,7 @@ import logging
 import os
 
 from ..a2a import A2ATransport
-from ..broker.client import BrokerClient
+from ..broker.failover import FailoverBrokerClient
 from ..config import ConfigError, Settings
 from ..crypto import Identity
 from ..events import EventLog
@@ -17,13 +17,14 @@ from ..peer.owner import NoOwner
 from ..serve import serve_background
 
 
-def parse_groups(items: list[str]) -> dict[str, str]:
+def parse_groups(items: list[str]) -> dict[str, list[str]]:
+    """group=url1|url2 ...: several brokers of one group, primary first"""
     out = {}
     for x in items:
         if "=" not in x:
-            raise ConfigError(f"broker 그룹은 그룹=주소 형식이어야 합니다: {x!r}")
-        g, url = x.split("=", 1)
-        out[g.strip()] = url.strip()
+            raise ConfigError(f"broker 그룹은 그룹=주소(|주소...) 형식이어야 합니다: {x!r}")
+        g, urls = x.split("=", 1)
+        out[g.strip()] = [u.strip() for u in urls.split("|") if u.strip()]
     return out
 
 
@@ -45,7 +46,7 @@ def build_autonomous_peer(settings: Settings, prefix: str, apps: list, descripti
     return Peer(Identity.load_or_create(get("key_file")), settings,
                 PeerConfig(url=f"http://{settings.host}:{get('port')}", labels=list(get("labels"))),
                 LocalFolderArea(area_dir, settings), NoOwner(), llm, A2ATransport(settings), EventLog(keep=settings.event_log_size),
-                brokers={g: BrokerClient(u, settings) for g, u in groups.items()}, apps=apps)
+                brokers={g: FailoverBrokerClient.from_urls(urls, settings) for g, urls in groups.items()}, apps=apps)
 
 
 async def run_peer(peer: Peer, port: int) -> None:
