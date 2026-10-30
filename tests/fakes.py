@@ -57,3 +57,25 @@ class RoutedLLM:
 
     def asked(self, key):
         return [kw for k, kw in self.calls if k == key]
+
+
+class HashEmbedder:
+    """deterministic stand-in for an embedding model: hashed bag of words+bigrams, normalized.
+    Same text -> same vector; texts sharing words are close. No meaning beyond overlap (that is what live tests are for)."""
+
+    def __init__(self, dim=256):
+        self.dim, self.calls = dim, []
+
+    async def embed(self, texts):
+        import hashlib
+        import math
+        from arena.search import tokens
+        self.calls.append(list(texts))
+        out = []
+        for t in texts:
+            v = [0.0] * self.dim
+            for tok in tokens(t):
+                v[int(hashlib.md5(tok.encode()).hexdigest(), 16) % self.dim] += 1.0
+            n = math.sqrt(sum(x * x for x in v)) or 1.0
+            out.append([x / n for x in v])
+        return out

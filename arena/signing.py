@@ -42,3 +42,25 @@ def verify_request(headers, method: str, path: str, now: float, window: float) -
     if not verify(pub, _target(method, path, ts), sig):
         raise SignatureError("bad request signature")
     return pub
+
+
+def sign_message(identity: Identity, op: str, now: float | None = None) -> dict:
+    """fields to merge into an A2A message so the receiver knows who sent it and when"""
+    ts = float(time.time() if now is None else now)
+    return {"pub": identity.pub, "ts": ts, "sig": identity.sign({"op": op, "ts": ts})}
+
+
+def verify_message(msg: dict, now: float, window: float) -> str:
+    """public key of a signed A2A message, or raise SignatureError"""
+    pub, ts, sig = msg.get("pub"), msg.get("ts"), msg.get("sig")
+    if not pub or ts is None or not sig:
+        raise SignatureError("signed message required (pub, ts, sig)")
+    try:
+        ts = float(ts)
+    except (TypeError, ValueError):
+        raise SignatureError("bad timestamp") from None
+    if abs(now - ts) > window:
+        raise SignatureError("message timestamp outside the allowed window")
+    if not verify(pub, {"op": msg.get("op"), "ts": ts}, sig):
+        raise SignatureError("bad message signature")
+    return pub

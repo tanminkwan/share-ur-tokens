@@ -26,7 +26,7 @@ class ApproveByOwner(PeerApp):
         return ["approve"]
 
     async def approve_event(self, peer, event, request):
-        a = await peer.owner.ask(f"'{request.get('title', '')}' 이벤트를 결재할까요?", request.get("text", ""))
+        a = await peer.owner.ask("다음 이벤트를 회사 이름으로 열어도 되는지 결재를 요청받았습니다. 결재할까요?", f"이벤트 내용: {request.get('text', '')}")
         return Decision(a.yes, a.why)
 
 
@@ -42,7 +42,8 @@ class AcceptRole(PeerApp):
     async def accept_role(self, peer, role, request):
         if role != self.role:
             return None
-        a = await peer.owner.ask(f"'{role}' 역할을 맡을까요?", request.get("text", ""))
+        a = await peer.owner.ask(f"이 이벤트에서 '{role}' 역할을 맡아 달라는 요청이 왔습니다. 지금 무엇을 평가하라는 것이 아니라, "
+                                 f"나중에 이 역할을 맡을지 정하는 것입니다. 맡을까요?", f"이벤트 내용: {request.get('text', '')}")
         return Decision(a.yes, a.why)
 
 
@@ -105,7 +106,8 @@ class LLMOwner:
 
     async def ask(self, question, context=""):
         d = await ask_json(self.llm, self.log, self.who, fallback=lambda: {"yes": False, "why": "LLM 응답 없음"},
-                           system=f"당신은 AI가 아니라 사람입니다. {self.persona} 질문에 당신의 판단으로 답하세요.",
+                           system=f"당신은 AI가 아니라 사람입니다. {self.persona} 질문에 당신의 판단으로 답하세요. "
+                                  "yes에는 예/아니오를, why에는 그렇게 정한 이유를 한 문장으로 쓰세요.",
                            user=f"{question}\n\n{context}", schema=self.ANSWER)
         return Answer(bool(d["yes"]), d["why"])
 

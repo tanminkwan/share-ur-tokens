@@ -105,6 +105,13 @@ class ClaudeLLM:
         raise LLMError(f"{type(last).__name__}: {str(last)[:120]}")
 
 
+class NoLLM:
+    """for peers without a model: every call fails, so callers use their fallback (e.g. profile = first line)"""
+
+    async def ask_json(self, **kw):
+        raise LLMError("no LLM configured for this peer")
+
+
 def build_llm(settings: Settings) -> LLM:
     if settings.llm_backend == "compat":
         return CompatLLM(settings)

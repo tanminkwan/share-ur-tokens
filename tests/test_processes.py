@@ -31,13 +31,13 @@ class Proc:
         full = dict(os.environ, PYTHONPATH=str(ROOT), **env)
         self.p = subprocess.Popen([sys.executable, "-m", module], env=full, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-    def wait_up(self, url, timeout=15):
+    def wait_up(self, url, timeout=15, path="/health"):
         end = time.time() + timeout
         while time.time() < end:
             if self.p.poll() is not None:
                 raise RuntimeError(self.p.stdout.read().decode())
             try:
-                if httpx.get(url + "/health", timeout=1).status_code == 200:
+                if httpx.get(url + path, timeout=1).status_code == 200:
                     return
             except httpx.HTTPError:
                 time.sleep(0.1)
@@ -151,3 +151,35 @@ async def test_r2_12_recorder_process_refuses_tampered_file(tmp_path, procs):
     procs.append(p)
     assert p.p.wait(15) != 0
     assert "TAMPERED at seq 0" in p.p.stdout.read().decode()
+
+
+async def test_p3d4_overseer_peer_process_reads_and_audits(tmp_path, procs):
+    """broker + recorder service + overseer peer as processes; a viewer asks the overseer over A2A"""
+    from arena.a2a import A2ATransport
+    from arena.signing import sign_message
+    bport, rport, oport = free_port(), free_port(), free_port()
+    burl, rurl, ourl = (f"http://127.0.0.1:{p}" for p in (bport, rport, oport))
+    ov_key, rec_key, viewer = tmp_path / "ov.key", tmp_path / "rec.key", Identity.generate()
+    ov, rec = Identity.load_or_create(str(ov_key)), Identity.load_or_create(str(rec_key))
+    base = make_env(tmp_path)
+    start(procs, "arena.broker", dict(base, ARENA_BROKER_PORT=str(bport)), tmp_path, burl)
+    start(procs, "arena.recorder", dict(base, ARENA_RECORDER_PORT=str(rport), ARENA_RECORDER_KEY_FILE=str(rec_key),
+                                        ARENA_RECORDER_READERS=ov.pub), tmp_path, rurl)
+    s = Settings.load(env=base, dotenv_path=None)
+    B, R = BrokerClient(burl, s), RecorderClient(rurl, s)
+    assert (await B.advertise(rec, dict(profile(rurl, "기록 보관", offers=["record"], now=time.time()), recorder_url=rurl)))["ok"]
+    cast = Cast()
+    for e in (cast.publish(ev=None), cast.share()):
+        assert (await R.record(*e))["ok"]
+    p = Proc("arena.peers.overseer", dict(base, ARENA_OVERSEER_PEER_PORT=str(oport), ARENA_OVERSEER_PEER_KEY_FILE=str(ov_key),
+                                          ARENA_OVERSEER_PEER_AREA=str(tmp_path / "ov-area"), ARENA_OVERSEER_PEER_BROKERS=f"open={burl}",
+                                          ARENA_OVERSEER_VIEWERS=viewer.pub), tmp_path)
+    procs.append(p)
+    p.wait_up(ourl, path="/.well-known/agent-card.json")
+    t = A2ATransport(s)
+    r = await t.call(ourl, dict({"op": "overseer_snapshot"}, **sign_message(viewer, "overseer_snapshot")))
+    assert r["ok"], r
+    snap = r["snapshot"]
+    assert snap["integrity"]["agree"] and snap["stats"]["entries"] == 2 and snap["stats"]["by_type"] == {"publish": 1, "share": 1}
+    assert any(x["pub"] == ov.pub and x["strengths"].startswith("관전용 절대자 peer") for x in snap["peers"])
+    assert (await t.call(ourl, dict({"op": "overseer_snapshot"}, **sign_message(Identity.generate(), "overseer_snapshot"))))["ok"] is False

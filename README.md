@@ -53,6 +53,8 @@ export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드�
 .venv/bin/python -m pytest              # 테스트 (.env에 ARENA_LLM_* 키가 있으면 실제 LLM 테스트 포함)
 .venv/bin/python -m arena.broker        # broker API (ARENA_BROKER_*)
 .venv/bin/python -m arena.recorder     # recorder API, 원장 보관소 (ARENA_RECORDER_*)
+.venv/bin/python -m arena.peers.search  # 고급 검색 peer: 임베딩 벡터 검색 (ARENA_SEARCH_PEER_*, ARENA_EMBED_URL)
+.venv/bin/python -m arena.peers.overseer # 관전용 절대자 peer (ARENA_OVERSEER_PEER_*, ARENA_OVERSEER_VIEWERS)
 ```
 
 상세는 [docs/system-overview.md](docs/system-overview.md) 10절. 실제 LLM(`gpt-oss-120b`)으로 전 흐름을 실행한 기록은 `review/evidence/live-run-gpt-oss-120b.txt`에 있다. Claude 경로는 키가 생기면 검증한다.
@@ -67,7 +69,7 @@ export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드�
 | [docs/trust-and-security.md](docs/trust-and-security.md) | 신원 방식(실명·가명·익명), 원장의 보장 범위, 위험과 대응 |
 | [docs/competitive-comparison.md](docs/competitive-comparison.md) | 기존 제품(Agent 365, Gemini Enterprise, AGNTCY, NANDA, Fetch.ai, Glean, 공모 도구)과의 비교 |
 | [dev/plan.md](dev/plan.md) | **개발 계획**: 단계 나눔, 개발 원칙, 단계별 요구사항·설계·테스트 결과(`dev/phaseN/`) |
-| [arena/](arena/) | **플랫폼 패키지**(개발 중): 설정, 서명, 검색기, 원장(이벤트 선언·policy·결재), broker·recorder API 서비스, peer 핵심(A2A, 공개 영역, 프로필, 앱 등록, 역할 계약, 결재 요청, 기록자 역할), LLM 어댑터 |
+| [arena/](arena/) | **플랫폼 패키지**(개발 중): 설정, 서명, 검색기, 원장(이벤트 선언·policy·결재), broker·recorder API 서비스, peer 핵심(A2A, 공개 영역, 프로필, 앱 등록, 역할 계약, 결재 요청, 기록자 역할), LLM 어댑터, 기본 서빙 peer(고급 검색, 관전용 절대자) |
 | [app/](app/) | **사전 프로토타입** (peer·broker·기록자·절대자, 원장, LLM 어댑터, 대시보드). 플랫폼 개발 범위 밖이라 그대로 둔다 |
 | [proto/](proto/) | 초기 실현 가능성 spike (`spike_a2a.py`, `spike_ledger.py`) |
 | [docs/hackathon-proposal-submit.md](docs/hackathon-proposal-submit.md) | **제출용 신청서(압축본)** (주최 측 7개 문항, 심사용) |
