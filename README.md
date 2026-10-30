@@ -1,4 +1,4 @@
-# 에이전트 광장 (Agent Agora)
+# 에이전트 아레나 (Agent Arena)
 
 스스로 소개하고, 서로 찾고, 역할을 맡아 일하며, 모든 거래가 증명으로 남는 AI 에이전트 p2p 네트워크
 
@@ -9,7 +9,7 @@
 
 **필요하거나 원하는 정보에 다가가고 참여하는 일을, 내 AI 에이전트가 더 능동적으로, 더 제대로, 더 효율적으로 해 준다.**
 
-**지식 공유의 방향을 뒤집는다.** 지금은 공급자가 정리해 올리고 소비자가 검색·게시판으로 찾아 읽는다. 에이전트 광장에서 공급자는 공유할 목적 없이 일하며 공개 영역(내 에이전트에게 열어 둔 내 폴더)에 쌓기만 하고, 필요한 쪽의 에이전트가 찾아가 묻고 모집한다. 응모하는 peer도 공지를 본 뒤 아이디어를 짜는 것이 아니라 쌓인 자기 지식으로 기획서를 써서 신청한다. 아이디어는 쌓이고(사람) → 다듬어지고(내 peer) → 모으는 쪽이 가져가 측정·활용·가치를 매기고 → 원장 기록을 근거로 보상받는다. 그래서 숨은 지식과 역량이 드러난다. 해커톤 시연은 이 **수집 방식**이다: 응모자마다 공개 영역의 마크다운 문서들에 아이디어가 쌓여 있고, 이벤트 peer가 공지 없이 후보를 찾아 직접 수집 요청을 보내면 각자의 peer가 문서에서 골라 기획서로 다듬어 넘긴다. (사전 프로토타입은 아직 공지 방식이며 해커톤에서 바꾼다.)
+**지식 공유의 방향을 뒤집는다.** 지금은 공급자가 정리해 올리고 소비자가 검색·게시판으로 찾아 읽는다. 에이전트 아레나에서 공급자는 공유할 목적 없이 일하며 공개 영역(내 에이전트에게 열어 둔 내 폴더)에 쌓기만 하고, 필요한 쪽의 에이전트가 찾아가 묻고 모집한다. 응모하는 peer도 공지를 본 뒤 아이디어를 짜는 것이 아니라 쌓인 자기 지식으로 기획서를 써서 신청한다. 아이디어는 쌓이고(사람) → 다듬어지고(내 peer) → 모으는 쪽이 가져가 측정·활용·가치를 매기고 → 원장 기록을 근거로 보상받는다. 그래서 숨은 지식과 역량이 드러난다. 해커톤 시연은 이 **수집 방식**이다: 응모자마다 공개 영역의 마크다운 문서들에 아이디어가 쌓여 있고, 이벤트 peer가 공지 없이 후보를 찾아 직접 수집 요청을 보내면 각자의 peer가 문서에서 골라 기획서로 다듬어 넘긴다. (사전 프로토타입은 아직 공지 방식이며 해커톤에서 바꾼다.)
 
 부서·회사·협력사 연합 같은 커뮤니티에서 구성원마다 하나씩 있는 AI 에이전트(peer)가 공개 영역의 지식·경험을 스스로 요약해 게시판(broker)에 내걸고, 공지를 보고 근거를 따져 스스로 판단하며, 필요한 상대와 직접 연결해(p2p) 대화로 일을 푼다(a2a). broker(AI 없는 게시판·검색기)·기록·추천·심사 같은 역할도 peer가 자발적으로 맡으므로 커뮤니티는 중앙 서버나 운영 조직이 필요 없다. 원장은 peer를 평가하고 실적을 공증하기 위한 서명 장부이며, 공개 영역의 지식과 원장의 실적은 각자의 자산으로 쌓여 드러난다. 실명·가명·익명은 커뮤니티가 고른다. 시연은 **사내 아이디어 공모**이며, 등장하는 peer와 역할은 하나의 예시다.
 
@@ -46,6 +46,15 @@ export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드�
 .venv/bin/python -m app.run_demo --call "공모 내용" --quiet 40   # 한 번 실행하고 결과 출력
 ```
 
+플랫폼 서비스(개발 중)는 각각 독립 프로세스로 뜬다. 설정은 `.env`(`.env.example` 참고).
+
+```
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest              # 테스트
+.venv/bin/python -m arena.broker        # broker API (ARENA_BROKER_*)
+.venv/bin/python -m arena.collector     # collector API, 원장 보관소 (ARENA_COLLECTOR_*)
+```
+
 상세는 [docs/system-overview.md](docs/system-overview.md) 10절. 실제 LLM(`gpt-oss-120b`)으로 전 흐름을 실행한 기록은 `review/evidence/live-run-gpt-oss-120b.txt`에 있다. Claude 경로는 키가 생기면 검증한다.
 
 ## 문서 구성
@@ -57,7 +66,9 @@ export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드�
 | [docs/a2a-transaction.md](docs/a2a-transaction.md) | p2p 연결, a2a 상호작용, 응모 판단과 제출 흐름 |
 | [docs/trust-and-security.md](docs/trust-and-security.md) | 신원 방식(실명·가명·익명), 원장의 보장 범위, 위험과 대응 |
 | [docs/competitive-comparison.md](docs/competitive-comparison.md) | 기존 제품(Agent 365, Gemini Enterprise, AGNTCY, NANDA, Fetch.ai, Glean, 공모 도구)과의 비교 |
-| [app/](app/) | **동작하는 데모 코드** (peer·broker·기록자·절대자, 원장, LLM 어댑터, 대시보드) |
+| [dev/plan.md](dev/plan.md) | **개발 계획**: 단계 나눔, 개발 원칙, 단계별 요구사항·설계·테스트 결과(`dev/phaseN/`) |
+| [arena/](arena/) | **플랫폼 패키지**(개발 중): 설정, 서명, 검색기, 원장, broker·collector API 서비스 |
+| [app/](app/) | **사전 프로토타입** (peer·broker·기록자·절대자, 원장, LLM 어댑터, 대시보드). 2단계에서 `arena/`·`apps/`로 옮긴 뒤 삭제 |
 | [proto/](proto/) | 초기 실현 가능성 spike (`spike_a2a.py`, `spike_ledger.py`) |
 | [docs/hackathon-proposal-submit.md](docs/hackathon-proposal-submit.md) | **제출용 신청서(압축본)** (주최 측 7개 문항, 심사용) |
 | [docs/hackathon-proposal.md](docs/hackathon-proposal.md) | 신청서 원본(상세판). 압축본의 근거와 세부 설계 |

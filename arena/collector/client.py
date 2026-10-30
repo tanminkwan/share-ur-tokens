@@ -1,0 +1,78 @@
+"""Clients for the collector. Peers depend on CollectorAPI only; HTTP and in-memory implementations are interchangeable."""
+from __future__ import annotations
+
+from typing import Protocol
+
+import httpx
+
+from ..config import Settings
+from ..crypto import Identity
+from ..signing import sign_request
+from .service import CollectorService
+
+
+class CollectorAPI(Protocol):
+    async def record(self, kind: str, payload: dict, sigs: dict) -> dict: ...
+    async def verify(self, hash_: str) -> dict: ...
+    async def audit(self) -> dict: ...
+    async def health(self) -> dict: ...
+    async def read_chain(self, identity: Identity) -> dict: ...
+    async def read_access_log(self, identity: Identity) -> dict: ...
+
+
+class CollectorClient:
+    def __init__(self, base_url: str, settings: Settings, http_client: httpx.AsyncClient | None = None):
+        self.base_url, self.settings = base_url.rstrip("/"), settings
+        self._http = http_client
+
+    async def _call(self, method: str, path: str, identity: Identity | None = None, json: dict | None = None) -> dict:
+        headers = sign_request(identity, method, path) if identity else {}
+        if self._http is not None:
+            r = await self._http.request(method, self.base_url + path, json=json, headers=headers)
+        else:
+            async with httpx.AsyncClient(timeout=self.settings.http_timeout_sec) as hc:
+                r = await hc.request(method, self.base_url + path, json=json, headers=headers)
+        return r.json()
+
+    async def record(self, kind, payload, sigs):
+        return await self._call("POST", "/entries", json={"type": kind, "payload": payload, "sigs": sigs})
+
+    async def verify(self, hash_):
+        return await self._call("GET", f"/entries/{hash_}")
+
+    async def audit(self):
+        return await self._call("GET", "/audit")
+
+    async def health(self):
+        return await self._call("GET", "/health")
+
+    async def read_chain(self, identity):
+        return await self._call("GET", "/chain", identity=identity)
+
+    async def read_access_log(self, identity):
+        return await self._call("GET", "/access-log", identity=identity)
+
+
+class InMemoryCollectorClient:
+    """same interface, calls the service object directly (tests, or a peer that hosts the collector in-process)"""
+
+    def __init__(self, svc: CollectorService):
+        self.svc = svc
+
+    async def record(self, kind, payload, sigs):
+        return await self.svc.record(kind, payload, sigs)
+
+    async def verify(self, hash_):
+        return self.svc.verify(hash_)
+
+    async def audit(self):
+        return self.svc.audit()
+
+    async def health(self):
+        return self.svc.health()
+
+    async def read_chain(self, identity):
+        return self.svc.read_chain(identity.pub)
+
+    async def read_access_log(self, identity):
+        return self.svc.read_access_log(identity.pub)
