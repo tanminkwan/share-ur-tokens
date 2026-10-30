@@ -162,19 +162,44 @@ class EventAssistant:
     # ---------------- identification and checks enforced by code ----------------
     REVEAL_KEYS = {"author", "label", "value", "salt", "publish_hash"}
 
-    def _reveals(self, obj) -> list[dict]:
+    def reveal_records(self, obj) -> list[dict]:
+        """every reveal record (the platform's fixed shape) inside obj"""
         if isinstance(obj, dict):
             if self.REVEAL_KEYS <= set(obj):
                 return [obj]
-            return [r for v in obj.values() for r in self._reveals(v)]
+            return [r for v in obj.values() for r in self.reveal_records(v)]
         if isinstance(obj, list):
-            return [r for v in obj for r in self._reveals(v)]
+            return [r for v in obj for r in self.reveal_records(v)]
         return []
+
+    REVEAL_REF = re.compile(r"^공개:(\S+):(\S+)$")
+
+    async def fill_reveals(self, ctx, st, obj):
+        """"공개:<handle>:<label>" -> my own reveal record or one I received and the code checked; returns (obj, missing refs)"""
+        missing = []
+
+        async def one(x):
+            if isinstance(x, dict):
+                return {k: await one(v) for k, v in x.items()}
+            if isinstance(x, list):
+                return [await one(v) for v in x]
+            m = self.REVEAL_REF.match(x.strip()) if isinstance(x, str) else None
+            if not m:
+                return x
+            who, label = self.expand(st, m.group(1)), m.group(2)
+            if who in (ctx.pub, ctx.pen) and label in st.secrets:
+                s = st.secrets[label]
+                return {"author": ctx.pub, "label": label, "value": s["value"], "salt": s["salt"], "publish_hash": s["publish_hash"]}
+            if f"{who}|{label}" in st.reveals:
+                return dict(st.reveals[f"{who}|{label}"])
+            missing.append(x)
+            return x
+        return await one(obj), missing
 
     async def verify_reveals(self, ctx, st, obj) -> list[tuple[bool, str]]:
         """every reveal record inside obj, checked against the ledger: published by its author, in this event, hash matches"""
         out = []
-        for r in self._reveals(obj):
+        for r in self.reveal_records(obj):
             v = await ctx.recorder(st.recorder_url).verify(str(r["publish_hash"]))
             if not (v.get("exists") and v.get("type") == "publish" and v.get("author") == r["author"] and v.get("event_id") == st.event_id):
                 out.append((False, f"라벨 {r['label']}: 그 등록이 원장에 없거나 다른 사람·다른 이벤트의 등록"))
@@ -182,15 +207,18 @@ class EventAssistant:
                 out.append((False, f"라벨 {r['label']}: 공개값이 먼저 등록한 해시와 맞지 않음"))
             else:
                 out.append((True, f"라벨 {r['label']}: 일치"))
+                if r["author"] != ctx.pub:  # kept by code, so it can be referred to as 공개:<handle>:<label> and never retyped
+                    st.reveals[f"{r['author']}|{r['label']}"] = {k: r[k] for k in self.REVEAL_KEYS}
         return out
 
-    @staticmethod
-    def _summary(results) -> str:
+    def _summary(self, ctx, st, obj, results) -> str:
         if not results:
             return ""
         bad = [why for ok, why in results if not ok]
-        return (f"\n[코드 확인] 공개값 {len(results)}건 모두 원장과 일치" if not bad
-                else f"\n[코드 확인] 공개값 {len(results)}건 중 원장과 맞지 않음: {'; '.join(bad)}")
+        refs = [f"공개:{self.handle(ctx, st, r['author'])}:{r['label']}" for r in self.reveal_records(obj) if f"{r['author']}|{r['label']}" in st.reveals]
+        return ((f"\n[코드 확인] 공개값 {len(results)}건 모두 원장과 일치" if not bad
+                 else f"\n[코드 확인] 공개값 {len(results)}건 중 원장과 맞지 않음: {'; '.join(bad)}")
+                + (f"\n[코드 보관] 공동 확인 값에는 {', '.join(refs)} 처럼 쓰면 코드가 이 공개값 묶음을 그대로 넣는다" if refs else ""))
 
     # ---------------- persistence ----------------
     def store(self, ctx) -> EventStore:
@@ -311,6 +339,9 @@ class EventAssistant:
                                       effort=self.s.assistant_effort,
                                       messages=[{"role": "user", "content": f"[지금까지]\n{recent}\n\n[생각] {d.get('thought', '')}\n"
                                                                             f"도구 {name}의 인자를 채우세요."}])
+            inner = args.get("arguments", args.get("args")) if isinstance(args, dict) else None
+            if isinstance(inner, dict) and set(args) <= {"tool", "name", "arguments", "args"}:  # {"tool": .., "arguments": {..}} -> {..}
+                args = inner
             key = [name, json.dumps(args, ensure_ascii=False, sort_keys=True)]
             if key == st.last_action:  # the same call twice in a row: do not run it again
                 result = {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
@@ -393,7 +424,7 @@ class EventAssistant:
                 notes += f"\n[코드 확인] 참가 신청: 규칙 해시 일치, 신청자 {len(st.applicants)}명"
             else:
                 notes += "\n[코드 확인] 참가 신청이 아님: 규칙 해시가 다르다"
-        notes += self._summary(await self.verify_reveals(ctx, st, data))
+        notes += self._summary(ctx, st, data, await self.verify_reveals(ctx, st, data))
         await self.feed(ctx, st.event_id, f"[메시지] 보낸 이 pub={who}\n{msg.get('text', '')}\n"
                                           f"data={json.dumps(data, ensure_ascii=False)}{notes}")
         return {"ok": True}
@@ -409,7 +440,7 @@ class EventAssistant:
         st.peers[who] = msg.get("url")
         await self.feed(ctx, st.event_id, f"[서명 요청] request_id={msg['request_id']} 제안자 pub={who}\n"
                                           f"kind={p.get('kind')} subject={p.get('subject')} parties={p.get('parties')}\n"
-                                          f"value={json.dumps(p.get('value'), ensure_ascii=False)}{self._summary(checks)}")
+                                          f"value={json.dumps(p.get('value'), ensure_ascii=False)}{self._summary(ctx, st, p.get('value'), checks)}")
         return {"ok": True}
 
     async def _op_attest_signature(self, ctx, msg, head: MessageHead):

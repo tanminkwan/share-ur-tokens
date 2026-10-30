@@ -71,11 +71,21 @@ async def contract(A, ctx, st, role, peer):
     return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error"), "contracts_so_far": len(st.contracts)}
 
 
-async def send(A, ctx, st, to, text, data=None):
+async def send(A, ctx, st, to, text, data=None, attach_reveals=()):
+    data = dict(data or {}) if isinstance(data, dict) else {"data": data}
+    for r in A.reveal_records(data):  # enforced by code: my own reveal travels exactly as committed, never retyped
+        if r.get("author") == ctx.pub and r != await my_reveal(A, ctx, st, r.get("label")):
+            return {"ok": False, "error": f"손으로 옮긴 내 공개값(라벨 {r.get('label')})이 내 기록과 다르다. 보내지 않았다. "
+                                          "공개값은 attach_reveals에 라벨을 넣어 코드가 붙이게 하라"}
+    for label in attach_reveals or ():
+        rec = await my_reveal(A, ctx, st, label)
+        if "error" in rec:
+            return {"ok": False, "error": rec["error"]}
+        data.setdefault("reveals", []).append(rec)
     _, url = await A.resolve_peer(ctx, st, to)
     if not url:
         return {"ok": False, "error": f"{to}의 주소를 찾지 못했다"}
-    return await A.send(ctx, st, url, text, data or {})
+    return await A.send(ctx, st, url, text, data)
 
 
 async def solicit(A, ctx, st, targets, text, data=None):
@@ -151,6 +161,9 @@ async def propose_attest(A, ctx, st, kind, subject, value, parties):
             return {"error": f"당사자 {x}를 찾지 못했다"}
         resolved.append({"pub": pub, "url": url})
     parties = resolved
+    value, missing = await A.fill_reveals(ctx, st, value)  # "공개:<handle>:<label>" -> the reveal record, by code
+    if missing:
+        return {"error": f"이런 공개값이 없다(내가 등록했거나 받아서 코드가 확인한 것만 쓸 수 있다): {', '.join(missing)}"}
     bad = [why for ok, why in await A.verify_reveals(ctx, st, value) if not ok]
     if bad:  # enforced by code: never propose a result whose reveals do not match the ledger
         return {"error": f"value 안의 공개값이 원장과 맞지 않는다(코드 확인): {'; '.join(bad)}"}
@@ -214,14 +227,16 @@ def default_tools() -> list[Tool]:
         Tool("join_event", "{}: 이 이벤트에 참가 신청을 한다(개최자에게 메시지로 알림)", None, join_event, participant_only=True),
         Tool("contract", "{role, peer}: 그 peer(필명)와 이 이벤트의 역할 계약을 맺어 원장에 기록한다. 계약에는 규칙 해시가 들어간다",
              _obj(role=S, peer=S), contract, host_only=True),
-        Tool("send", "{to, text, data_json}: 상대 peer(필명)에게 이 이벤트의 메시지를 보낸다(data_json은 JSON 객체를 담은 문자열)",
-             _obj(to=S, text=S, data_json=S), send),
+        Tool("send", "{to, text, data_json, attach_reveals?: [라벨...]}: 상대 peer(필명)에게 이 이벤트의 메시지를 보낸다(data_json은 JSON 객체를 담은 문자열). "
+             "내 공개값을 보낼 때는 손으로 옮기지 말고 attach_reveals에 라벨을 넣는다. 코드가 공개값 묶음을 data.reveals에 그대로 붙인다",
+             dict(_obj(to=S, text=S, data_json=S), properties={"to": S, "text": S, "data_json": S, "attach_reveals": {"type": "array", "items": S}}),
+             send),
         Tool("solicit", "{targets: [필명...], text, data_json}: 고른 peer들에게 직접 요청을 한 번에 보낸다(data_json은 JSON 객체 문자열)",
              _obj(targets={"type": "array", "items": S}, text=S, data_json=S), solicit),
         Tool("publish_text", "{text}: 글을 원장에 먼저 등록한다. 결과 content_hash, publish_hash", _obj(text=S), publish_text),
         Tool("commit", "{label, value}: 값에 비밀값을 붙인 해시를 원장에 먼저 등록하고 값은 숨겨 둔다. 결과 label, commit, publish_hash",
              _obj(label=S, value=S), commit),
-        Tool("my_reveal", "{label}: 내가 먼저 등록한 값의 공개값 묶음(author, label, value, salt, publish_hash)을 꺼낸다. 상대에게는 이 묶음을 고치지 말고 그대로 보낸다",
+        Tool("my_reveal", "{label}: 내가 먼저 등록한 값의 공개값 묶음(author, label, value, salt, publish_hash)을 본다. 보낼 때는 send의 attach_reveals를 쓴다",
              _obj(label=S), my_reveal),
         Tool("check_reveal", "{publish_hash, author, label, value, salt}: 상대(필명)가 보낸 공개값이 상대가 먼저 등록한 해시와 맞는지 원장으로 확인한다. 결과 match",
              _obj(publish_hash=S, author=S, label=S, value=S, salt=S), check_reveal),
@@ -229,6 +244,7 @@ def default_tools() -> list[Tool]:
         Tool("event_progress", "{}: 이 이벤트의 원장 기록(계약, 등록과 이름표, 공동 확인, 닫힘)을 순서대로 본다. 누가 무엇을 했는지 확인할 때 쓴다",
              None, event_progress, after_close=True),
         Tool("propose_attest", "{kind, subject, value_json, parties: [필명...]}: 공동 확인을 제안한다(value_json은 JSON 문자열). "
+             "value 안에 공개값 묶음을 넣을 자리에는 \"공개:필명-xxxxxx:라벨\"이라고 쓰면 코드가 확인된 묶음을 그대로 넣는다. "
              "당사자가 나 혼자면 바로 기록하고, 아니면 다른 당사자에게 서명 요청을 보낸다",
              _obj(kind=S, subject=S, value_json=S, parties={"type": "array", "items": S}), propose_attest),
         Tool("cosign", "{request_id}: 받은 서명 요청에 서명해 돌려준다(내용이 내가 본 것과 같을 때만)", _obj(request_id=S), cosign),
