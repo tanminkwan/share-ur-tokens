@@ -1,4 +1,4 @@
-"""R3-8, R4-11, R6-1: real processes over real HTTP. Two brokers that share notices + one collector, restarted once."""
+"""R3-8, R4-11, R6-1: real processes over real HTTP. Two brokers that share notices + one recorder, restarted once."""
 import os
 import pathlib
 import socket
@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from arena.broker.client import BrokerClient
-from arena.collector.client import CollectorClient
+from arena.recorder.client import RecorderClient
 from arena.config import Settings
 from arena.crypto import Identity
 from tests.conftest import make_env
@@ -107,47 +107,47 @@ async def test_r4_11_closed_group_owner_from_settings(tmp_path, procs):
     assert len((await D.find("심사", identity=member))["peers"]) == 1
 
 
-async def test_r3_8_collector_process_persists_across_restart(tmp_path, procs):
+async def test_r3_8_recorder_process_persists_across_restart(tmp_path, procs):
     reader, cast = Identity.generate(), Cast()
     port = free_port()
     url = f"http://127.0.0.1:{port}"
-    env = make_env(tmp_path, ARENA_COLLECTOR_PORT=port, ARENA_COLLECTOR_READERS=reader.pub, ARENA_COLLECTOR_NAME="rec-1")
+    env = make_env(tmp_path, ARENA_RECORDER_PORT=port, ARENA_RECORDER_READERS=reader.pub, ARENA_RECORDER_NAME="rec-1")
     s = Settings.load(env=env, dotenv_path=None)
-    start(procs, "arena.collector", env, tmp_path, url)
-    C = CollectorClient(url, s)
+    start(procs, "arena.recorder", env, tmp_path, url)
+    C = RecorderClient(url, s)
     first = await C.health()
     assert first["name"] == "rec-1" and first["length"] == 0
-    a = await C.record(*cast.publish())
+    a = await C.record(*cast.publish(ev=None))
     b = await C.record(*cast.share())
     assert a["ok"] and b["ok"]
     assert (await C.read_chain(Identity.generate()))["ok"] is False
     procs[0].stop()
-    start(procs, "arena.collector", env, tmp_path, url)
+    start(procs, "arena.recorder", env, tmp_path, url)
     again = await C.health()
     assert again["pub"] == first["pub"]  # same recorder key
     assert again["length"] == 2 and again["head"] == b["hash"]  # same chain
     assert (await C.audit())["status"] == "ok"
-    c = await C.record(*cast.publish(content="idea B"))
+    c = await C.record(*cast.publish(content="doc B", ev=None))
     assert c["ok"] and c["seq"] == 2
     chain = (await C.read_chain(reader))["chain"]
     assert [e["seq"] for e in chain] == [0, 1, 2]
     assert (tmp_path / "ledger.jsonl").read_text(encoding="utf-8").count("\n") == 3
 
 
-async def test_r2_12_collector_process_refuses_tampered_file(tmp_path, procs):
+async def test_r2_12_recorder_process_refuses_tampered_file(tmp_path, procs):
     import json
     cast, port = Cast(), free_port()
     url = f"http://127.0.0.1:{port}"
-    env = make_env(tmp_path, ARENA_COLLECTOR_PORT=port)
-    start(procs, "arena.collector", env, tmp_path, url)
-    C = CollectorClient(url, Settings.load(env=env, dotenv_path=None))
-    await C.record(*cast.publish())
+    env = make_env(tmp_path, ARENA_RECORDER_PORT=port)
+    start(procs, "arena.recorder", env, tmp_path, url)
+    C = RecorderClient(url, Settings.load(env=env, dotenv_path=None))
+    await C.record(*cast.publish(ev=None))
     procs[0].stop()
     f = tmp_path / "ledger.jsonl"
     e = json.loads(f.read_text(encoding="utf-8"))
-    e["payload"]["call_id"] = "forged"
+    e["payload"]["author"] = Identity.generate().pub
     f.write_text(json.dumps(e, ensure_ascii=False) + "\n", encoding="utf-8")
-    p = Proc("arena.collector", env, tmp_path)
+    p = Proc("arena.recorder", env, tmp_path)
     procs.append(p)
     assert p.p.wait(15) != 0
     assert "TAMPERED at seq 0" in p.p.stdout.read().decode()

@@ -1,4 +1,4 @@
-# 1단계 설계: 인프라 서비스 (broker · collector)
+# 1단계 설계: 인프라 서비스 (broker · recorder)
 
 요구사항은 [requirements.md](requirements.md). 기술 스택은 Python 3.11, Starlette(HTTP API), httpx(클라이언트), `cryptography`(ed25519), pytest.
 
@@ -16,21 +16,21 @@ flowchart LR
         SRCH["Searcher (BM25)"]
         BAPI --> BSVC --> SRCH
     end
-    subgraph colproc["collector 프로세스 (python -m arena.collector)"]
+    subgraph colproc["recorder 프로세스 (python -m arena.recorder)"]
         CAPI["HTTP API<br/>/entries /audit /chain /health"]
-        CSVC["CollectorService<br/>열람 통제 · 접근 기록"]
+        CSVC["RecorderService<br/>열람 통제 · 접근 기록"]
         LDG["Ledger<br/>원장 규칙 · 해시 체인"]
         FILE[("JSONL 파일")]
         CAPI --> CSVC --> LDG --> FILE
     end
     P1 -- "BrokerClient" --> BAPI
     P2 -- "BrokerClient" --> BAPI
-    P1 -- "CollectorClient" --> CAPI
-    P2 -- "CollectorClient" --> CAPI
+    P1 -- "RecorderClient" --> CAPI
+    P2 -- "RecorderClient" --> CAPI
     BAPI -. "공지 공유 (이웃 broker)" .-> BAPI2["다른 broker"]
 ```
 
-두 서비스는 **라이브러리(규칙) + API(포장)** 두 겹이다. 규칙 층은 네트워크를 모르므로 네트워크 없이 테스트하고, 포장 층은 요청 해석·서명 확인·응답 변환만 한다. 구성원 peer가 자기 프로세스 안에 `BrokerService`나 `CollectorService`를 품고 같은 API를 열면 "역할을 맡은 peer"가 된다(2단계).
+두 서비스는 **라이브러리(규칙) + API(포장)** 두 겹이다. 규칙 층은 네트워크를 모르므로 네트워크 없이 테스트하고, 포장 층은 요청 해석·서명 확인·응답 변환만 한다. 구성원 peer가 자기 프로세스 안에 `BrokerService`나 `RecorderService`를 품고 같은 API를 열면 "역할을 맡은 peer"가 된다(2단계).
 
 ## 2. 패키지 구성
 
@@ -51,16 +51,16 @@ arena/
     api.py             build_broker_app(service) -> Starlette
     client.py          BrokerAPI(Protocol), BrokerClient(httpx), InMemoryBrokerClient
     __main__.py        단독 실행
-  collector/
+  recorder/
     __init__.py
-    service.py         CollectorService (Ledger + 열람 허용 목록 + 접근 기록)
-    api.py             build_collector_app(service) -> Starlette
-    client.py          CollectorAPI(Protocol), CollectorClient(httpx), InMemoryCollectorClient
+    service.py         RecorderService (Ledger + 열람 허용 목록 + 접근 기록)
+    api.py             build_recorder_app(service) -> Starlette
+    client.py          RecorderAPI(Protocol), RecorderClient(httpx), InMemoryRecorderClient
     __main__.py        단독 실행
 tests/
   conftest.py          설정 덮어쓰기, Identity·서비스·앱 fixture
   test_config.py  test_crypto.py  test_search.py  test_ledger.py
-  test_collector_service.py  test_collector_api.py
+  test_recorder_service.py  test_recorder_api.py
   test_broker_service.py     test_broker_api.py
   test_processes.py    실제 프로세스 기동 통합 테스트
 ```
@@ -77,11 +77,11 @@ tests/
 | `ARENA_BROKER_NEIGHBORS` | (빈 값) | 이웃 broker 주소, 쉼표 구분 |
 | `ARENA_BROKER_OWNER_PUB` | (빈 값) | 닫힌 그룹의 소유자 공개키. 비어 있으면 열린 그룹 |
 | `ARENA_BROKER_KEY_FILE` | `data/broker.key` | broker 키 파일 |
-| `ARENA_COLLECTOR_PORT` | `9120` | collector 포트 |
-| `ARENA_COLLECTOR_NAME` | `collector` | collector 이름 |
-| `ARENA_COLLECTOR_KEY_FILE` | `data/collector.key` | 기록자 키 파일 |
-| `ARENA_COLLECTOR_LEDGER_FILE` | `data/ledger.jsonl` | 원장 파일 |
-| `ARENA_COLLECTOR_READERS` | (빈 값) | 전체 열람 허용 공개키, 쉼표 구분 |
+| `ARENA_RECORDER_PORT` | `9120` | recorder 포트 |
+| `ARENA_RECORDER_NAME` | `recorder` | recorder 이름 |
+| `ARENA_RECORDER_KEY_FILE` | `data/recorder.key` | 기록자 키 파일 |
+| `ARENA_RECORDER_LEDGER_FILE` | `data/ledger.jsonl` | 원장 파일 |
+| `ARENA_RECORDER_READERS` | (빈 값) | 전체 열람 허용 공개키, 쉼표 구분 |
 | `ARENA_SIG_WINDOW_SEC` | `60` | 서명 요청의 시각 허용 폭 |
 | `ARENA_CONTRACT_ROLES` | `record,review` | 역할 계약에 허용되는 역할 |
 | `ARENA_ACCESS_LOG_SIZE` | `50` | 접근 기록 보관 건수 |
@@ -150,16 +150,16 @@ classDiagram
 
 - 항목 모양은 기존과 같다: `{type, payload, sigs, prev, ts, seq, hash, seal:{pub, sig}}`. 해시는 `(type, payload, sigs, prev, ts)`의 canon.
 - 규칙은 `RULES` 목록의 함수들이 순서대로 돈다(R2-1 ~ R2-9). 규칙 추가는 함수 추가로 한다(개방-폐쇄).
-- 기록자는 하나다. 다른 기록자의 항목을 받아 검증하는 경로(validator)와 시각 편차 규칙은 마지막 단계(collector 분산)에서 넣는다.
+- 기록자는 하나다. 다른 기록자의 항목을 받아 검증하는 경로(validator)와 시각 편차 규칙은 마지막 단계(recorder 분산)에서 넣는다.
 - `Ledger(identity, store, settings, clock=time.time)`: 시작 시 `store.load()`로 체인을 읽고 `audit_chain`이 `ok`가 아니면 `LedgerCorrupt` 예외. `propose`가 통과하면 `store.append`.
 - `JsonlStore`: 한 항목 한 줄. 열 때 `O_APPEND`. 디렉터리가 없으면 만든다.
 - `audit_chain(chain)`, `contribution(chain)`은 모듈 함수(절대자·대시보드도 같은 함수를 쓴다).
 
-## 6. collector 서비스와 API
+## 6. recorder 서비스와 API
 
 ```mermaid
 classDiagram
-    class CollectorService {
+    class RecorderService {
         +name, identity, ledger, readers: set, access_log: deque
         +record(kind, payload, sigs) dict
         +verify(hash) dict
@@ -168,7 +168,7 @@ classDiagram
         +read_access_log(reader_pub) dict
         +health() dict
     }
-    class CollectorAPI {
+    class RecorderAPI {
         <<Protocol>>
         +record(kind, payload, sigs)
         +verify(hash)
@@ -176,12 +176,12 @@ classDiagram
         +read_chain(identity)
         +health()
     }
-    class CollectorClient
-    class InMemoryCollectorClient
-    CollectorAPI <|.. CollectorClient
-    CollectorAPI <|.. InMemoryCollectorClient
-    InMemoryCollectorClient --> CollectorService
-    CollectorClient ..> "HTTP" CollectorService
+    class RecorderClient
+    class InMemoryRecorderClient
+    RecorderAPI <|.. RecorderClient
+    RecorderAPI <|.. InMemoryRecorderClient
+    InMemoryRecorderClient --> RecorderService
+    RecorderClient ..> "HTTP" RecorderService
 ```
 
 | 메서드·경로 | 인증 | 요청 | 응답 |
@@ -251,13 +251,13 @@ classDiagram
 
 ## 8. 클라이언트
 
-`BrokerAPI`, `CollectorAPI`는 `typing.Protocol`이다. `httpx` 구현은 `Settings`의 제한 시간을 쓰고 서명 요청 헤더를 붙인다. `InMemory*` 구현은 서비스 객체를 직접 부르며 같은 dict를 돌려준다. 2단계의 peer는 Protocol에만 의존한다.
+`BrokerAPI`, `RecorderAPI`는 `typing.Protocol`이다. `httpx` 구현은 `Settings`의 제한 시간을 쓰고 서명 요청 헤더를 붙인다. `InMemory*` 구현은 서비스 객체를 직접 부르며 같은 dict를 돌려준다. 2단계의 peer는 Protocol에만 의존한다.
 
 ## 9. 단독 실행
 
 ```
 python -m arena.broker      # ARENA_BROKER_* 설정으로 기동, 키 파일 없으면 만들고 저장
-python -m arena.collector   # ARENA_COLLECTOR_* 설정으로 기동, 원장 파일 이어 쓰기
+python -m arena.recorder   # ARENA_RECORDER_* 설정으로 기동, 원장 파일 이어 쓰기
 ```
 
 둘 다 uvicorn으로 `ARENA_HOST:포트`에서 듣는다. 시작 시 health 내용을 로그로 한 줄 찍는다.
@@ -267,7 +267,7 @@ python -m arena.collector   # ARENA_COLLECTOR_* 설정으로 기동, 원장 파�
 ```mermaid
 sequenceDiagram
     participant A as 응모자 peer
-    participant C as collector
+    participant C as recorder
     participant E as 이벤트 peer
     A->>C: POST /entries publish(author 서명)
     C-->>A: seq, hash, seal(기록자 서명)
@@ -307,12 +307,12 @@ sequenceDiagram
 |---|---|---|
 | 단위 | 순수 함수·서비스 객체, 네트워크 없음, 시계 주입 | 원장 규칙 하나당 테스트 하나, 가시성 규칙, 만기, 허가 |
 | API | Starlette 앱을 `httpx.ASGITransport`로 호출 | 서명 요청 401, 열람 403, 이웃 전달(가짜 게이트웨이) |
-| 프로세스 | `subprocess`로 broker 2개 + collector 1개 기동, 실제 HTTP | 공지가 이웃에 보이고, 재시작 뒤 원장이 이어짐 |
+| 프로세스 | `subprocess`로 broker 2개 + recorder 1개 기동, 실제 HTTP | 공지가 이웃에 보이고, 재시작 뒤 원장이 이어짐 |
 | 회귀 | `app.run_demo` 실행 | 기존 데모가 그대로 돈다 |
 
 테스트는 임시 디렉터리에 키·원장 파일을 두고, 포트는 빈 포트를 골라 쓴다.
 
 ## 13. 이번 단계에서 하지 않는 것
 
-- 다단계 공지 전파(중복 걸러내기), **기록자 여럿(collector 분산: 복제·합의·상호 대조)은 마지막 단계**, 허가 회수, 재전송 방지용 nonce 저장, 인증 토큰(라벨 서명은 회사 로그인 연동 범위 밖).
+- 다단계 공지 전파(중복 걸러내기), **기록자 여럿(recorder 분산: 복제·합의·상호 대조)은 마지막 단계**, 허가 회수, 재전송 방지용 nonce 저장, 인증 토큰(라벨 서명은 회사 로그인 연동 범위 밖).
 - 기존 `app/`을 새 서비스로 바꾸는 일(2단계).

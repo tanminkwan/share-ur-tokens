@@ -2,9 +2,9 @@
 import httpx
 import pytest
 
-from arena.collector.api import build_collector_app
-from arena.collector.client import CollectorAPI, CollectorClient, InMemoryCollectorClient
-from arena.collector.service import CollectorService
+from arena.recorder.api import build_recorder_app
+from arena.recorder.client import RecorderAPI, RecorderClient, InMemoryRecorderClient
+from arena.recorder.service import RecorderService
 from arena.crypto import Identity
 from arena.ledger import MemoryStore
 from arena.signing import sign_request
@@ -23,23 +23,23 @@ def reader():
 
 @pytest.fixture
 def svc(settings, reader):
-    return CollectorService.build(settings, identity=Identity.generate(), store=MemoryStore(), readers=[reader.pub])
+    return RecorderService.build(settings, identity=Identity.generate(), store=MemoryStore(), readers=[reader.pub])
 
 
 @pytest.fixture
 def http(svc):
-    return httpx.AsyncClient(transport=httpx.ASGITransport(app=build_collector_app(svc)), base_url="http://collector")
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=build_recorder_app(svc)), base_url="http://recorder")
 
 
 @pytest.fixture(params=["http", "memory"])
-def client(request, svc, http, settings) -> CollectorAPI:
+def client(request, svc, http, settings) -> RecorderAPI:
     if request.param == "http":
-        return CollectorClient("http://collector", settings, http_client=http)
-    return InMemoryCollectorClient(svc)
+        return RecorderClient("http://recorder", settings, http_client=http)
+    return InMemoryRecorderClient(svc)
 
 
 async def test_r3_1_post_entries(http, cast):
-    kind, p, sigs = cast.publish()
+    kind, p, sigs = cast.publish(ev=None)
     r = await http.post("/entries", json={"type": kind, "payload": p, "sigs": sigs})
     assert r.status_code == 200 and r.json()["ok"] and r.json()["seq"] == 0
     r = await http.post("/entries", json={"type": kind, "payload": p, "sigs": sigs})
@@ -51,7 +51,7 @@ async def test_r3_1_post_entries(http, cast):
 
 
 async def test_r3_2_get_entry(http, cast):
-    kind, p, sigs = cast.publish()
+    kind, p, sigs = cast.publish(ev=None)
     rec = (await http.post("/entries", json={"type": kind, "payload": p, "sigs": sigs})).json()
     r = (await http.get(f"/entries/{rec['hash']}")).json()
     assert r["exists"] and r["seal_ok"] and r["type"] == "publish"
@@ -84,9 +84,9 @@ async def test_r3_5_access_log_endpoint(http, reader):
 
 
 async def test_r3_9_clients_share_one_interface(client, cast, reader):
-    rec = await client.record(*cast.publish())
+    rec = await client.record(*cast.publish(ev=None))
     assert rec["ok"] and rec["seq"] == 0
-    bad = await client.record(*cast.publish())
+    bad = await client.record(*cast.publish(ev=None))
     assert bad["ok"] is False and bad["error"].startswith("content already published")
     v = await client.verify(rec["hash"])
     assert v["exists"] and v["type"] == "publish"

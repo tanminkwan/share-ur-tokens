@@ -1,4 +1,4 @@
-"""Starlette plumbing shared by the broker and collector APIs: JSON in/out, error mapping, signed-request check."""
+"""Starlette plumbing shared by the broker and recorder APIs: JSON in/out, error mapping, signed-request check."""
 from __future__ import annotations
 
 import json

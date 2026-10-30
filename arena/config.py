@@ -46,14 +46,13 @@ class Settings:
     broker_neighbors: list[str] = F("ARENA_BROKER_NEIGHBORS", [], _list, "이웃 broker 주소(쉼표 구분)")
     broker_owner_pub: str | None = F("ARENA_BROKER_OWNER_PUB", None, _opt, "닫힌 그룹 소유자 공개키(비면 열린 그룹)")
     broker_key_file: str = F("ARENA_BROKER_KEY_FILE", "data/broker.key", str, "broker 키 파일")
-    # collector
-    collector_port: int = F("ARENA_COLLECTOR_PORT", 9120, int, "collector 포트")
-    collector_name: str = F("ARENA_COLLECTOR_NAME", "collector", str, "collector 이름")
-    collector_key_file: str = F("ARENA_COLLECTOR_KEY_FILE", "data/collector.key", str, "기록자 키 파일")
-    collector_ledger_file: str = F("ARENA_COLLECTOR_LEDGER_FILE", "data/ledger.jsonl", str, "원장 파일(JSONL)")
-    collector_readers: list[str] = F("ARENA_COLLECTOR_READERS", [], _list, "전체 열람 허용 공개키(쉼표 구분)")
+    # recorder
+    recorder_port: int = F("ARENA_RECORDER_PORT", 9120, int, "recorder 포트")
+    recorder_name: str = F("ARENA_RECORDER_NAME", "recorder", str, "recorder 이름")
+    recorder_key_file: str = F("ARENA_RECORDER_KEY_FILE", "data/recorder.key", str, "기록자 키 파일")
+    recorder_ledger_file: str = F("ARENA_RECORDER_LEDGER_FILE", "data/ledger.jsonl", str, "원장 파일(JSONL)")
+    recorder_readers: list[str] = F("ARENA_RECORDER_READERS", [], _list, "전체 열람 허용 공개키(쉼표 구분)")
     # ledger rules
-    contract_roles: list[str] = F("ARENA_CONTRACT_ROLES", ["record", "review"], _list, "역할 계약에 허용되는 역할")
     access_log_size: int = F("ARENA_ACCESS_LOG_SIZE", 50, int, "접근 기록 보관 건수")
     # search
     search_k: int = F("ARENA_SEARCH_K", 3, int, "검색 기본 상위 건수")

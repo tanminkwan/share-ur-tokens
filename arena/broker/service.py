@@ -12,6 +12,7 @@ from ..search import BM25Searcher, Searcher
 from .neighbors import Caller, HttpNeighbors, NeighborGateway
 
 log = logging.getLogger("arena.broker")
+NOTICE_TEXT_FIELDS = ("title", "text", "kind")  # searched if present; every other notice field is the app's business
 
 
 class BrokerService:
@@ -155,7 +156,7 @@ class BrokerService:
         visible = await self.visible_notices(pub)
         if visible is None:
             return None
-        ranked = self.searcher.rank(q, [f"{n['title']} {n['text']} {n['kind']}" for n in visible])
+        ranked = self.searcher.rank(q, [" ".join(str(n.get(f, "")) for f in NOTICE_TEXT_FIELDS) for n in visible])
         return [dict(visible[i], score=s) for i, s in ranked[:self._k(k)] if s > 0]
 
     def health(self) -> dict:

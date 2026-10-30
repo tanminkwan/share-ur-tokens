@@ -1,1 +1,1 @@
-"""에이전트 아레나 (Agent Arena) platform package: the layer below the apps (idea contest etc.) and the demo cast."""
+"""에이전트 아레나 (Agent Arena): the general-purpose platform layer. Apps (apps/) and the demo (demo/) sit on top."""

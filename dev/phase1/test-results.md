@@ -1,7 +1,8 @@
-# 1단계 테스트 결과: 인프라 서비스 (broker · collector)
+# 1단계 테스트 결과: 인프라 서비스 (broker · recorder)
 
 - 실행일: 2026-10-30
 - 브랜치: `arena-platform-20261030`
+- 이름 변경(2026-10-30, 사용자 결정): 이 단계에서 만든 `collector` 서비스는 실제 역할(검사·기록자 서명·보관·확인)에 맞게 `recorder`(기록자)로 바꿨다. 이 문서의 이름도 새 이름으로 고쳤다.
 - 환경: Python 3.11.9, pytest 9.2.0, pytest-asyncio 1.4.1, Linux
 
 ## 1. 자동 테스트
@@ -20,8 +21,8 @@
 | `tests/test_crypto.py` | 11 | 단위 | R1-3, R1-4, R1-5 |
 | `tests/test_search.py` | 3 | 단위 | R1-6 |
 | `tests/test_ledger.py` | 13 | 단위 | R2-1 ~ R2-12 |
-| `tests/test_collector_service.py` | 9 | 단위 | R3-1 ~ R3-8 |
-| `tests/test_collector_api.py` | 7 | API (ASGI) | R3-1 ~ R3-5, R3-9 (HTTP·메모리 클라이언트 양쪽) |
+| `tests/test_recorder_service.py` | 9 | 단위 | R3-1 ~ R3-8 |
+| `tests/test_recorder_api.py` | 7 | API (ASGI) | R3-1 ~ R3-5, R3-9 (HTTP·메모리 클라이언트 양쪽) |
 | `tests/test_broker_service.py` | 14 | 단위 (메모리 이웃 3곳) | R4-1 ~ R4-10 |
 | `tests/test_broker_api.py` | 7 | API (ASGI) | R4-1, R4-7, R4-9, R4-12 (HTTP·메모리 클라이언트 양쪽) |
 | `tests/test_processes.py` | 4 | 실제 프로세스 + HTTP | R2-12, R3-8, R4-11 |
@@ -35,7 +36,7 @@
 - B에서 역할 검색을 하면 A에 있는 기록자 프로필이 A 출처로 함께 나온다.
 - A에서 마감하면 B에서도 사라진다. B를 멈춰도 A는 계속 답한다.
 - 소유자 공개키를 설정한 broker는 허가 없는 게시와 서명 없는 검색을 거부하고, 소유자 허가 뒤에는 받아들인다.
-- collector를 재시작해도 같은 기록자 키와 같은 체인으로 이어 쓴다. 원장 파일의 과거 항목을 고치면 collector가 `TAMPERED at seq 0`을 알리고 시작을 거부한다.
+- recorder를 재시작해도 같은 기록자 키와 같은 체인으로 이어 쓴다. 원장 파일의 과거 항목을 고치면 recorder가 `TAMPERED at seq 0`을 알리고 시작을 거부한다.
 
 ## 2. 기존 데모 회귀 확인 (R6-3)
 
@@ -73,7 +74,7 @@ set -a && . ./.env && set +a
 
 | 항목 | 요구사항·설계 | 구현 | 이유 |
 |---|---|---|---|
-| 원장 시각 편차 규칙, 다른 기록자 항목 검증 경로 | 설계 초안에 있었음 | 뺌 | 사용자 지시: collector 분산은 마지막 단계, 지금은 보관소 하나 (7단계로 옮김) |
+| 원장 시각 편차 규칙, 다른 기록자 항목 검증 경로 | 설계 초안에 있었음 | 뺌 | 사용자 지시: recorder 분산은 마지막 단계, 지금은 보관소 하나 (7단계로 옮김) |
 | 프로필 주소 | 주소를 본문에 따로 | 프로필 안에 넣어 서명 대상에 포함 | 남이 주소만 바꿔치기하는 것을 막기 위해 |
 
 ## 5. 남은 한계
@@ -81,4 +82,4 @@ set -a && . ./.env && set +a
 - 서명 요청의 재전송은 시각 폭(기본 60초)으로만 막는다.
 - broker의 프로필·공지·허가는 메모리에만 있다(재시작하면 peer가 다시 게시해야 한다). 원장만 파일에 남는다.
 - 공지 공유는 이웃에 한 번만 전달한다(다단계 전파는 범위 밖).
-- 이 단계 테스트에는 LLM 호출이 없다. broker와 collector는 설계상 AI가 없기 때문이다.
+- 이 단계 테스트에는 LLM 호출이 없다. broker와 recorder는 설계상 AI가 없기 때문이다.

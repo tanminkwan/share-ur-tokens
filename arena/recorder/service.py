@@ -1,4 +1,4 @@
-"""CollectorService: a Ledger plus who may read it in full, and a log of read attempts. No HTTP here."""
+"""RecorderService: a Ledger plus who may read it in full, and a log of read attempts. No HTTP here."""
 from __future__ import annotations
 
 import asyncio
@@ -8,10 +8,10 @@ from typing import Callable, Iterable
 
 from ..config import Settings
 from ..crypto import Identity, pen_name, verify
-from ..ledger import JsonlStore, Ledger, LedgerStore
+from ..ledger import JsonlStore, Ledger, LedgerStore, events
 
 
-class CollectorService:
+class RecorderService:
     def __init__(self, settings: Settings, ledger: Ledger, readers: Iterable[str], clock: Callable[[], float] = time.time):
         self.settings, self.ledger, self.clock = settings, ledger, clock
         self.identity = ledger.identity
@@ -21,14 +21,14 @@ class CollectorService:
 
     @classmethod
     def build(cls, settings: Settings, identity: Identity, store: LedgerStore, readers: Iterable[str] | None = None,
-              clock: Callable[[], float] = time.time) -> "CollectorService":
+              clock: Callable[[], float] = time.time) -> "RecorderService":
         ledger = Ledger(identity, store, settings, clock=clock)
-        return cls(settings, ledger, settings.collector_readers if readers is None else readers, clock=clock)
+        return cls(settings, ledger, settings.recorder_readers if readers is None else readers, clock=clock)
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> "CollectorService":
-        identity = Identity.load_or_create(settings.collector_key_file)
-        return cls.build(settings, identity, JsonlStore(settings.collector_ledger_file))
+    def from_settings(cls, settings: Settings) -> "RecorderService":
+        identity = Identity.load_or_create(settings.recorder_key_file)
+        return cls.build(settings, identity, JsonlStore(settings.recorder_ledger_file))
 
     async def record(self, kind: str, payload: dict, sigs: dict) -> dict:
         async with self._lock:
@@ -38,15 +38,20 @@ class CollectorService:
         return {"ok": True, "seq": entry["seq"], "hash": entry["hash"], "seal": entry["seal"]}
 
     def verify(self, hash_: str) -> dict:
-        """public: does an entry with this hash exist and is it sealed by me; contract metadata only"""
+        """public: does an entry with this hash exist, is it sealed by me, and its public metadata only.
+        A contractor is shown unless the event's policy hides that role."""
         e = self.ledger.find(hash_)
-        p = e["payload"] if e else {}
-        is_contract = bool(e and e["type"] == "contract")
-        return {"ok": True, "exists": bool(e), "type": e["type"] if e else None,
-                "seal_ok": bool(e and verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"])),
-                "role": p.get("role") if is_contract else None, "call_id": p.get("call_id") if is_contract else None,
-                "issuer": p.get("issuer") if is_contract else None,
-                "contractor": p.get("contractor") if is_contract and p.get("role") == "record" else None}
+        if not e:
+            return {"ok": True, "exists": False, "type": None, "seal_ok": False, "event_id": None}
+        p = e["payload"]
+        out = {"ok": True, "exists": True, "type": e["type"], "seal_ok": verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"]),
+               "event_id": p.get("event_id")}
+        if e["type"] == "event":
+            out.update(issuer=p["issuer"], kind=p.get("kind"), approvers=list(p.get("approvers", [])))
+        elif e["type"] == "contract":
+            hidden = events(self.ledger.chain).get(p["event_id"], {}).get("policy", {}).get("hidden_roles", [])
+            out.update(role=p["role"], issuer=p["issuer"], contractor=None if p["role"] in hidden else p["contractor"])
+        return out
 
     def audit(self) -> dict:
         return {"ok": True, "status": self.ledger.audit(), "length": len(self.ledger.chain), "head": self.ledger.head()}
@@ -68,6 +73,6 @@ class CollectorService:
 
     def health(self) -> dict:
         s = self.settings
-        return {"ok": True, "name": s.collector_name, "pub": self.identity.pub,
+        return {"ok": True, "name": s.recorder_name, "pub": self.identity.pub,
                 "pen_name": pen_name(self.identity.pub, s.pen_name_prefix, s.pen_name_len),
                 "length": len(self.ledger.chain), "head": self.ledger.head()}

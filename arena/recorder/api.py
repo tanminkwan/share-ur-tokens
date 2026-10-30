@@ -1,4 +1,4 @@
-"""HTTP API of the collector. Only translation: request -> service call -> JSON reply."""
+"""HTTP API of the recorder. Only translation: request -> service call -> JSON reply."""
 from __future__ import annotations
 
 from starlette.applications import Starlette
@@ -7,10 +7,10 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from ..http import guarded, read_json, reply, signed_caller
-from .service import CollectorService
+from .service import RecorderService
 
 
-def build_collector_app(svc: CollectorService) -> Starlette:
+def build_recorder_app(svc: RecorderService) -> Starlette:
     window = svc.settings.sig_window_sec
 
     async def post_entry(r: Request):

@@ -1,4 +1,4 @@
-"""Clients for the collector. Peers depend on CollectorAPI only; HTTP and in-memory implementations are interchangeable."""
+"""Clients for the recorder. Peers depend on RecorderAPI only; HTTP and in-memory implementations are interchangeable."""
 from __future__ import annotations
 
 from typing import Protocol
@@ -8,10 +8,10 @@ import httpx
 from ..config import Settings
 from ..crypto import Identity
 from ..signing import sign_request
-from .service import CollectorService
+from .service import RecorderService
 
 
-class CollectorAPI(Protocol):
+class RecorderAPI(Protocol):
     async def record(self, kind: str, payload: dict, sigs: dict) -> dict: ...
     async def verify(self, hash_: str) -> dict: ...
     async def audit(self) -> dict: ...
@@ -20,7 +20,7 @@ class CollectorAPI(Protocol):
     async def read_access_log(self, identity: Identity) -> dict: ...
 
 
-class CollectorClient:
+class RecorderClient:
     def __init__(self, base_url: str, settings: Settings, http_client: httpx.AsyncClient | None = None):
         self.base_url, self.settings = base_url.rstrip("/"), settings
         self._http = http_client
@@ -53,10 +53,10 @@ class CollectorClient:
         return await self._call("GET", "/access-log", identity=identity)
 
 
-class InMemoryCollectorClient:
-    """same interface, calls the service object directly (tests, or a peer that hosts the collector in-process)"""
+class InMemoryRecorderClient:
+    """same interface, calls the service object directly (tests, or a peer that hosts the recorder in-process)"""
 
-    def __init__(self, svc: CollectorService):
+    def __init__(self, svc: RecorderService):
         self.svc = svc
 
     async def record(self, kind, payload, sigs):

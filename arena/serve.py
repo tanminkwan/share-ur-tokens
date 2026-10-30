@@ -1,4 +1,4 @@
-"""Run a Starlette app with uvicorn using Settings (shared by the broker and collector entry points)."""
+"""Run a Starlette app with uvicorn using Settings (shared by the broker and recorder entry points)."""
 from __future__ import annotations
 
 import json

@@ -10,16 +10,16 @@ def test_r1_1_every_setting_comes_from_env(tmp_path):
     assert s.broker_port == 9333
     assert s.sig_window_sec == 7
     assert s.broker_neighbors == ["http://a:1", "http://b:2"]
-    assert s.collector_ledger_file == str(tmp_path / "ledger.jsonl")
+    assert s.recorder_ledger_file == str(tmp_path / "ledger.jsonl")
 
 
 def test_r1_1_defaults_apply_when_key_absent():
     s = Settings.load(env={}, dotenv_path=None)
     assert s.host == "127.0.0.1"
-    assert s.contract_roles == ["record", "review"]
+    assert not hasattr(s, "contract_roles")  # P2-A4: roles come from each event policy, not the platform
     assert s.pen_name_prefix and s.pen_name_len > 0
     assert s.broker_owner_pub is None
-    assert s.collector_readers == []
+    assert s.recorder_readers == []
 
 
 def test_r1_2_missing_required_key_names_the_key():

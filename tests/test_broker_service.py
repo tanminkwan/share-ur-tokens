@@ -210,3 +210,16 @@ async def test_r4_10_health(net, clock):
     hl = b.health()
     assert hl == {"ok": True, "name": "b0", "pub": b.identity.pub, "profiles": 1, "notices": 0,
                   "neighbors": ["mem://b1", "mem://b2"], "closed": False}
+
+
+async def test_pa8_minimal_notice_is_accepted_and_searchable(b0, clock):
+    issuer, viewer = Identity.generate(), Identity.generate()
+    await b0.advertise(ad(viewer, profile("http://v", "v", labels=[], now=clock())))
+    n = {"notice_id": "bare", "issuer_pub": issuer.pub, "until": clock() + 60}
+    assert (await b0.post_notice(n, issuer.sign(n)))["ok"]
+    assert [x["notice_id"] for x in await b0.visible_notices(viewer.pub)] == ["bare"]  # no audience -> everyone
+    assert await b0.search_notices(viewer.pub, "anything") == []
+    m = {"notice_id": "m", "issuer_pub": issuer.pub, "until": clock() + 60, "text": "TF 모집 클라우드", "anything": {"app": "data"}}
+    await b0.post_notice(m, issuer.sign(m))
+    hits = await b0.search_notices(viewer.pub, "클라우드")
+    assert [x["notice_id"] for x in hits] == ["m"] and hits[0]["anything"] == {"app": "data"}
