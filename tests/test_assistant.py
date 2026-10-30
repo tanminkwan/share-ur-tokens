@@ -131,13 +131,13 @@ async def test_p5c11_p5c13_participant_reads_rules_asks_owner_joins_and_gets_a_c
     assert "예시 이벤트 규칙" in prompt and "join_event" in prompt  # the agent sees the rules and the tools
     # the host's agent gets the join message and contracts the applicant
     assert any("참가 신청" in line for line in asst(eco.host).events[ev].transcript)
-    eco.host.llm.push("contract", role="member", peer_pub=eco.a.identity.pub, peer_url=eco.a.config.url)
+    eco.host.llm.push("contract", role="member", peer=eco.a.pen)
     await asst(eco.host).feed(ctx(eco.host), ev, "계속")
     await settle(eco.host)
     c = [x for x in eco.svc.ledger.chain if x["type"] == "contract"]
     assert len(c) == 1 and c[0]["payload"]["contractor"] == eco.a.identity.pub and c[0]["payload"]["rules_hash"] == h(RULES.encode())
     # b never applied: its assistant refuses a contract for this event
-    eco.host.llm.push("contract", role="member", peer_pub=eco.b.identity.pub, peer_url=eco.b.config.url)
+    eco.host.llm.push("contract", role="member", peer=eco.b.pen)
     await asst(eco.host).feed(ctx(eco.host), ev, "계속")
     await settle(eco.host)
     assert len([x for x in eco.svc.ledger.chain if x["type"] == "contract"]) == 1
@@ -157,7 +157,7 @@ async def joined(eco):
         await p.events.watch_once(p.ctx(p.events))
     await settle(eco.a, eco.b, eco.host)
     for p in (eco.a, eco.b):
-        eco.host.llm.push("contract", role="member", peer_pub=p.identity.pub, peer_url=p.config.url)
+        eco.host.llm.push("contract", role="member", peer=p.pen)
     await asst(eco.host).feed(ctx(eco.host), ev, "계약하라")
     await settle(eco.host)
     return ev
@@ -171,24 +171,24 @@ async def test_p5c11_p5c12_commit_reveal_messages_and_co_signed_attest(eco):
     await asst(a).feed(ctx(a), ev, "시작")
     await settle(a)
     sec = asst(a).events[ev].secrets["x-1"]
-    a.llm.push("send", to_url=b.config.url, text="내 등록", data={"label": "x-1", "publish_hash": sec["publish_hash"]})
+    a.llm.push("send", to=b.pen, text="내 등록", data={"label": "x-1", "publish_hash": sec["publish_hash"]})
     await asst(a).feed(ctx(a), ev, "보내라")
     await settle(a, b)
     tb = "\n".join(asst(b).events[ev].transcript)
-    assert sec["publish_hash"] in tb and a.identity.pub[:8] in tb  # the signed message reached b's agent
+    assert ("#" + sec["publish_hash"][:10]) in tb and a.pen in tb  # the signed message reached b's agent (shown with short refs)
     a.llm.push("my_reveal", label="x-1")
     await asst(a).feed(ctx(a), ev, "공개값")
     await settle(a)
-    rv = json.loads(next(x for x in reversed(asst(a).events[ev].transcript) if x.startswith("my_reveal 결과: ")).split("결과: ", 1)[1])
-    b.llm.push("check_reveal", publish_hash=sec["publish_hash"], author_pub=a.identity.pub, label="x-1", value=rv["value"], salt=rv["salt"])
-    b.llm.push("check_reveal", publish_hash=sec["publish_hash"], author_pub=a.identity.pub, label="x-1", value="other", salt=rv["salt"])
+    rv = await asst(a).tools["my_reveal"].run(asst(a), ctx(a), asst(a).events[ev], label="x-1")  # the real values, as code sees them
+    b.llm.push("check_reveal", publish_hash=sec["publish_hash"], author=a.pen, label="x-1", value=rv["value"], salt=rv["salt"])
+    b.llm.push("check_reveal", publish_hash=sec["publish_hash"], author=a.pen, label="x-1", value="other", salt=rv["salt"])
     await asst(b).feed(ctx(b), ev, "확인")
     await settle(b)
     results = [line for line in asst(b).events[ev].transcript if "check_reveal" in line and "결과" in line]
     assert '"match": true' in results[0] and '"match": false' in results[1]
     # a proposes a two-party attest; b co-signs; it lands with both signatures
     a.llm.push("propose_attest", kind="pair", subject="x", value={"winner": ""},
-               parties=[{"pub": a.identity.pub, "url": a.config.url}, {"pub": b.identity.pub, "url": b.config.url}])
+               parties=[a.pen, b.pen])
     await asst(a).feed(ctx(a), ev, "확인 제안")
     await settle(a, b)
     rid = next(iter(asst(b).events[ev].pending))
@@ -215,7 +215,7 @@ async def test_p5c11_decline_and_issuer_attest_and_close(eco):
     ev = await joined(eco)
     a, b = eco.a, eco.b
     a.llm.push("propose_attest", kind="pair", subject="y", value={"winner": "a"},
-               parties=[{"pub": a.identity.pub, "url": a.config.url}, {"pub": b.identity.pub, "url": b.config.url}])
+               parties=[a.pen, b.pen])
     await asst(a).feed(ctx(a), ev, "제안")
     await settle(a, b)
     rid = next(iter(asst(b).events[ev].pending))
@@ -225,7 +225,7 @@ async def test_p5c11_decline_and_issuer_attest_and_close(eco):
     assert not [x for x in eco.svc.ledger.chain if x["type"] == "attest"]
     assert any("거절" in line and "내가 본 것과 다르다" in line for line in asst(a).events[ev].transcript)
     host = eco.host
-    host.llm.push("propose_attest", kind="summary", subject="final", value={"ranking": []}, parties=[{"pub": host.identity.pub, "url": host.config.url}])
+    host.llm.push("propose_attest", kind="summary", subject="final", value={"ranking": []}, parties=[host.pen])
     await asst(host).feed(ctx(host), ev, "요약")
     await settle(host)
     at = [x for x in eco.svc.ledger.chain if x["type"] == "attest"]
@@ -293,7 +293,7 @@ async def test_p5c18_messages_carry_and_check_group_and_event(eco):
             msgs.append((msg.get("op"), meta))
             return await inner.call(url, msg, timeout, meta)
     eco.a.transport = Spy()
-    eco.a.llm.push("send", to_url=eco.b.config.url, text="안녕", data={})
+    eco.a.llm.push("send", to=eco.b.pen, text="안녕", data={})
     await asst(eco.a).feed(ctx(eco.a), ev, "보내라")
     await settle(eco.a, eco.b)
     assert msgs[0] == ("event_message", {"group_id": "public", "event_id": ev})
@@ -350,3 +350,56 @@ async def test_p5c23_an_idle_event_wakes_its_assistant_with_backoff(eco):
     await a.feed(ctx(eco.host), ev, "새 메시지")  # a real input resets the backoff
     await settle(eco.host)
     assert st.idle_checks == 0
+
+
+async def test_p5c25_the_llm_sees_handles_and_short_refs_code_expands_them(eco):
+    ev = await joined(eco)
+    a, b = eco.a, eco.b
+    st = asst(a).events[ev]
+    prompts_before = len(a.llm.prompts)
+    a.llm.push("commit", label="x-1", value="hello")
+    await asst(a).feed(ctx(a), ev, "등록")
+    await settle(a)
+    full = st.secrets["x-1"]["publish_hash"]
+    seen = json.dumps(a.llm.prompts[prompts_before:], ensure_ascii=False)
+    assert a.identity.pub not in seen and eco.host.identity.pub not in seen and full not in seen  # no 64-hex strings reach the LLM
+    assert a.pen in seen and ("#" + full[:10]) in seen
+    # the LLM writes a handle and a short ref; the code sends to b's address and the message carries the full hash
+    a.llm.push("send", to=b.pen, text="내 등록", data={"label": "x-1", "publish_hash": "#" + full[:10]})
+    await asst(a).feed(ctx(a), ev, "보내라")
+    await settle(a, b)
+    assert any(full in line or ("#" + full[:10]) in line for line in asst(b).events[ev].transcript)
+    # a two-party attest written with handles lands on the ledger with full public keys
+    a.llm.push("propose_attest", kind="pair", subject="h", value={"winner": b.pen}, parties=[a.pen, b.pen])
+    await asst(a).feed(ctx(a), ev, "제안")
+    await settle(a, b)
+    rid = next(iter(asst(b).events[ev].pending))
+    b.llm.push("cosign", request_id=rid)
+    await asst(b).feed(ctx(b), ev, "서명")
+    await settle(a, b)
+    at = [x for x in eco.svc.ledger.chain if x["type"] == "attest"][-1]["payload"]
+    assert at["parties"] == [a.identity.pub, b.identity.pub] and at["value"]["winner"] == b.identity.pub
+
+
+async def test_p5c25_a_handle_not_yet_known_is_found_on_the_broker(eco):
+    ev = await joined(eco)
+    host = eco.host
+    stranger = eco.peer("stranger")
+    await stranger.advertise()
+    host.llm.push("send", to=stranger.pen, text="안녕", data={})
+    await asst(host).feed(ctx(host), ev, "인사")
+    await settle(host)
+    assert '"ok": false' not in asst(host).events[ev].transcript[-2] or "unknown event" in asst(host).events[ev].transcript[-2]
+
+
+async def test_p5c26_repeated_identical_actions_and_participant_only_tools(eco):
+    ev = await joined(eco)
+    host = eco.host
+    choose = next(x for x in reversed(host.llm.prompts) if x["schema"].get("required", [None])[0] == "thought")
+    assert "join_event" not in choose["schema"]["properties"]["tool"]["enum"]  # the host never sees participant-only tools
+    for _ in range(3):
+        host.llm.push("ask_owner", question="계속할까요?")
+    await asst(host).feed(ctx(host), ev, "반복")
+    await settle(host)
+    assert len(host.owner.asked) == 1  # the same call twice in a row is not run again
+    assert sum("이미 했다" in line for line in asst(host).events[ev].transcript) == 2

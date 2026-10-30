@@ -1,0 +1,73 @@
+[assistant] 필명-c43ffb: 이벤트 개최 ev-c79d95c378 'peer 가위바위보 대회' (규칙 해시 9359390364, 방식 assistant)
+[assistant] 필명-c43ffb: 참여 중인 이벤트 1건을 로컬에서 불러와 이어 감
+[events   ] 필명-8ee637: 이벤트 ev-c79d95c378 → 앱 assistant (방식 assistant)
+[events   ] 필명-5217b7: 이벤트 ev-c79d95c378 → 앱 assistant (방식 assistant)
+[events   ] 필명-f91f03: 이벤트 ev-c79d95c378 → 앱 assistant (방식 assistant)
+[events   ] 필명-8e9294: 이벤트 ev-c79d95c378 → 앱 assistant (방식 assistant)
+[assistant] 필명-c43ffb: [ev-c79d95c378] join_event → {"error": "개최자는 참가 신청하지 않는다"}
+[decide   ] 필명-f91f03: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-f91f03: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-8ee637: 소유자에게 물음 '‘peer 가위바위소 대회’에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-8ee637: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-8e9294: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 아니오: 이번에는 쉬겠다
+[assistant] 필명-8e9294: [ev-c79d95c378] ask_owner → {"yes": false, "why": "이번에는 쉬겠다"}
+[decide   ] 필명-5217b7: 소유자에게 물음 '새로운 'peer 가위바위보 대회'에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-5217b7: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-5217b7: [ev-c79d95c378] join_event → {"ok": true}
+[assistant] 필명-8ee637: [ev-c79d95c378] join_event → {"ok": true}
+[assistant] 필명-f91f03: [ev-c79d95c378] join_event → {"ok": true}
+[assistant] 필명-c43ffb: [ev-c79d95c378] join_event → {"error": "개최자는 참가 신청하지 않는다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 'known peer 5217b7c4와 8ee63710, f91f036a를' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-c43ffb: [ev-c79d95c378] contract → {"ok": false, "error": "the contract names another contractor"}
+[assistant] 필명-c43ffb: [ev-c79d95c378] note → {"ok": true}
+[decide   ] 필명-c43ffb: 소유자에게 물음 'contract 시도에서 "the contract names anothe' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약 오류가 발생했으니, 어떤 peer와 계약을 진행하면 될까요? 선택 ' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 선택해 주세요. 가능한 peer는 5217b7c' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-c43ffb: [ev-c79d95c378] contract → {"ok": false, "error": "the contract names another contractor"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약 오류가 계속 발생하고 있습니다. 현재 어떤 peer와 계약을 진행하' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 하나 선택해 주세요. 가능한 peer는:
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 정확히 선택해 주세요: 1) 5217b7c4 (' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 정확히 선택해 주세요: 1) 5217b7c4 (' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 정확히 선택해 주세요: 1) 5217b7c4 (' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 정확히 선택해 주세요: 1) 5217b7c4 (' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 선택해 주세요. 번호로 답해 주세요: 1) 52' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 정확히 선택해 주세요. 아래 중 하나만 골라 주' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 선택해 주세요. 번호로 답해 주세요: 1) 52' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 정확히 선택해 주세요. 아래 중 하나만 골라 주' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 정확히 선택해 주세요. 아래 중 하나만 골라 주' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 번호 혹은 pub 키로 명확히 알려 주세요:
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 정확히 선택해 주세요. 번호(1‑3) 혹은 pu' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 정확히 선택해 주세요. 아래 중 하나를 번호(1' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 명확히 선택해 주세요. 번호(1‑3) 혹은 해당' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 반드시 번호(1‑3) 혹은 정확한 pub 키 중' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 구체적으로 선택해 주세요. 번호(1‑3) 혹은 ' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-c43ffb: [ev-c79d95c378] note → {"ok": true}
+[decide   ] 필명-c43ffb: 소유자에게 물음 '계약을 진행할 peer를 정확히 선택해 주세요. 번호(1‑3) 혹은 pu' → 예: 친선 대회라 참가한다
+[assistant] 필명-c43ffb: [ev-c79d95c378] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-8ee637: [ev-c79d95c378] note → {"ok": true}
+elapsed 902.2s, entries 2: ['event']
+E           AssertionError: the event did not close in time
+tests/live/test_rps_acceptance.py:118: AssertionError

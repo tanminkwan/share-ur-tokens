@@ -24,6 +24,7 @@ class Tool:
     args: dict | None                       # JSON schema of the arguments, None = no arguments
     run: Callable[..., Awaitable[dict]]     # run(assistant, ctx, state, **args)
     host_only: bool = False
+    participant_only: bool = False
     after_close: bool = False               # still usable once the event is closed
 
 
@@ -51,7 +52,10 @@ async def join_event(A, ctx, st):
     return r
 
 
-async def contract(A, ctx, st, role, peer_pub, peer_url):
+async def contract(A, ctx, st, role, peer):
+    peer_pub, peer_url = await A.resolve_peer(ctx, st, peer)
+    if not peer_pub or not peer_url:
+        return {"ok": False, "error": f"{peer}를 찾지 못했다(필명이나 공개키를 확인)"}
     c = {"event_id": st.event_id, "role": role, "issuer": ctx.pub, "contractor": peer_pub, "nonce": nonce(peer_pub, role),
          "group_id": st.group_id, "rules_hash": st.rules_hash}
     eng = await ctx.call(peer_url, {"op": "engage", "role": role, "contract": c, "request": {"event_id": st.event_id, "rules_hash": st.rules_hash}},
@@ -65,11 +69,21 @@ async def contract(A, ctx, st, role, peer_pub, peer_url):
     return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error"), "contracts_so_far": len(st.contracts)}
 
 
-async def send(A, ctx, st, to_url, text, data=None):
-    return await A.send(ctx, st, to_url, text, data or {})
+async def send(A, ctx, st, to, text, data=None):
+    _, url = await A.resolve_peer(ctx, st, to)
+    if not url:
+        return {"ok": False, "error": f"{to}의 주소를 찾지 못했다"}
+    return await A.send(ctx, st, url, text, data or {})
 
 
 async def solicit(A, ctx, st, targets, text, data=None):
+    urls = []
+    for t in targets:
+        _, url = await A.resolve_peer(ctx, st, t)
+        if not url:
+            return {"error": f"{t}의 주소를 찾지 못했다"}
+        urls.append(url)
+    targets = urls
     req = {"request_id": f"{st.event_id}-{nonce(text)[:8]}", "event_id": st.event_id, "text": text, "data": data or {},
            "issuer_pub": ctx.pub, "issuer_url": ctx.url, "until": ctx.clock() + ctx.settings.event_request_ttl_sec, "group_id": st.group_id}
     acks = await ctx.solicit(list(targets), req)
@@ -100,7 +114,8 @@ async def my_reveal(A, ctx, st, label):
     return {"label": label, **{k: s[k] for k in ("value", "salt", "commit", "publish_hash")}} if s else {"error": f"먼저 등록한 라벨 {label}이 없다"}
 
 
-async def check_reveal(A, ctx, st, publish_hash, author_pub, label, value, salt):
+async def check_reveal(A, ctx, st, publish_hash, author, label, value, salt):
+    author_pub, _ = await A.resolve_peer(ctx, st, author, need_url=False)
     v = await ctx.recorder(st.recorder_url).verify(publish_hash)
     if not (v.get("exists") and v.get("type") == "publish" and v.get("author") == author_pub and v.get("event_id") == st.event_id):
         return {"match": False, "reason": "그 등록이 원장에 없거나 다른 사람·다른 이벤트의 등록"}
@@ -113,6 +128,13 @@ async def verify_entry(A, ctx, st, hash):
 
 
 async def propose_attest(A, ctx, st, kind, subject, value, parties):
+    resolved = []
+    for x in parties:
+        pub, url = await A.resolve_peer(ctx, st, x, need_url=(x not in (ctx.pub, ctx.pen)))
+        if not pub:
+            return {"error": f"당사자 {x}를 찾지 못했다"}
+        resolved.append({"pub": pub, "url": url})
+    parties = resolved
     pubs = [x["pub"] for x in parties]
     p = {"event_id": st.event_id, "kind": kind, "subject": subject, "value": value, "parties": pubs, "nonce": nonce(kind, subject),
          "group_id": st.group_id}
@@ -167,23 +189,23 @@ async def wait(A, ctx, st):
 def default_tools() -> list[Tool]:
     return [
         Tool("ask_owner", "{question}: 소유자(사람)에게 예/아니오로 묻는다. 결과 yes, why", _obj(question=S), ask_owner),
-        Tool("join_event", "{}: 이 이벤트에 참가 신청을 한다(개최자에게 메시지로 알림). 참가자만", None, join_event),
-        Tool("contract", "{role, peer_pub, peer_url}: 그 peer와 이 이벤트의 역할 계약을 맺어 원장에 기록한다. 계약에는 규칙 해시가 들어간다",
-             _obj(role=S, peer_pub=S, peer_url=S), contract, host_only=True),
-        Tool("send", "{to_url, text, data_json}: 상대 peer에게 이 이벤트의 메시지를 보낸다(data_json은 JSON 객체를 담은 문자열)",
-             _obj(to_url=S, text=S, data_json=S), send),
-        Tool("solicit", "{targets: [url...], text, data_json}: 고른 peer들에게 직접 요청을 한 번에 보낸다(data_json은 JSON 객체 문자열)",
+        Tool("join_event", "{}: 이 이벤트에 참가 신청을 한다(개최자에게 메시지로 알림)", None, join_event, participant_only=True),
+        Tool("contract", "{role, peer}: 그 peer(필명)와 이 이벤트의 역할 계약을 맺어 원장에 기록한다. 계약에는 규칙 해시가 들어간다",
+             _obj(role=S, peer=S), contract, host_only=True),
+        Tool("send", "{to, text, data_json}: 상대 peer(필명)에게 이 이벤트의 메시지를 보낸다(data_json은 JSON 객체를 담은 문자열)",
+             _obj(to=S, text=S, data_json=S), send),
+        Tool("solicit", "{targets: [필명...], text, data_json}: 고른 peer들에게 직접 요청을 한 번에 보낸다(data_json은 JSON 객체 문자열)",
              _obj(targets={"type": "array", "items": S}, text=S, data_json=S), solicit),
         Tool("publish_text", "{text}: 글을 원장에 먼저 등록한다. 결과 content_hash, publish_hash", _obj(text=S), publish_text),
         Tool("commit", "{label, value}: 값에 비밀값을 붙인 해시를 원장에 먼저 등록하고 값은 숨겨 둔다. 결과 label, commit, publish_hash",
              _obj(label=S, value=S), commit),
         Tool("my_reveal", "{label}: 내가 먼저 등록한 값과 비밀값을 꺼낸다(상대에게 보낼 공개값)", _obj(label=S), my_reveal),
-        Tool("check_reveal", "{publish_hash, author_pub, label, value, salt}: 상대가 보낸 공개값이 상대가 먼저 등록한 해시와 맞는지 원장으로 확인한다. 결과 match",
-             _obj(publish_hash=S, author_pub=S, label=S, value=S, salt=S), check_reveal),
+        Tool("check_reveal", "{publish_hash, author, label, value, salt}: 상대(필명)가 보낸 공개값이 상대가 먼저 등록한 해시와 맞는지 원장으로 확인한다. 결과 match",
+             _obj(publish_hash=S, author=S, label=S, value=S, salt=S), check_reveal),
         Tool("verify", "{hash}: 원장 항목이 있는지와 공개 정보를 확인한다", _obj(hash=S), verify_entry, after_close=True),
-        Tool("propose_attest", "{kind, subject, value_json, parties: [{pub, url}...]}: 공동 확인을 제안한다(value_json은 JSON 문자열). "
+        Tool("propose_attest", "{kind, subject, value_json, parties: [필명...]}: 공동 확인을 제안한다(value_json은 JSON 문자열). "
              "당사자가 나 혼자면 바로 기록하고, 아니면 다른 당사자에게 서명 요청을 보낸다",
-             _obj(kind=S, subject=S, value_json=S, parties={"type": "array", "items": PARTY}), propose_attest),
+             _obj(kind=S, subject=S, value_json=S, parties={"type": "array", "items": S}), propose_attest),
         Tool("cosign", "{request_id}: 받은 서명 요청에 서명해 돌려준다(내용이 내가 본 것과 같을 때만)", _obj(request_id=S), cosign),
         Tool("decline", "{request_id, reason}: 받은 서명 요청을 거절하고 이유를 알린다", _obj(request_id=S, reason=S), decline),
         Tool("close_event", "{result_hash}: 이 이벤트를 원장에서 닫고 공지를 마감한다", _obj(result_hash=S), close_event, host_only=True),

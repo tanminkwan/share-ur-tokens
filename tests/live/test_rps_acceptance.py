@@ -49,6 +49,12 @@ def expected_winner(r, a, b):
     return a if BEATS.get(r["a_move"]) == r["b_move"] else b
 
 
+def pen(pub):
+    from arena.config import Settings
+    s = Settings.load(env={}, dotenv_path=None)
+    return s.pen_name_prefix + pub[:s.pen_name_len]
+
+
 def ranking_from_ledger(chain, ev, players):
     rec = {p: {"pub": p, "wins": 0, "games": 0} for p in players}
     for e in chain:
@@ -60,7 +66,7 @@ def ranking_from_ledger(chain, ev, players):
                 rec[p["value"]["winner"]]["wins"] += 1
     for r in rec.values():
         r["rate"] = round(r["wins"] / r["games"], 4) if r["games"] else 0.0
-    return sorted(rec.values(), key=lambda r: (-r["rate"], -r["wins"], r["pub"]))
+    return sorted(rec.values(), key=lambda r: (-r["rate"], -r["wins"], pen(r["pub"])))
 
 
 async def start_world(live, tmp):

@@ -192,3 +192,4 @@ class Settings(EnvSettings):
     assistant_idle_sec: float = F("ARENA_ASSISTANT_IDLE_SEC", 60.0, float, "열린 이벤트에 입력이 없을 때 기본 비서가 스스로 점검하기까지(초, 점검마다 두 배)")
     assistant_idle_max_checks: int = F("ARENA_ASSISTANT_IDLE_MAX_CHECKS", 5, int, "입력 없이 연달아 하는 점검의 최대 횟수")
     event_watch_sec: float = F("ARENA_EVENT_WATCH_SEC", 1.0, float, "이벤트 배정기가 broker 그룹들의 변경분을 읽는 주기(초)")
+    assistant_ref_len: int = F("ARENA_ASSISTANT_REF_LEN", 10, int, "기본 비서가 LLM에게 보이는 해시의 짧은 참조 길이(# 뒤 글자 수)")
