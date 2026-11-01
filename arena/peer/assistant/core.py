@@ -177,10 +177,12 @@ class EventAssistant:
     # ---------------- identification and checks enforced by code ----------------
     REVEAL_KEYS = {"author", "label", "value", "salt", "publish_hash"}
 
+    PARTIAL_KEYS = {"label", "value", "publish_hash"}  # a revealed value with its registration: a reveal record, even with fields missing
+
     def reveal_records(self, obj) -> list[dict]:
-        """every reveal record (the platform's fixed shape) inside obj"""
+        """every reveal record (the platform's fixed shape) inside obj, complete or not"""
         if isinstance(obj, dict):
-            if self.REVEAL_KEYS <= set(obj):
+            if self.REVEAL_KEYS <= set(obj) or (self.PARTIAL_KEYS <= set(obj) and set(obj) <= self.REVEAL_KEYS):
                 return [obj]
             return [r for v in obj.values() for r in self.reveal_records(v)]
         if isinstance(obj, list):
@@ -194,6 +196,16 @@ class EventAssistant:
         missing = []
 
         async def one(x):
+            if isinstance(x, dict) and self.PARTIAL_KEYS <= set(x) and set(x) <= self.REVEAL_KEYS and not self.REVEAL_KEYS <= set(x):
+                ref = self.expand(st, str(x["publish_hash"]).strip())
+                prefix = ref[1:] if ref.startswith("#") else ref  # a short ref not seen yet is still the start of the hash
+                on_ledger = next((e for e in await self.progress_entries(ctx, st)
+                                  if e["type"] == "reveal" and str(e.get("commit", "")).startswith(prefix) and len(prefix) >= self.s.assistant_ref_len), None)
+                if on_ledger:  # a partial record written by hand: completed exactly from the ledger reveal of that registration
+                    return {"author": on_ledger["author"], "label": on_ledger["label"], "value": on_ledger["value"],
+                            "salt": on_ledger["salt"], "publish_hash": on_ledger["commit"]}
+                missing.append(f"불완전한 공개값(라벨 {x.get('label')}): 원장 공개가 없다")
+                return x
             if isinstance(x, dict):
                 return {k: await one(v) for k, v in x.items()}
             if isinstance(x, list):
@@ -219,6 +231,9 @@ class EventAssistant:
         """every reveal record inside obj, checked against the ledger: published by its author, in this event, hash matches"""
         out = []
         for r in self.reveal_records(obj):
+            if not self.REVEAL_KEYS <= set(r):
+                out.append((False, f"라벨 {r.get('label')}: 불완전한 공개값 묶음({', '.join(sorted(self.REVEAL_KEYS - set(r)))} 없음)"))
+                continue
             v = await ctx.recorder(st.recorder_url).verify(str(r["publish_hash"]))
             if not (v.get("exists") and v.get("type") == "publish" and v.get("author") == r["author"] and v.get("event_id") == st.event_id):
                 out.append((False, f"라벨 {r['label']}: 그 등록이 원장에 없거나 다른 사람·다른 이벤트의 등록"))

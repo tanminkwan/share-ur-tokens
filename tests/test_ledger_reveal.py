@@ -64,3 +64,35 @@ async def test_p5c36_the_state_line_says_to_whom_i_sent_reveals(eco):
     await asst(a).feed(ctx(a), ev, "보내라")
     await settle(a, b)
     assert f"내가 보낸 공개값: r-1→{b.pen}" in asst(a)._system(ctx(a), asst(a).events[ev])
+
+
+async def test_p5c44_a_hand_written_partial_reveal_record_is_completed_from_the_ledger_or_refused(eco):
+    """run 13: a joint confirmation held reveal records written by hand without the salt; the code did not see them as
+    reveal records (a field was missing), so nothing checked them"""
+    ev = await joined(eco)
+    a, b = eco.a, eco.b
+    sa = await _commit(a, ev, "r-1", "바위")
+    sb = await _commit(b, ev, "r-1", "보")
+    for p in (a, b):
+        p.llm.push("reveal", label="r-1")
+        await asst(p).feed(ctx(p), ev, "공개하라")
+        await settle(p)
+    partial = {"author": a.pen, "label": "r-1", "value": "바위", "publish_hash": "#" + sa["publish_hash"][:10]}
+    b_partial = {"author": b.pen, "label": "r-1", "value": "보", "publish_hash": "#" + sb["publish_hash"][:10]}
+    a.llm.push("propose_attest", kind="pair", subject="r", value={"a": partial, "b": b_partial}, parties=[a.pen, b.pen])
+    await asst(a).feed(ctx(a), ev, "제안")
+    await settle(a, b)
+    rid = next(iter(asst(b).events[ev].pending))
+    filled = asst(b).events[ev].pending[rid]["payload"]["value"]
+    assert filled["a"]["salt"] == sa["salt"] and filled["b"]["salt"] == sb["salt"]  # completed by code from the ledger reveals
+    # a partial record whose registration was never revealed on the ledger is refused
+    await _commit(a, ev, "r-2", "가위")
+    s2 = asst(a).events[ev].secrets["r-2"]
+    a.llm.push("propose_attest", kind="pair", subject="r2", value={"a": {"author": a.pen, "label": "r-2", "value": "가위", "publish_hash": "#" + s2["publish_hash"][:10]}},
+               parties=[a.pen, b.pen])
+    await asst(a).feed(ctx(a), ev, "제안")
+    await settle(a, b)
+    assert any("r-2" in x and "error" in x for x in asst(a).events[ev].transcript)
+    # and one that reaches me anyway is flagged as incomplete
+    checks = await asst(b).verify_reveals(ctx(b), asst(b).events[ev], {"a": {"author": a.identity.pub, "label": "r-2", "value": "가위", "publish_hash": s2["publish_hash"]}})
+    assert checks and not checks[0][0] and "불완전" in checks[0][1]

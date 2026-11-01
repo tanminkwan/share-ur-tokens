@@ -146,6 +146,7 @@ async def test_rps_app_free_acceptance(live, tmp_path):
             for r in v["rounds"]:
                 for side in ("a", "b"):
                     rec = r[side]  # the reveal record exactly as the platform produced it
+                    assert isinstance(rec, dict) and {"author", "label", "value", "salt", "publish_hash"} <= set(rec), f"incomplete reveal record in {p['subject']}"
                     pub_e = next(e for e in mine if e["hash"] == rec["publish_hash"])
                     assert pub_e["payload"]["author"] == rec["author"] == v[side]
                     assert pub_e["payload"]["content_hash"] == commit_hash(rec["label"], rec["value"], rec["salt"], rec["author"])
