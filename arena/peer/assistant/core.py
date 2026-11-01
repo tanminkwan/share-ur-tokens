@@ -151,6 +151,11 @@ class EventAssistant:
         for e in entries:
             if e["type"] == "assign":
                 st.assignments.update(e.get("subjects", {}))
+            if e["type"] == "attest":  # settled: requests and proposals I still hold for the same kind and subject are stale
+                same = lambda x: x["payload"].get("kind") == e.get("kind") and x["payload"].get("subject") == e.get("subject")
+                for box in (st.pending, st.proposals):
+                    for k in [k for k, x in box.items() if same(x)]:
+                        box.pop(k)
             for k in self.PEOPLE:
                 for pub in (e.get(k) if isinstance(e.get(k), list) else [e.get(k)]):
                     if isinstance(pub, str) and HEX64.fullmatch(pub) and pub not in st.roster:
@@ -161,9 +166,13 @@ class EventAssistant:
         """one short line per entry, the latest ones only; handles and short refs instead of 64-hex"""
         return [self.progress_line(ctx, st, e) for e in (await self.progress_entries(ctx, st))[-self.s.assistant_progress_max:]]
 
+    SIGNED_BY_ALL = ("attest", "contract")  # entries with more than one signer: the ledger records them only with every signature
+    SETTLED_NOTE = "원장에 있는 항목은 필요한 서명이 모두 모여 확정된 것이다(코드 확인). 원장에 있는 공동 확인에 더 받을 서명은 없다."
+
     def progress_line(self, ctx, st, e) -> str:
         rest = {k: v for k, v in e.items() if k not in ("seq", "type", "hash", "rules_hash", "salt") and v not in (None, [], "")}
-        return self.shorten(ctx, st, f"{e['seq']} {e['type']} {json.dumps(rest, ensure_ascii=False)} (항목 {e['hash']})")
+        mark = " · 서명 완료(당사자 전원, 원장 확정)" if e["type"] in self.SIGNED_BY_ALL else ""
+        return self.shorten(ctx, st, f"{e['seq']} {e['type']} {json.dumps(rest, ensure_ascii=False)}{mark} (항목 {e['hash']})")
 
     # ---------------- identification and checks enforced by code ----------------
     REVEAL_KEYS = {"author", "label", "value", "salt", "publish_hash"}
@@ -298,7 +307,7 @@ class EventAssistant:
             self.save(ctx, st)
             if new and not first:
                 lines = [self.progress_line(ctx, st, e) for e in new]
-                await self.feed(ctx, st.event_id, "[원장 새 기록] 이 이벤트의 원장에 다른 사람의 기록이 올랐다(코드가 읽음).\n" + "\n".join(lines))
+                await self.feed(ctx, st.event_id, f"[원장 새 기록] 이 이벤트의 원장에 다른 사람의 기록이 올랐다(코드가 읽음). {self.SETTLED_NOTE}\n" + "\n".join(lines))
 
     WAKE_HOST = ("attest",)  # results are what a host collects; its own moves come by message or tool result
 
@@ -325,7 +334,7 @@ class EventAssistant:
                 st.idle_checks += 1
                 progress = "\n".join(await self.progress_lines(ctx, st)) or "없음"
                 await self.feed(ctx, st.event_id, "[점검] 한동안 새 입력이 없다. 아래 원장 기록을 보고 규칙상 지금 내가 해야 할 일이 남았는지 "
-                                                  f"확인하고, 있으면 하라. 다른 사람이 이미 한 일을 기다리고 있지 않은지도 보라.\n[진행 현황] (원장, 코드가 읽음)\n{progress}", idle=True)
+                                                  f"확인하고, 있으면 하라. 다른 사람이 이미 한 일을 기다리고 있지 않은지도 보라.\n[진행 현황] (원장, 코드가 읽음) {self.SETTLED_NOTE}\n{progress}", idle=True)
 
     # ---------------- the agent loop ----------------
     async def learn_keys(self, ctx, st, text: str) -> None:

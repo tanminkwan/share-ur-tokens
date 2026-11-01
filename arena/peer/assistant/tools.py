@@ -174,7 +174,7 @@ async def verify_entry(A, ctx, st, hash):
 
 
 async def event_progress(A, ctx, st):
-    return {"ok": True, "progress": await A.progress_lines(ctx, st)}
+    return {"ok": True, "note": A.SETTLED_NOTE, "progress": await A.progress_lines(ctx, st)}
 
 
 async def propose_attest(A, ctx, st, kind, subject, value, parties):
