@@ -140,7 +140,9 @@ def build_llm(settings: Settings) -> LLM:
         return CompatLLM(settings)
     if settings.llm_backend == "claude":
         return ClaudeLLM(settings)
-    raise ConfigError(f"{settings.key_of('llm_backend')} 값은 compat 또는 claude여야 합니다: {settings.llm_backend!r}")
+    if settings.llm_backend == "none":
+        return NoLLM()  # a peer without an LLM: a human peer, or a service peer
+    raise ConfigError(f"{settings.key_of('llm_backend')} 값은 compat, claude, none 가운데 하나여야 합니다: {settings.llm_backend!r}")
 
 
 class UsageMeter:
