@@ -146,7 +146,7 @@ sequenceDiagram
     participant R as 기록자 (원장)
     participant B as 책
     participant D as 독자
-    A->>R: 먼저 등록(publish): 본문 해시, 작가 서명
+    A->>R: 먼저 등록(publish, purpose authorship): 본문 해시, 작가 서명
     R-->>A: 봉인된 기록 (원장 식별자, 기록 해시, 번호, 시각)
     A->>B: 출간: 본문 + 원장 참조(판권면)
     D->>B: 본문을 정해진 방식으로 해시

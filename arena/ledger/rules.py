@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ..crypto import verify
 from .elements import element_rules
+from .purposes import check_purpose
 from .types import ENTRY_TYPES, closed_events, events, groups, published
 
 
@@ -59,6 +60,11 @@ def r_shape(chain, e, now, s):
     return t.shape(chain, e, now, s) if t.shape else None
 
 
+def r_purpose(chain, e, now, s):
+    """a coded purpose must be a registered code, declared on a type it is for (arena/ledger/purposes.py)"""
+    return check_purpose(chain, e)
+
+
 def r_signatures(chain, e, now, s):
     for who in signers(e):
         sig = e["sigs"].get(who) if who else None
@@ -92,7 +98,7 @@ def r_nonce(chain, e, now, s):
         return "replay (nonce already used)"
 
 
-GENERIC = (r_type, r_prev, r_group, r_ledger_id, r_shape, r_signatures, r_time, r_event_ref, r_known_content, r_nonce)
+GENERIC = (r_type, r_prev, r_group, r_ledger_id, r_shape, r_purpose, r_signatures, r_time, r_event_ref, r_known_content, r_nonce)
 
 
 def check(chain: list[dict], e: dict, now: float, settings) -> str | None:

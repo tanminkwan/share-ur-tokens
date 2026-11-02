@@ -120,11 +120,12 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 3. `group_id`가 있는가, 선언된 그룹인가(첫 항목은 제네시스, 만민 그룹은 선언할 수 없음)
 4. 원장이 제네시스로 시작했으면, payload의 `ledger_id`가 제네시스 항목의 해시인가
 5. 종류별 모양
-6. 종류가 정한 서명자 **전원**의 서명이 `sigs`에 있고 맞는가
-7. 시각이 뒤로 가지 않는가
-8. 이벤트를 가리키면 선언된, 닫히지 않은 이벤트인가
-9. 내용 해시를 가리키는 종류는 그 내용이 먼저 등록되었는가
-10. 한 번만 쓰는 `nonce`를 다시 쓰지 않았는가
+6. 목적 코드(`purpose`)가 있으면 등록된 코드인가, 그 종류에 쓸 수 있는 코드인가, 코드의 확인을 통과하는가(4.4절 끝)
+7. 종류가 정한 서명자 **전원**의 서명이 `sigs`에 있고 맞는가
+8. 시각이 뒤로 가지 않는가
+9. 이벤트를 가리키면 선언된, 닫히지 않은 이벤트인가
+10. 내용 해시를 가리키는 종류는 그 내용이 먼저 등록되었는가
+11. 한 번만 쓰는 `nonce`를 다시 쓰지 않았는가
 
 ### 4.4 항목 종류
 
@@ -136,7 +137,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `group` | `founder` | `group_id`, `founder`, `closed`, `brokers` |
 | `event` | `issuer`와 `approvers` 전원 | `event_id`, `issuer`, `kind`, `policy`, `approvers`, `rules_hash`, `mode`, `apps`, 선택 `elements`(4.6절) |
 | `contract` | `issuer`, `contractor` | `event_id`, `role`, `issuer`, `contractor`, `nonce`, `rules_hash` |
-| `publish` | `author` | `author`, `content_hash`, 선택 `event_id`, 선택 `label` |
+| `publish` | `author` | `author`, `content_hash`, 선택 `event_id`, 선택 `label`, 선택 `purpose`(`authorship` · `commit`) |
 | `reveal` | `author` | `author`, `label`, `value`, `salt`, `commit`(그 작성자의 `publish` 항목 해시), `event_id` |
 | `share` | `provider`, `consumer` | `provider`, `consumer`, `content_hash`, `terms`, `nonce`, 선택 `event_id` |
 | `feedback` | `evaluator` | `evaluator`, `content_hash`, `verdict`, 선택 `event_id` |
@@ -145,6 +146,8 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `close` | `issuer` | `event_id`, `issuer`, `result_hash`(이 이벤트의 항목) |
 | `key_rotate` | `old`, `new`, 기록자면 `god`도 | `role`(`recorder`·`god`), `old`(그 시점의 유효한 키), `new`, 기록자면 `god`(지금의 god 키), `nonce` |
 | `chain_link` | `child_god`, `child_recorder` | `child_ledger_id`(새 체인의 제네시스 해시), `child_god`, `child_recorder`(새 체인의 첫 기록자 키), `name`, `nonce`. 원래 체인에 남긴다. 한 체인은 한 번만 |
+
+**코드 칸과 자유 영역**: 위 표의 칸과 공통 칸(`group_id`, `ledger_id`, `event_id`, `purpose`, `nonce`)이 원장이 확인하는 코드 칸이다. payload의 나머지는 자유 영역으로, 원장이 읽지 않고 공개 확인에도 보이지 않는다(서명 범위 안이라 바꿀 수는 없다). 목적 코드 `purpose`는 등록된 값만 받는다. 처음 둘: `authorship`(`publish`, 저작 내용과 그 시점의 증명, 이름표 없음), `commit`(`publish`, 봉인 등록, 이름표 있음). 칸 정책 전체: [entry-columns.md](entry-columns.md).
 
 정책(`policy`)의 키와 뜻은 [phase5/requirements.md](phase5/requirements.md)와 백서 9장에 있다. 실행 방식 `mode`는 `assistant` · `app` · `app_or_assistant`, 앱 목록 `apps`의 각 칸은 `{id(UUID), name, version, hash?, required?}`.
 
