@@ -387,10 +387,10 @@ class EventAssistant:
         return n
 
     # ---------------- holding an event ----------------
-    async def host_event(self, ctx, *, title, kind, rules, policy, instruction, audience=None, recorder=None, elements=None):
+    async def host_event(self, ctx, *, title, kind, rules, policy, instruction, audience=None, recorder=None, elements=None, codebook=None):
         """open an event run in the primordial way: natural-language rules, app = the basic assistant"""
         out = await announce_event(ctx, group=self.group, title=title, kind=kind, rules=rules, policy=policy,
-                                   mode="assistant", apps=[], audience=audience, recorder=recorder, elements=elements)
+                                   mode="assistant", apps=[], audience=audience, recorder=recorder, elements=elements, codebook=codebook)
         ev, rec = out["event_id"], out["recorder"]
         st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url,
                                           policy=dict(policy), elements=dict(elements or {}))

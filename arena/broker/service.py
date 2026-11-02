@@ -78,6 +78,9 @@ class BrokerService:
         bad = check_connections(prof["connections"]) if "connections" in prof else None
         if bad:
             return {"ok": False, "error": f"bad connection information: {bad}"}
+        cb = prof.get("codebook")
+        if cb is not None and (not isinstance(cb, dict) or set(cb) != {"entry", "publisher", "version"}):
+            return {"ok": False, "error": "codebook must be {entry, publisher, version}"}
         if not self.is_member(pub):
             return {"ok": False, "error": "members of this peer group only"}
         updated = pub in self.profiles

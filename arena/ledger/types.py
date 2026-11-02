@@ -118,10 +118,14 @@ def _event_once(chain, e, now, s):
     bad = check_elements(p.get("elements", {}))
     if bad:
         return bad
+    from .codebook import check_event_codebook  # registered after the built-in types
+    return check_event_codebook(chain, p)
 
 
 def _event_contribute(rec, p, index):
     _inc(rec, p["issuer"], "events")
+    if isinstance(p.get("codebook"), dict) and p["codebook"].get("publisher"):  # standing comes from being followed
+        _inc(rec, p["codebook"]["publisher"], "codebook_followers")
     for a in p.get("approvers", []):
         _inc(rec, a, "approvals")
 
@@ -357,6 +361,7 @@ for _t in (
     EntryType("event", lambda p: [p.get("issuer"), *p.get("approvers", [])], shape=_event_shape, rules=(_event_once,),
               public=lambda p, c: {**_rules_hash(p), **({"mode": p["mode"], "apps": p.get("apps", [])} if "mode" in p else {}),
                                    **({"elements": p["elements"]} if p.get("elements") else {}),
+                                   **({"codebook": p["codebook"]} if p.get("codebook") else {}),
                                    "issuer": p["issuer"], "kind": p.get("kind"), "approvers": list(p.get("approvers", []))},
               counters={"events": 0, "approvals": 0}, contribute=_event_contribute),
     EntryType("contract", lambda p: [p.get("issuer"), p.get("contractor")], event_ref="required", unique_nonce=True, rules=(_contract_rule,),

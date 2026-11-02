@@ -219,7 +219,7 @@ def test_pa6_contribution_is_generic(ledger, cast):
     ok(ledger, cast.feedback("pick", evaluator=cast.issuer))
     c = contribution(ledger.chain)
     assert c[cast.author.pub] == {"published": 1, "received_by": 2, "verdicts_received": {"score": 1, "pick": 1},
-                                  "verdicts_given": {}, "roles": {}, "events": 0, "approvals": 0, "attested": {}, "closed": 0, "groups": 0, "revealed": 0}
+                                  "verdicts_given": {}, "roles": {}, "events": 0, "approvals": 0, "attested": {}, "closed": 0, "groups": 0, "revealed": 0, "codebooks": 0, "codebook_followers": 0}
     assert c[cast.judge.pub]["roles"] == {"judge": 1} and c[cast.judge.pub]["verdicts_given"] == {"score": 1}
     assert c[cast.issuer.pub]["events"] == 1 and c[cast.issuer.pub]["verdicts_given"] == {"pick": 1}
     assert c[cast.approver.pub]["approvals"] == 1

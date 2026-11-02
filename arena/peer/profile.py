@@ -25,7 +25,8 @@ class ProfileBuilder:
         caps = await CapabilityLabeler(peer.settings).compute(peer) if peer.settings.label_auto else []
         profile = {"url": peer.config.url, "connections": peer.connections(), "summary": d["summary"], "offers": peer.offers(),
                    "labels": list(peer.config.labels) + [c["label"] for c in caps], "capabilities": caps,
-                   "until": peer.clock() + peer.settings.profile_ttl_sec, "ver": self.version}
+                   "until": peer.clock() + peer.settings.profile_ttl_sec, "ver": self.version,
+                   **({"codebook": dict(peer.config.codebook)} if peer.config.codebook else {})}
         for app in peer.apps:
             if isinstance(app, ProfileContributor):
                 profile.update(app.profile_extra())

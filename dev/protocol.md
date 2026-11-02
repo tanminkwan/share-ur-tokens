@@ -98,6 +98,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `GET /access-log` | 예(허용된 키만) | 접근 기록 |
 | `GET /trust` | 아니요 | 신뢰 문서: `ledger_id`, 제네시스 항목 전체, 모든 `key_rotate` 항목 전체, 지금 기록자 키(4.5절) |
 | `GET /links/{ledger_id}` | 아니요 | 그 커뮤니티 체인을 이 원장에 연결한 `chain_link` 항목 전체 |
+| `GET /codes` | 아니요 | 이 기록자가 구현한 원장 코드(`implemented`: `entry_types`·`purposes`·`elements`)와 함께 든 기본 판(`builtin`: `{name, version}`) |
 | `GET /audit`, `GET /health` | 아니요 | 감사 결과, 상태(지금 기록자 공개키, `ledger_id` 포함) |
 
 ### 4.2 항목의 모양
@@ -135,7 +136,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 |---|---|---|
 | `genesis` | `god` | `god`, `broker`, `recorder`, `group_id`, 커뮤니티 체인이면 `parent`(`{ledger_id, recorder_url}`: 연결한 원래 체인) |
 | `group` | `founder` | `group_id`, `founder`, `closed`, `brokers` |
-| `event` | `issuer`와 `approvers` 전원 | `event_id`, `issuer`, `kind`, `policy`, `approvers`, `rules_hash`, `mode`, `apps`, 선택 `elements`(4.6절) |
+| `event` | `issuer`와 `approvers` 전원 | `event_id`, `issuer`, `kind`, `policy`, `approvers`, `rules_hash`, `mode`, `apps`, 선택 `elements`(4.6절), 선택 `codebook`(`{entry, publisher, version}`: 따르는 코드표 판. 원장이 그 판 기록과 대조하고, 기본 요소가 그 판의 코드인지, 이 기록자가 그 판의 원장 코드를 모두 구현했는지 본다) |
 | `contract` | `issuer`, `contractor` | `event_id`, `role`, `issuer`, `contractor`, `nonce`, `rules_hash` |
 | `publish` | `author` | `author`, `content_hash`, 선택 `event_id`, 선택 `label`, 선택 `purpose`(`authorship` · `commit`) |
 | `reveal` | `author` | `author`, `label`, `value`, `salt`, `commit`(그 작성자의 `publish` 항목 해시), `event_id` |
@@ -145,6 +146,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `attest` | `parties` 전원 | 선택 `event_id`, `kind`, `subject`, `value`, `parties`, `nonce` |
 | `close` | `issuer` | `event_id`, `issuer`, `result_hash`(이 이벤트의 항목) |
 | `key_rotate` | `old`, `new`, 기록자면 `god`도 | `role`(`recorder`·`god`), `old`(그 시점의 유효한 키), `new`, 기록자면 `god`(지금의 god 키), `nonce` |
+| `codebook` | `publisher` | `publisher`, `name`, `version`(`x.y`), `content_hash`(코드표 문서의 해시), `codes`(`entry_types`·`purposes`·`elements`·`connections` 목록), 선택 `supersedes`(앞 판의 기록 해시). 같은 낸 이·이름·번호는 한 번만, 같은 표의 새 판은 번호가 더 커야 함([codebook.md](codebook.md)) |
 | `chain_link` | `child_god`, `child_recorder` | `child_ledger_id`(새 체인의 제네시스 해시), `child_god`, `child_recorder`(새 체인의 첫 기록자 키), `name`, `nonce`. 원래 체인에 남긴다. 한 체인은 한 번만 |
 
 **코드 칸과 자유 영역**: 위 표의 칸과 공통 칸(`group_id`, `ledger_id`, `event_id`, `purpose`, `nonce`)이 원장이 확인하는 코드 칸이다. payload의 나머지는 자유 영역으로, 원장이 읽지 않고 공개 확인에도 보이지 않는다(서명 범위 안이라 바꿀 수는 없다). 목적 코드 `purpose`는 등록된 값만 받는다. 지금 코드: `authorship`(`publish`, 저작 내용과 그 시점의 증명, 이름표 없음), `commit`(`publish`, 봉인 등록, 이름표 있음), `delivery`(`share`, 자료 전달), `submission`(`share`, 이벤트 제출, 이벤트 필수), `evaluation`(`share`, 평가 건넴, 이벤트 필수). 칸 정책 전체: [entry-columns.md](entry-columns.md).

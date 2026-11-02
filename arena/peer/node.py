@@ -35,6 +35,7 @@ class PeerConfig:
     offers: list[str] = field(default_factory=list)
     labels: list[str] = field(default_factory=list)
     connections: list = field(default_factory=list)  # how to reach this peer (arena/connections.py); empty = a2a at url
+    codebook: dict | None = None  # the code table edition this peer follows {entry, publisher, version} (optional)
     element_apps: bool | None = None  # built-in elements' apps (desks): None = only if an app handles events, True/False = always/never
 
 
