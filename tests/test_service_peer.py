@@ -124,7 +124,7 @@ def test_p6a1_the_service_and_app_store_runners_build_their_peers(tmp_path, sett
     assert "app_get" in app_store.build(s).skills()
 
 
-async def test_p6a5_the_host_sees_open_roles_with_the_peers_offering_them_and_its_instruction_stays_pinned(eco):
+async def test_p6a9_the_host_sees_open_roles_with_the_peers_offering_them_and_its_instruction_stays_pinned(eco):
     """live with-elements run 2: the host's instruction (naming the referee) scrolled away and the host kept asking its owner
     who the referee was. The owner's instruction is now pinned in the prompt, and the state line lists the policy roles
     nobody holds yet with the peers whose profile offers them."""

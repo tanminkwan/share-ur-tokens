@@ -85,7 +85,7 @@ def test_p6a8_the_service_runner_opens_the_configured_connection_methods(tmp_pat
         service.build(dataclasses.replace(settings, service_peer_connections=["human"], **base), str(f))
 
 
-async def test_p6a8_a_call_to_a_peer_without_the_op_names_the_peers_that_offer_it(eco):
+async def test_p6a9_a_call_to_a_peer_without_the_op_names_the_peers_that_offer_it(eco):
     """live with-elements run 1: a player sent op judge to a peer that has no such op and got only "unknown op". The tool
     now names the peers whose posted profile offers the op, so the agent can call the right one."""
     svc = eco.peer("svc", apps=[ServiceApp(eco.s, spec())])

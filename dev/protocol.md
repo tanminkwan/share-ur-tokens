@@ -158,6 +158,8 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 4. **커뮤니티 체인**: 제네시스에 `parent`가 있으면, 먼저 `parent.recorder_url`의 원래 체인을 1~3으로 증명하고(그것도 커뮤니티 체인이면 위로 따라감, 받는 쪽 상한 `ARENA_TRUST_MAX_LINK_DEPTH`), `GET /links/{이 체인의 ledger_id}`로 `chain_link`를 받아: 이 체인의 제네시스 해시·god 키·첫 기록자 키를 가리키는가, 새 god과 새 첫 기록자의 서명이 맞는가, `ledger_id`가 원래 체인의 것인가, **그 시점의 원래 기록자 키로** 봉인됐는가를 본다. 그다음 이 체인에 2~3을 한다(뿌리 값 대신 연결이 증명한 제네시스로).
 5. 증명된 기록자의 이벤트만 받는다. 공지의 `recorder_pub`이 증명된 지금 키와 같아야 한다.
 
+체인을 넓히는 정책(뿌리 원장, 가지 기록, 가지의 첫 기록, 원장 밖 내용의 링크)과 구현 예정인 칸은 `dev/chain-policy.md`에 있다.
+
 ### 4.6 이벤트의 요소와 원장 규칙
 
 이벤트 선언과 공지의 `elements`는 `{요소 이름: 설정}`이다. 원장은 등록된 요소와 올바른 설정만 받고, 그 이벤트를 가리키는 항목마다 선언된 요소의 규칙을 더해 본다. 받는 peer는 공지의 `elements`가 원장 선언과 같아야 이벤트를 받는다.
@@ -166,7 +168,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 |---|---|---|
 | `intake`(제출 받기) | `max_per_author`, `receiver`(`issuer` 또는 역할), 선택 `deadline`, `audience` | `terms: "submission"`인 `share`: 받는 사람이 `receiver`, 마감 전, 작성자당 상한 이하, 겸할 수 없는 역할(`conflict_roles`) 아님 |
 | `evaluation`(평가) | `evaluator_role`, `verdict`, `per_item` | `terms: "evaluation"`인 `share`: 주는 쪽이 개최자, 받는 쪽이 평가자 역할, 항목당 평가자 수 이하. 판정 종류가 `verdict`인 `feedback`: 그 평가자가 이 이벤트에서 그 항목을 넘겨받았어야 함 |
-| `sealed`(봉인 묶음) | `{}` | 배정된 주제 `S`의 라벨(`S` 또는 `S-<숫자>`): 배정된 당사자만 `publish`, 당사자 전원이 등록한 뒤에만 `reveal`, 공개가 있으면 새 등록 없음 |
+| `sealed`(봉인 묶음) | `{}` | 배정된 주제 `S`의 라벨(`S` 또는 `S-<숫자>`): 배정된 당사자만 `publish`, 당사자 전원이 등록한 뒤에만 `reveal`, 공개가 있으면 새 등록 없음. 이 요소를 켠 이벤트에서는 배정된 주제에 속하지 않는 라벨의 `reveal`을 받지 않는다 |
 
 요소의 op(받는 peer의 내장 앱): `intake.submit`(`event_id`, `content`, `share`, `sig`(제출자의 `share` 서명), `recorder_url`; 받는 peer가 검사 뒤 함께 서명해 기록하고 기록 결과를 돌려줌), `evaluation.request`(`event_id`, `recorder_url`, `items`: `[{share, sig(개최자의 share 서명), content}]`; 답은 `receipts`(내용 해시 → 평가자의 share 서명)와 `verdicts`(`[{payload, sig, comment}]`)).
 

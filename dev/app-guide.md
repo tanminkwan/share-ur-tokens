@@ -186,7 +186,7 @@ await peer.call(store_url, {"op": "app_publish", "package": pkg})
 |---|---|
 | `intake`(제출 받기) | 이벤트를 `elements={"intake": {...}}`로 선언한다. 제출은 받는 peer의 내장 `IntakeDesk`가 검사·기록·보관하고, `ctx.submissions(event_id)`로 목록을 본다 |
 | `evaluation`(평가) | 평가자 쪽 앱은 `EvaluationProvider` 능력(`async evaluate(ctx, items, request) -> [{content_hash, score, comment}]`)만 구현한다. 넘김 확인과 판정 서명은 플랫폼이 한다. 판정으로 무엇을 할지는 앱의 몫이다 |
-| `sealed`(봉인 묶음) | 배정한 주제의 라벨(`S`, `S-<번호>`)을 쓰면 공개 순서를 원장이 지킨다 |
+| `sealed`(봉인 묶음) | 배정한 주제의 라벨(`S`, `S-<번호>`)을 쓰면 공개 순서를 원장이 지킨다. 배정되지 않은 라벨은 공개할 수 없다 |
 
 ### 10-3. API를 제공하는 peer (서비스 peer)
 
