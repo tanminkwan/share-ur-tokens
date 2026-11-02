@@ -363,7 +363,7 @@ for _t in (
               public=lambda p, c: {"author": p["author"], "content_hash": p["content_hash"], **({"label": p["label"]} if "label" in p else {})},
               counters={"published": 0},
               contribute=_count("published", "author"), index=_publish_index),
-    EntryType("share", lambda p: [p.get("provider"), p.get("consumer")], needs_content=True, unique_nonce=True,
+    EntryType("share", lambda p: [p.get("provider"), p.get("consumer")], event_ref="optional", needs_content=True, unique_nonce=True,
               counters={"received_by": set()}, contribute=_share_contribute),
     EntryType("feedback", lambda p: [p.get("evaluator")], event_ref="optional", needs_content=True, rules=(_feedback_rule,),
               counters={"verdicts_received": defaultdict(int), "verdicts_given": defaultdict(int)}, contribute=_feedback_contribute),

@@ -19,10 +19,11 @@ from ..recorder.client import RecorderAPI, RecorderClient
 from .area import PublicArea
 from .builtin import RESERVED_OPS, DirectRequests, EventApprovals, RoleContracts
 from .app_install import AppInstaller
+from .elements import PEER_ELEMENTS
 from .events import EventRouter
 from .context import AppContext, PlatformContext
 from .owner import Owner
-from .plugin import SDK_VERSION, App, Lifecycle, is_uuid, MessageHead, OfferProvider, OpProvider, capabilities_of
+from .plugin import SDK_VERSION, App, EventHandler, Lifecycle, is_uuid, MessageHead, OfferProvider, OpProvider, capabilities_of
 from .profile import ProfileBuilder
 from .receipts import Receipts
 
@@ -60,6 +61,8 @@ class Peer:
         self._requests = DirectRequests(settings)
         self.events = EventRouter(settings, installer=AppInstaller(settings) if (settings.app_store_urls or settings.app_store_discover) else None)
         self.builtins = [RoleContracts(), EventApprovals(), self._requests, self.events]
+        if any(isinstance(a, EventHandler) for a in apps):  # peers that take part in events get the built-in elements' apps
+            self.builtins += [el.app(settings) for el in PEER_ELEMENTS.values() if el.app]
         self.apps = list(apps)
         self._contexts: dict[int, AppContext] = {}
         self._ops: dict[str, tuple[object, Callable]] = {}

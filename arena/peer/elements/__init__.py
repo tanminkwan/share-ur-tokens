@@ -25,3 +25,6 @@ def register_peer_element(el: PeerElement) -> None:
 
 def element_tools() -> list:
     return [t for el in PEER_ELEMENTS.values() for t in el.tools]
+
+
+from . import intake  # noqa: E402,F401  (the built-in elements register themselves)

@@ -100,6 +100,12 @@ class AppContext:
         """reach a peer by a connection method its profile lists (a2a, else api)"""
         return await self._peer.call_peer(pub, msg, timeout, group=group, event=event)
 
+    async def submissions(self, event_id: str) -> list:
+        """what this peer's submission desk received for an event (the intake element)"""
+        from .elements.intake import IntakeDesk
+        desk = self._peer.app_by_id(IntakeDesk.app_id)
+        return desk.list(event_id) if desk else []
+
     async def profile_of(self, pub: str) -> dict | None:
         return await self._peer.profile_of(pub)
 
