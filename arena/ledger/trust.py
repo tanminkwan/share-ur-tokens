@@ -83,6 +83,8 @@ async def link_to_parent(parent, god, recorder_identity, chain: list[dict], name
     pt = await parent.trust()
     if not pt.get("ok"):
         return {"ok": False, "error": f"parent recorder: {pt.get('error')}"}
+    if "parent" in pt["genesis"]["payload"]:
+        return {"ok": False, "error": "only the trunk (the root chain) takes branch links; a branch chain cannot start a branch"}
     g = chain[0]
     p = {"child_ledger_id": g["hash"], "child_god": god.pub, "child_recorder": recorder_identity.pub, "name": name,
          "group_id": pt["genesis"]["payload"]["group_id"], "ledger_id": pt["ledger_id"], "nonce": g["hash"][:16]}

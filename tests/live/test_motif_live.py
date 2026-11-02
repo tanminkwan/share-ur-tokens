@@ -18,7 +18,7 @@ from arena.peer.record_role import RecordRole
 from arena.recorder.service import RecorderService
 from arena.serve import serve_background
 from tests.conftest import make_env
-from tests.motif.doubles import APPROVER_LABEL, CONTENT_SCHEMA, OPEN, REVIEW, AcceptRole, ApproveByOwner, Inbox, Judge, LLMOwner
+from tests.motif.doubles import APPROVER_LABEL, CONTENT_SCHEMA, OPEN, REVIEW, AcceptRole, ApproveByOwner, Judge, LLMOwner
 from tests.motif.flow import CALL, apply, check_notice, found_group, open_event, review_and_adopt
 from tests.test_processes import Proc, free_port
 
@@ -31,7 +31,6 @@ class LiveWorld:
         self.tmp, self.s, self.procs, self.servers = tmp, settings, procs, []
         self.log, self.t, self.llm = EventLog(echo=True), A2ATransport(settings), build_llm(settings)
         self.org_id, self.god = Identity.generate(), Identity.generate()
-        self.inbox = Inbox()
 
     def start_brokers(self):
         self.urls = {}
@@ -60,14 +59,14 @@ class LiveWorld:
             self.servers.append(await serve_background(role.api(), HOST, rport))
             self.ledger = svc.ledger
         owner = LLMOwner(self.llm, self.log, name, persona or f"당신은 {notes[0]}입니다.")
-        p = Peer(ident, self.s, PeerConfig(url=url, labels=list(labels)), LocalFolderArea(str(root), self.s), owner, self.llm,
+        p = Peer(ident, self.s, PeerConfig(url=url, labels=list(labels), element_apps=True), LocalFolderArea(str(root), self.s), owner, self.llm,
                  self.t, self.log, brokers={g: BrokerClient(self.urls[g], self.s) for g in groups}, apps=apps)
         self.servers.append(await serve_background(p.a2a_app(), HOST, port))
         return p
 
     async def boot(self):
         self.start_brokers()
-        self.org = await self.peer("org", [self.inbox], ["사내 행사 진행 담당"], groups=[OPEN, REVIEW], identity=self.org_id)
+        self.org = await self.peer("org", [], ["사내 행사 진행 담당"], groups=[OPEN, REVIEW], identity=self.org_id)  # IntakeDesk: built in
         self.rec = await self.peer("rec", [], ["정보보안·컴플라이언스 8년차", "감사 추적을 위한 기록 보관과 열람 통제를 맡아 왔다"], record=True)
         self.ceo = await self.peer("ceo", [ApproveByOwner()], ["대표이사", "회사 전략과 인재 육성을 책임진다"], labels=[SDS, APPROVER_LABEL],
                                    persona="당신은 이 회사의 대표이사입니다. 신입 사원 적응과 인재 육성은 회사의 중점 과제라서, 그와 관련된 사내 공모라면 결재합니다.")

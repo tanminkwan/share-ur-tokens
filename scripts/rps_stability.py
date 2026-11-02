@@ -29,10 +29,13 @@ def judge_run(n: int, exit_code: int, log: str, basetemp: pathlib.Path) -> dict:
     else:
         audit, entries, closed = "no ledger", 0, False
     m = re.search(r"elapsed ([0-9.]+)s", log)
+    u = re.search(r"^usage: (\{.*\})$", log, re.M)
+    usage = json.loads(u.group(1)) if u else {}
     return {"run": n, "exit": exit_code, "audit": audit, "entries": entries, "closed": closed,
             "elapsed": float(m.group(1)) if m else None, "llm_finished": exit_code == 0,
             "platform_ok": exit_code in (0, 1) and audit == "ok",
-            "llm_error": "LLM judgement error: yes" in log}
+            "llm_error": "LLM judgement error: yes" in log,
+            "llm_calls": usage.get("calls"), "tokens": (usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)) if usage else None}
 
 
 def summarize(rows: list[dict]) -> str:
@@ -48,6 +51,24 @@ def summarize(rows: list[dict]) -> str:
     return "\n".join(out)
 
 
+def run_many(test: str, runs: int, timeout: int, out: pathlib.Path) -> list[dict]:
+    rows = []
+    out.mkdir(parents=True, exist_ok=True)
+    for n in range(1, runs + 1):
+        base = out / f"run{n}"
+        cmd = [sys.executable, "-m", "pytest", test, "-q", "-s", "-p", "no:cacheprovider", f"--basetemp={base}"]
+        try:
+            p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+            code, log = p.returncode, p.stdout + p.stderr
+        except subprocess.TimeoutExpired as e:
+            code, log = -1, f"timeout after {timeout}s\n{e.stdout or ''}"
+        (out / f"run{n}.log").write_text(log, encoding="utf-8")
+        rows.append(judge_run(n, code, log, base))
+        print(f"{test} run {n}: platform_ok={rows[-1]['platform_ok']} llm_finished={rows[-1]['llm_finished']} "
+              f"calls={rows[-1]['llm_calls']} tokens={rows[-1]['tokens']}", flush=True)
+    return rows
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--runs", type=int, default=5)
@@ -57,19 +78,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     out = pathlib.Path(a.out or ROOT / "data" / "runs" / f"stability-{time.strftime('%Y%m%d-%H%M%S')}")
     out.mkdir(parents=True, exist_ok=True)
-    rows = []
-    for n in range(1, a.runs + 1):
-        base = out / f"run{n}"
-        cmd = [sys.executable, "-m", "pytest", a.test, "-q", "-s", "-p", "no:cacheprovider", f"--basetemp={base}"]
-        try:
-            p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=a.timeout)
-            code, log = p.returncode, p.stdout + p.stderr
-        except subprocess.TimeoutExpired as e:
-            code, log = -1, f"timeout after {a.timeout}s\n{e.stdout or ''}"
-        (out / f"run{n}.log").write_text(log, encoding="utf-8")
-        rows.append(judge_run(n, code, log, base))
-        print(f"run {n}: platform_ok={rows[-1]['platform_ok']} audit={rows[-1]['audit']} llm_finished={rows[-1]['llm_finished']}",
-              flush=True)
+    rows = run_many(a.test, a.runs, a.timeout, out)
     text = f"# 반복 안정성: {a.test}, {a.runs}번 ({time.strftime('%Y-%m-%d %H:%M')})\n\n" + summarize(rows) + "\n"
     (out / "summary.md").write_text(text, encoding="utf-8")
     print(text)

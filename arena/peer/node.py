@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from ..a2a import Transport, build_a2a_app
+from ..connections import pick
+from ..rest import RestTransport
 from ..config import Settings
 from ..crypto import Identity, pen_name
 from ..events import EventLog
@@ -17,12 +19,14 @@ from ..recorder.client import RecorderAPI, RecorderClient
 from .area import PublicArea
 from .builtin import RESERVED_OPS, DirectRequests, EventApprovals, RoleContracts
 from .app_install import AppInstaller
+from .elements import PEER_ELEMENTS
 from .events import EventRouter
 from .context import AppContext, PlatformContext
-from .owner import Owner
-from .plugin import SDK_VERSION, App, Lifecycle, is_uuid, MessageHead, OfferProvider, OpProvider, capabilities_of
+from .owner import NoOwner, Owner
+from .plugin import SDK_VERSION, App, EventHandler, Lifecycle, is_uuid, MessageHead, OfferProvider, OpProvider, capabilities_of
 from .profile import ProfileBuilder
 from .receipts import Receipts
+from .scheduler import Scheduler
 
 
 @dataclass
@@ -31,6 +35,10 @@ class PeerConfig:
     url: str
     offers: list[str] = field(default_factory=list)
     labels: list[str] = field(default_factory=list)
+    connections: list = field(default_factory=list)  # how to reach this peer (arena/connections.py); empty = a2a at url
+    operator: str | None = None  # service | agent | human (dev/peer-spec.md); None = agent unless the peer has no LLM (human)
+    codebook: dict | None = None  # the code table edition this peer follows {entry, publisher, version} (optional)
+    element_apps: bool | None = None  # built-in elements' apps (desks): None = only if an app handles events, True/False = always/never
 
 
 class Peer:
@@ -52,10 +60,15 @@ class Peer:
             self.app_states.setdefault(DirectRequests.name, {"inbox": saved["inbox"]})
         self.last_profile: dict | None = None
         self._group_ids: dict[str, str] = {}
-        self._trust: dict[str, dict] = {}  # recorder url -> its trust check against the root of trust (P5-G6)
+        self._trust: dict[str, dict] = {}
+        self.rest = RestTransport(settings)  # the api connection method (P6-A8)  # recorder url -> its trust check against the root of trust (P5-G6)
         self._requests = DirectRequests(settings)
-        self.events = EventRouter(settings, installer=AppInstaller(settings) if settings.app_store_urls else None)
-        self.builtins = [RoleContracts(), EventApprovals(), self._requests, self.events]
+        self.events = EventRouter(settings, installer=AppInstaller(settings) if (settings.app_store_urls or settings.app_store_discover) else None)
+        self.scheduler = Scheduler(settings)  # "이 시각에 이 일": timers kept in the home, handed to the app that set them
+        self.builtins = [RoleContracts(), EventApprovals(), self._requests, self.events, self.scheduler]
+        wants = config.element_apps if config.element_apps is not None else any(isinstance(a, EventHandler) for a in apps)
+        if wants:  # peers that take part in events (or ask for them) get the built-in elements' apps
+            self.builtins += [el.app(settings) for el in PEER_ELEMENTS.values() if el.app]
         self.apps = list(apps)
         self._contexts: dict[int, AppContext] = {}
         self._ops: dict[str, tuple[object, Callable]] = {}
@@ -114,6 +127,44 @@ class Peer:
     def sign(self, payload) -> str:
         return self.identity.sign(payload)
 
+    def operator(self) -> str:
+        """who decides and answers for this peer (dev/peer-spec.md 1절)"""
+        if self.config.operator:
+            return self.config.operator
+        from ..llm import NoLLM
+        if isinstance(self.owner, NoOwner):
+            return "service"  # nobody behind it: code answers
+        return "human" if isinstance(self.llm, NoLLM) else "agent"
+
+    def connections(self) -> list:
+        """the connections this peer's profile lists (P6-A7): the person's choice, or a2a at its url; a human contact only if set"""
+        out = [dict(c) for c in self.config.connections] or [{"kind": "a2a", "url": self.config.url}]
+        if self.settings.peer_human_contact and not any(c["kind"] == "human" for c in out):
+            out.append({"kind": "human", "contact": self.settings.peer_human_contact})
+        return out
+
+    async def profile_of(self, pub: str) -> dict | None:
+        for broker in self.brokers.values():
+            try:
+                found = next((p for p in (await broker.list_profiles(identity=self.identity)).get("profiles", []) if p["pub"] == pub), None)
+            except Exception:
+                continue
+            if found:
+                return found
+        return None
+
+    async def call_peer(self, pub: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None) -> dict:
+        """reach a peer by the connection its profile lists that code may use: a2a first, else api (P6-A8)"""
+        prof = await self.profile_of(pub)
+        conns = (prof or {}).get("connections") or ([{"kind": "a2a", "url": prof["url"]}] if prof and prof.get("url") else [])
+        c = pick(conns)
+        if c is None:
+            return {"ok": False, "error": "no connection method this peer can use (a2a or api)"}
+        if c["kind"] == "a2a":
+            return await self.call(c["url"], msg, timeout, group=group, event=event)
+        meta = {"group_id": group, "event_id": event} if (group or event) else None
+        return await self.rest.call(c["url"], msg, timeout, meta)
+
     def offers(self) -> list[str]:
         out = list(self.config.offers)
         for app in self.apps:
@@ -130,6 +181,9 @@ class Peer:
     def app_by_id(self, app_id: str):
         return next((a for a in self.apps + self.builtins if a.app_id == app_id), None)
 
+    def app_by_name(self, name: str):
+        return next((a for a in self.apps + self.builtins if a.name == name), None)
+
     def recorder(self, url: str) -> RecorderAPI:
         if url not in self.known_recorders:
             self.known_recorders.append(url)
@@ -145,9 +199,10 @@ class Peer:
         if self.home:
             self.home.save_state({"profile_ver": self.profiles.version, "known_recorders": self.known_recorders, "apps": self.app_states})
 
-    async def recorder_trust(self, url: str, depth: int = 0) -> dict:
+    async def recorder_trust(self, url: str) -> dict:
         """is the recorder at url the one this peer's root of trust proves? {ok, anchored, recorder, ledger_id, why}.
-        The root is the original chain; a community chain is proven through its chain_link in its parent (P5-G9).
+        The root is the trunk (the original chain); a branch chain is proven through its chain_link in the trunk (P5-G9).
+        Branches grow only from the trunk (P5-G10), so the proof is always one step.
         Without a root of trust in the settings every recorder passes (anchored False). Checked once per url."""
         if url in self._trust:
             return self._trust[url]
@@ -164,9 +219,11 @@ class Peer:
             out = {"ok": ok, "anchored": True, "recorder": keys.get("recorder"), "ledger_id": doc.get("ledger_id") if ok else None, "why": why}
         else:
             parent = ((doc.get("genesis") or {}).get("payload") or {}).get("parent")
-            if not parent or depth >= s.trust_max_link_depth:
-                return fail("not the original chain and not linked into it")
-            pt = await self.recorder_trust(parent["recorder_url"], depth + 1)
+            if not parent:
+                return fail("not the trunk and not linked into it")
+            if parent.get("ledger_id") != s.trust_genesis_hash:
+                return fail("branches grow only from the trunk; this chain names another chain as its origin")
+            pt = await self.recorder_trust(parent["recorder_url"])
             if not pt["ok"] or pt["ledger_id"] != parent["ledger_id"]:
                 return fail(f"parent chain not proven: {pt.get('why')}")
             try:

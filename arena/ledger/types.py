@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from ..crypto import commit_hash
+from .elements import check_elements
 from ..peer.plugin import valid_run
 
 POLICY_LISTS = ("roles", "conflict_roles", "hidden_roles", "reveal_values", "assigned_kinds", "attest_kinds")
@@ -114,10 +115,22 @@ def _event_once(chain, e, now, s):
     p = e["payload"]
     if ("mode" in p or "apps" in p) and not valid_run(p.get("mode"), p.get("apps", [])):
         return "bad mode or app list"
+    bad = check_elements(p.get("elements", {}))
+    if bad:
+        return bad
+    if "schedule" in p:
+        from .schedule import check_schedule
+        bad = check_schedule(p["schedule"], s.event_schedule_max)
+        if bad:
+            return bad
+    from .codebook import check_event_codebook  # registered after the built-in types
+    return check_event_codebook(chain, p)
 
 
 def _event_contribute(rec, p, index):
     _inc(rec, p["issuer"], "events")
+    if isinstance(p.get("codebook"), dict) and p["codebook"].get("publisher"):  # standing comes from being followed
+        _inc(rec, p["codebook"]["publisher"], "codebook_followers")
     for a in p.get("approvers", []):
         _inc(rec, a, "approvals")
 
@@ -324,6 +337,8 @@ def _link_shape(chain, e, now, s):
 
 
 def _link_rule(chain, e, now, s):
+    if chain and "parent" in chain[0]["payload"]:  # branches grow only from the trunk (user 2026-11-02, dev/chain-policy.md)
+        return "only the trunk (the root chain) takes branch links; a branch chain cannot start a branch"
     if any(x["type"] == "chain_link" and x["payload"]["child_ledger_id"] == e["payload"]["child_ledger_id"] for x in chain):
         return "this chain is already linked"
 
@@ -350,6 +365,9 @@ for _t in (
               counters={"groups": 0}, contribute=_count("groups", "founder")),
     EntryType("event", lambda p: [p.get("issuer"), *p.get("approvers", [])], shape=_event_shape, rules=(_event_once,),
               public=lambda p, c: {**_rules_hash(p), **({"mode": p["mode"], "apps": p.get("apps", [])} if "mode" in p else {}),
+                                   **({"elements": p["elements"]} if p.get("elements") else {}),
+                                   **({"codebook": p["codebook"]} if p.get("codebook") else {}),
+                                   **({"schedule": p["schedule"]} if p.get("schedule") else {}),
                                    "issuer": p["issuer"], "kind": p.get("kind"), "approvers": list(p.get("approvers", []))},
               counters={"events": 0, "approvals": 0}, contribute=_event_contribute),
     EntryType("contract", lambda p: [p.get("issuer"), p.get("contractor")], event_ref="required", unique_nonce=True, rules=(_contract_rule,),
@@ -358,9 +376,10 @@ for _t in (
               public=lambda p, c: {"author": p["author"], "content_hash": p["content_hash"], **({"label": p["label"]} if "label" in p else {})},
               counters={"published": 0},
               contribute=_count("published", "author"), index=_publish_index),
-    EntryType("share", lambda p: [p.get("provider"), p.get("consumer")], needs_content=True, unique_nonce=True,
+    EntryType("share", lambda p: [p.get("provider"), p.get("consumer")], event_ref="optional", needs_content=True, unique_nonce=True,
               counters={"received_by": set()}, contribute=_share_contribute),
     EntryType("feedback", lambda p: [p.get("evaluator")], event_ref="optional", needs_content=True, rules=(_feedback_rule,),
+              public=lambda p, c: {k: p[k] for k in ("evaluator", "content_hash", "verdict", "score") if k in p},
               counters={"verdicts_received": defaultdict(int), "verdicts_given": defaultdict(int)}, contribute=_feedback_contribute),
     EntryType("attest", lambda p: list(p.get("parties", [])) or [None], event_ref="optional", unique_nonce=True, shape=_attest_shape,
               rules=(_attest_rule,), public=lambda p, c: {"kind": p.get("kind"), "subject": p.get("subject"), "parties": list(p["parties"]),

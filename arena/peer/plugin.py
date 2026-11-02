@@ -77,12 +77,25 @@ class Lifecycle(Protocol):
 
 
 @runtime_checkable
+class TimerHandler(Protocol):
+    """an app the peer's scheduler wakes at a time it (or the event's schedule) set: timer = {id, at, kind, data, event_id, late}"""
+    async def on_timer(self, ctx, timer: dict) -> None: ...
+
+
+@runtime_checkable
 class EventHandler(Protocol):
     """an app that runs events: the platform's event router hands it the events that name its app_id (or the assistant mode)"""
     async def on_event(self, ctx, notice: dict, change: str) -> None: ...  # change: "new" | "updated" | "closed"
 
 
-CAPABILITIES = (OpProvider, OfferProvider, RoleAcceptor, EventApprover, RequestReceiver, ProfileContributor, Lifecycle, EventHandler)
+@runtime_checkable
+class EvaluationProvider(Protocol):
+    """an app that judges items handed over for evaluation (the evaluation element): [{content_hash, score, comment}]"""
+    async def evaluate(self, ctx, items: list, request: dict) -> list: ...
+
+
+CAPABILITIES = (OpProvider, OfferProvider, RoleAcceptor, EventApprover, RequestReceiver, ProfileContributor, Lifecycle, EventHandler,
+                EvaluationProvider, TimerHandler)
 
 # ---------------- which app runs an event, and how ----------------
 MODES = ("assistant", "app", "app_or_assistant")

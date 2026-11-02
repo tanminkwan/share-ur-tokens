@@ -96,6 +96,19 @@ class AppContext:
     async def call(self, url: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None) -> dict:
         return await self._peer.call(url, msg, timeout, group=group, event=event)
 
+    async def call_peer(self, pub: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None) -> dict:
+        """reach a peer by a connection method its profile lists (a2a, else api)"""
+        return await self._peer.call_peer(pub, msg, timeout, group=group, event=event)
+
+    async def submissions(self, event_id: str) -> list:
+        """what this peer's submission desk received for an event (the intake element)"""
+        from .elements.intake import IntakeDesk
+        desk = self._peer.app_by_id(IntakeDesk.app_id)
+        return desk.list(event_id) if desk else []
+
+    async def profile_of(self, pub: str) -> dict | None:
+        return await self._peer.profile_of(pub)
+
     async def solicit(self, targets: list[str], request: dict) -> dict:
         return await self._peer.solicit(targets, request)
 
@@ -118,6 +131,20 @@ class AppContext:
 
     async def add_experience(self, note: str) -> None:
         await self._peer.add_experience(note)
+
+    # ---- the peer's scheduler (P6-S): "이 시각에 이 일" ----
+    def schedule(self, at: float, kind: str, data: dict | None = None, event_id: str | None = None) -> str:
+        """wake this app (TimerHandler.on_timer) at `at`; kept across restarts. Returns the timer id"""
+        app = self._peer.app_by_name(self.app_name)
+        return self._peer.scheduler.add(self._peer.ctx(self._peer.scheduler), app.app_id, at, kind, data, event_id)
+
+    def cancel_timer(self, timer_id: str | None = None, event_id: str | None = None) -> int:
+        """cancel one timer, or every timer of this app for an event"""
+        app = self._peer.app_by_name(self.app_name)
+        return self._peer.scheduler.cancel(self._peer.ctx(self._peer.scheduler), timer_id, app_id=app.app_id, event_id=event_id)
+
+    def timers(self, event_id: str | None = None) -> list[dict]:
+        return self._peer.scheduler.of(self._peer.app_by_name(self.app_name).app_id, event_id)
 
 
 class PlatformContext(AppContext):

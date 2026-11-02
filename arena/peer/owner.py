@@ -3,7 +3,7 @@ The demo plugs in a persona (an LLM playing the person); a real UI will implemen
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 
 @dataclass(frozen=True)
@@ -25,3 +25,11 @@ class NoOwner:
 
     async def write(self, task, context, schema):
         raise PermissionError("autonomous peer: no owner to write")
+
+
+@runtime_checkable
+class Notifier(Protocol):
+    """an owner that can also be told things and asked to approve an action (dev/peer-spec.md 2.6, 2.8). Optional: the
+    assistant uses it when the owner has it"""
+    def notify(self, kind: str, title: str, body: str = "", event_id: str | None = None) -> None: ...
+    async def suggest(self, title: str, body: str, tool: str, args: dict, event_id: str | None = None) -> bool: ...

@@ -65,6 +65,7 @@ def make_app(settings):          # 팩토리: 설정을 받아 앱을 돌려준�
 | `ProfileContributor` | `profile_extra() -> dict` | 프로필을 게시할 때 덧붙일 항목 |
 | `Lifecycle` | `start(ctx)` | peer가 시작하거나 앱이 실행 중에 설치될 때 |
 | `EventHandler` | `on_event(ctx, notice, change)` | 이벤트 배정기가 이 앱을 지정한 이벤트를 넘길 때(`change`: `new`·`updated`·`closed`) |
+| `TimerHandler` | `on_timer(ctx, timer)` | peer의 예약 장치가 깨울 때: 앱이 `ctx.schedule`로 건 시각, 또는 이 앱이 맡은 이벤트의 공증된 일정 시각(`timer`: `{id, at, kind, data, event_id, late}`, 일정이면 `kind`가 `schedule`이고 `data`가 그 일정 항목) |
 
 ## 5. 문맥(Context): 앱이 쓸 수 있는 것
 
@@ -77,6 +78,7 @@ def make_app(settings):          # 팩토리: 설정을 받아 앱을 돌려준�
 | 통신 | `call(url, msg, group=, event=)`, `solicit(targets, request)`, `group_id(그룹 이름)` |
 | 프로필 | `offers()`, `advertise()`, `add_experience(note)` |
 | 앱 전용 저장 | `state.load()` / `state.save(dict)`(재시작 뒤에도 유지), `data_dir`(이 앱만 쓰는 폴더) |
+| 예약 | `schedule(at, kind, data=, event_id=)` → 예약 id, `cancel_timer(id 또는 event_id=)`, `timers(event_id=)`. 홈 폴더에 남아 재시작해도 이어지고, 꺼져 있던 동안 놓친 예약은 켜질 때 한 번 온다. "아직인가?"를 확인하려고 주기적으로 깨어나지 말고 예약을 건다(토큰과 시간을 아낀다) |
 
 **하면 안 되는 것**
 
@@ -120,6 +122,9 @@ def make_app(settings):          # 팩토리: 설정을 받아 앱을 돌려준�
 | `policy` | 역할·판정·공동 확인 규칙(원장이 집행) |
 | `mode` | 실행 방식: `assistant` / `app` / `app_or_assistant` |
 | `apps` | **앱 목록**: `[{id, name, version, hash?, required?}, ...]`. 앱을 쓰는 방식이면 비어 있으면 안 된다 |
+| `elements` | 켤 기본 요소와 설정(선택, 10-2절) |
+| `schedule` | **일정**(선택): `[{at, code, subject?, note?}, ...]`. `at`은 초 단위 시각, `code`는 미리 정한 시각 코드(`start` 시작, `session` 만나서 진행, `deadline` 마감, `end` 끝). 원장에 공증되어 모든 참가자가 같은 시각을 본다. 이벤트를 맡은 앱이 `TimerHandler`이면 배정기가 그 시각들에 앱을 깨우도록 예약해 준다 |
+| `codebook` | 따르는 코드표 판(선택, `dev/codebook.md`) |
 
 ```python
 from arena.sdk import announce_event, app_ref
@@ -133,6 +138,8 @@ await announce_event(ctx, group="public", title="...", kind="...", rules=자연�
 | `assistant` | 앱 없이 각 peer의 기본 비서가 자연어 규칙으로 처리한다(원초적 방식). 앱 목록은 비어도 된다 |
 | `app` | 목록의 **필수 앱이 모두** 설치되어 있어야 참여한다 |
 | `app_or_assistant` | 필수 앱이 모두 있으면 앱들이, 아니면 기본 비서가 처리한다 |
+
+**시각에 맞춰 하는 일과 시각이 지키는 일을 나눈다.** 마감처럼 지켜야 하는 시각은 원장이 기록 시각(`ts`)으로 막는다(예: 제출 받기 요소의 `deadline`). 그 시각에 무언가를 하는 일(만나서 경기 시작, 마감 직후 평가 시작)은 peer의 예약 장치가 앱이나 비서를 깨워서 한다. 원장의 시계와 peer의 시계는 다를 수 있으니, 마감 직후의 행동은 원장 기록으로 마감이 지났는지 확인한 뒤에 한다.
 
 받는 쪽은 플랫폼의 **이벤트 배정기**(내장 앱)가 **코드로만** 처리한다. LLM은 앱 식별자를 보지 않는다. 배정기는 공지의 규칙 해시·실행 방식·앱 목록이 원장과 같은지 확인하고, 목록의 앱을 `app_id`로 찾는다. 버전은 주 버전이 같고 지정 버전 이상이어야 하고, `hash`가 있으면 내 앱의 코드 해시(`app_fingerprint`)와 같아야 한다. 조건이 맞으면 목록에서 이벤트를 받는 앱(`EventHandler`) **모두에게** 넘긴다. 맞지 않으면 넘기지 않고 이유를 로그에 남긴다.
 
@@ -177,6 +184,25 @@ await peer.call(store_url, {"op": "app_publish", "package": pkg})
 - 꾸러미는 **모듈 원본 한 파일**과 배포자가 서명한 목록표다. 그 파일 안에서 앱을 만드는 함수(`factory(settings)`)를 내놓는다. 다른 파일에 기대는 앱은 아직 꾸러미로 나눌 수 없다.
 - 이벤트가 앱 목록에 이 앱을 지정했는데 peer에 없으면, 그 peer가 `ARENA_APP_STORE_URLS`에 적은 배포 peer에 묻는다. 코드로 원본 해시, 배포자 서명, 신뢰 배포자(`ARENA_APP_TRUSTED_PUBLISHERS`), 크기, id·버전을 확인하고, 소유자 승인을 받은 뒤 설치한다. 이벤트가 코드 해시를 지정했으면 불러온 앱의 `app_fingerprint`도 같아야 한다.
 - **주의**: 설치한 코드는 받는 peer의 프로세스 안에서 격리 없이 실행된다. 그래서 서명과 소유자 승인을 거친다.
+
+### 10-2. 플랫폼 기본 요소를 쓰는 앱 (6단계)
+
+이벤트가 선언으로 켤 수 있는 기본 요소가 있다(`dev/phase6/requirements.md`). 앱이 같은 일을 다시 짤 필요가 없다.
+
+| 요소 | 앱이 할 일 |
+|---|---|
+| `intake`(제출 받기) | 이벤트를 `elements={"intake": {...}}`로 선언한다. 제출은 받는 peer의 내장 `IntakeDesk`가 검사·기록·보관하고, `ctx.submissions(event_id)`로 목록을 본다 |
+| `evaluation`(평가) | 평가자 쪽 앱은 `EvaluationProvider` 능력(`async evaluate(ctx, items, request) -> [{content_hash, score, comment}]`)만 구현한다. 넘김 확인과 판정 서명은 플랫폼이 한다. 판정으로 무엇을 할지는 앱의 몫이다 |
+| `sealed`(봉인 묶음) | 배정한 주제의 라벨(`S`, `S-<번호>`)을 쓰면 공개 순서를 원장이 지킨다. 배정되지 않은 라벨은 공개할 수 없다 |
+
+### 10-3. API를 제공하는 peer (서비스 peer)
+
+코드를 남의 peer에 설치하지 않고 내 peer가 API로 내놓는 방법이다. 설명 파일(JSON) 하나로 띄운다: `python -m arena.peers.service --spec service.json`.
+
+- op마다 파이썬 함수(`async fn(input, ctx[, request]) -> dict`) 또는 기존 시스템의 HTTP 경로를 적는다.
+- 모든 답에 서비스가 서명한 영수증이 붙는다(`arena.sdk.verify_service_receipt`).
+- 이벤트의 역할을 맡을 수 있고(`roles`), `record: {kind}`로 표시한 op는 계산한 결과를 그 역할로 원장에 공동 확인으로 남긴다(예: 승패를 코드로 계산하는 판정 peer).
+- 연결 방식은 `ARENA_SERVICE_PEER_CONNECTIONS`로 `a2a`, `api`, 또는 둘 다. `api`만 열면 AI 에이전트 없는 API 전용 peer다. 연결 방식은 미리 정해진 것만 쓴다(`human`, `a2a`, `api`, `arena/connections.py`).
 
 ## 11. 어댑터: 앱 인터페이스를 모르는 것을 앱으로
 

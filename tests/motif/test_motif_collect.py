@@ -13,7 +13,7 @@ from arena.peer.track import meets, track_of
 from arena.signing import sign_message
 from tests.fakes import FakeOwner, HashEmbedder
 from tests.motif.doubles import OPEN, REVIEW, AcceptRole, Judge
-from tests.motif.flow import lid, apply, check_notice, open_event, review_and_adopt
+from tests.motif.flow import lid, submissions, apply, check_notice, open_event, review_and_adopt
 from tests.motif.test_motif_memory import SDS, MemoryWorld
 
 
@@ -86,11 +86,11 @@ async def test_p4e2_collection_mode_end_to_end(world):
     acks = await org.solicit(chosen, request)
     assert all(a == {"ok": True, "received": True} for a in acks.values()), acks
     for _ in range(50):
-        if len(w.inbox.items.get(o["event_id"], {})) == 2:
+        if len(submissions(w, o["event_id"])) == 2:
             break
         await asyncio.sleep(0.02)
-    subs = w.inbox.items[o["event_id"]]
-    assert len(subs) == 2 and all(v["content"]["title"].startswith("직접 요청에 응한 기획") for v in subs.values())
+    subs = submissions(w, o["event_id"])
+    assert len(subs) == 2 and all(v["content"].startswith("[직접 요청에 응한 기획") for v in subs.values())
     assert w.applicants[2].inbox == deque_empty() and w.outsider.inbox == deque_empty()
     # 4. review by the contracted (pre-checked) reviewer and adoption, as before
     res = await review_and_adopt(w, o, top=1)

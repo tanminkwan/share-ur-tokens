@@ -75,6 +75,17 @@ class RecorderService:
         e = next((x for x in self.ledger.chain if x["type"] == "chain_link" and x["payload"]["child_ledger_id"] == child_ledger_id), None)
         return {"ok": True, "link": e} if e else {"ok": False, "error": "no chain_link for this ledger"}
 
+    def codebooks(self) -> dict:
+        """public: the code table editions on this ledger, as whole entries (a branch copies the trunk's from here)"""
+        return {"ok": True, "codebooks": [e for e in self.ledger.chain if e["type"] == "codebook"]}
+
+    def codes(self) -> dict:
+        """public: the ledger codes this recorder implements and the built-in edition it ships with. An event that follows
+        an edition listing codes outside these is refused here"""
+        from ..codebook import NAME, VERSION
+        from ..ledger.codebook import implemented_codes
+        return {"ok": True, "implemented": implemented_codes(), "builtin": {"name": NAME, "version": VERSION}}
+
     def trust(self) -> dict:
         """public: what anyone needs to prove the current keys from the root of trust (P5-G5)"""
         chain = self.ledger.chain
@@ -98,7 +109,9 @@ class RecorderService:
             return {"ok": True, "exists": False, "type": None, "seal_ok": False, "event_id": None, "group_id": None}
         p = e["payload"]
         out = {"ok": True, "exists": True, "type": e["type"], "seal_ok": verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"]),
-               "event_id": p.get("event_id"), "group_id": p.get("group_id")}
+               "event_id": p.get("event_id"), "group_id": p.get("group_id"),
+               "seq": e["seq"], "ts": e["ts"], "ledger_id": self.ledger.chain[0]["hash"],
+               **({"purpose": p["purpose"]} if "purpose" in p else {})}  # a coded column: public like the type  # where and when: a book citing this entry proves it existed by then
         out.update(public_view(e, self.ledger.chain))  # each entry type decides what may be shown
         return out
 

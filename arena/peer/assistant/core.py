@@ -9,10 +9,13 @@ import os
 import re
 
 from ...crypto import h, pen_name, verify
-from ...llm import ask_json
+from ...llm import NoLLM, ask_json
 from ..event_store import EventStore, FolderEventStore
-from ..events import announce_event
+from ..elements import element_tools
+from ..events import announce_event, event_times, schedule_event_times
+from ..owner import Notifier
 from ..plugin import ASSISTANT_APP_ID, Decision, MessageHead
+from ..scheduler import fmt_time
 from .state import EventState, commit_hash, nonce
 from .tools import Tool, default_tools
 
@@ -28,7 +31,7 @@ class EventAssistant:
         self.events: dict[str, EventState] = {}
         self._stores: dict[str, EventStore] = {}
         self.tools: dict[str, Tool] = {}
-        for t in tools if tools is not None else default_tools():
+        for t in tools if tools is not None else default_tools() + element_tools():
             self.add_tool(t)
 
     def add_tool(self, tool: Tool) -> None:
@@ -118,6 +121,22 @@ class EventAssistant:
             return {k: self.expand(st, v) for k, v in obj.items()}
         return obj
 
+    async def offers_role(self, ctx, pub: str, role: str) -> bool:
+        """does this peer's posted profile offer the role (a service peer takes roles it advertises, without applying)?"""
+        try:
+            profiles = (await ctx.brokers[self.group].list_profiles(identity=ctx.identity)).get("profiles", [])
+        except Exception:
+            return False
+        return any(p["pub"] == pub and role in p.get("offers", []) for p in profiles)
+
+    async def offering_op(self, ctx, op: str) -> list[str]:
+        """public keys of the peers whose posted profile offers the service op (P6-A5)"""
+        try:
+            profiles = (await ctx.brokers[self.group].list_profiles(identity=ctx.identity)).get("profiles", [])
+        except Exception:
+            return []
+        return [p["pub"] for p in profiles if op in ((p.get("service") or {}).get("ops") or {})]
+
     async def resolve_peer(self, ctx, st, ref: str, need_url: bool = True) -> tuple[str | None, str | None]:
         """a peer named by handle, public key or address -> (public key, address); unknown handles are looked up on the broker"""
         ref = self.expand(st, str(ref))
@@ -138,6 +157,22 @@ class EventAssistant:
                 return p["pub"], st.peers[p["pub"]]
         return pub, None
 
+    # ---------------- evaluating items handed over (EvaluationProvider, the evaluation element's fallback judge) ----------------
+    EVALUATION_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["verdicts"], "properties": {"verdicts": {
+        "type": "array", "items": {"type": "object", "additionalProperties": False, "required": ["id", "score", "comment"],
+                                   "properties": {"id": {"type": "string"}, "score": {"type": "number"}, "comment": {"type": "string"}}}}}}
+
+    async def evaluate(self, ctx, items, request) -> list:
+        """judge items by the event's natural-language rules: a score (1-10) and one sentence each; ids are short refs"""
+        st = self.events.get(request.get("event_id"))
+        ids = {it["content_hash"][:self.s.assistant_ref_len]: it["content_hash"] for it in items}
+        listing = "\n".join(f"- {it['content_hash'][:self.s.assistant_ref_len]}: {it['content']}" for it in items)
+        d = await ask_json(ctx.llm, ctx.log, ctx.pen, fallback=lambda: {"verdicts": []}, schema=self.EVALUATION_SCHEMA, effort=self.s.assistant_effort,
+                           system=("당신은 이 이벤트의 평가자 비서입니다. 아래 이벤트 규칙에 따라 각 항목에 1~10점과 한 문장 의견을 주세요. "
+                                   "id는 목록의 값을 그대로 쓰세요.\n\n[이벤트 규칙]\n" + (st.rules if st else "")),
+                           messages=[{"role": "user", "content": listing}])
+        return [{"content_hash": ids[r["id"]], "score": r["score"], "comment": r["comment"]} for r in d.get("verdicts", []) if r.get("id") in ids]
+
     # ---------------- the event's progress, read from the ledger by code ----------------
     PEOPLE = ("author", "contractor", "issuer", "parties", "approvers")
 
@@ -148,6 +183,10 @@ class EventAssistant:
         except Exception:
             return []
         entries = r.get("entries", []) if r.get("ok") else []
+        if "sealed" in st.elements:
+            st.sealed_view = self._sealed_view(ctx, st, entries)
+        if st.role == "host":
+            await self._role_offers(ctx, st)
         for e in entries:
             if e["type"] == "assign":
                 st.assignments.update(e.get("subjects", {}))
@@ -161,6 +200,36 @@ class EventAssistant:
                     if isinstance(pub, str) and HEX64.fullmatch(pub) and pub not in st.roster:
                         st.roster.append(pub)
         return entries
+
+    async def _role_offers(self, ctx, st):
+        """host: the policy roles nobody holds yet, with the peers whose posted profile offers each (a service peer takes a
+        role it advertises without applying; live with-elements run 2: the host never found the referee to contract)"""
+        held = {c[0] for c in st.contracts}
+        open_roles = [r for r in st.policy.get("roles", []) if r not in held]
+        if not open_roles:
+            st.role_offers = {}
+            return
+        try:
+            profiles = (await ctx.brokers[self.group].list_profiles(identity=ctx.identity)).get("profiles", [])
+        except Exception:
+            return
+        st.role_offers = {r: [p["pub"] for p in profiles if r in p.get("offers", []) and p["pub"] != ctx.pub] for r in open_roles}
+
+    def _sealed_view(self, ctx, st, entries) -> list[str]:
+        """for each sealed label of a subject I am assigned to: how many registered, and whether it may open (P6-D3)"""
+        asg = {e2: v for e in entries if e["type"] == "assign" for e2, v in e.get("subjects", {}).items()}
+        out = []
+        for subject, parties in asg.items():
+            if ctx.pub not in parties:
+                continue
+            labels = sorted({e["label"] for e in entries if e["type"] == "publish" and e.get("label")
+                             and (e["label"] == subject or e["label"].rpartition("-")[0] == subject and e["label"].rpartition("-")[2].isdigit())})
+            for label in labels:
+                regs = {e["author"] for e in entries if e["type"] == "publish" and e.get("label") == label} & set(parties)
+                opened = {e["author"] for e in entries if e["type"] == "reveal" and e.get("label") == label}
+                state = f"공개 {len(opened)}/{len(parties)}" if opened else ("공개 가능" if len(regs) == len(parties) else "공개 기다림")
+                out.append(f"봉인 {label}: 등록 {len(regs)}/{len(parties)}, {state}")
+        return out
 
     async def progress_lines(self, ctx, st) -> list[str]:
         """one short line per entry, the latest ones only; handles and short refs instead of 64-hex"""
@@ -320,16 +389,22 @@ class EventAssistant:
         return n
 
     # ---------------- holding an event ----------------
-    async def host_event(self, ctx, *, title, kind, rules, policy, instruction, audience=None, recorder=None):
+    async def host_event(self, ctx, *, title, kind, rules, policy, instruction, audience=None, recorder=None, elements=None, codebook=None,
+                         schedule=None):
         """open an event run in the primordial way: natural-language rules, app = the basic assistant"""
         out = await announce_event(ctx, group=self.group, title=title, kind=kind, rules=rules, policy=policy,
-                                   mode="assistant", apps=[], audience=audience, recorder=recorder)
+                                   mode="assistant", apps=[], audience=audience, recorder=recorder, elements=elements, codebook=codebook,
+                                   schedule=schedule)
         ev, rec = out["event_id"], out["recorder"]
         st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url,
-                                          policy=dict(policy))
+                                          policy=dict(policy), elements=dict(elements or {}))
+        st.instruction = instruction
+        st.drive = self.initial_drive(ctx)
+        st.schedule = event_times(out["notice"])
+        schedule_event_times(ctx, out["notice"])  # the host wakes at its own event's times too
         self.save(ctx, st)
         ctx.log.emit("assistant", ctx.pen, f"이벤트 개최 {ev} '{title}' (규칙 해시 {out['rules_hash'][:10]}, 방식 assistant)")
-        await self.feed(ctx, ev, f"[소유자의 지시] {instruction}")
+        await self.feed(ctx, ev, f"[소유자의 지시] {instruction}", kind="owner")
         return ev
 
     # ---------------- events handed over by the platform's event router ----------------
@@ -340,16 +415,31 @@ class EventAssistant:
             st = self.events[ev] = EventState(ev, "participant", notice.get("title", ""), notice["rules"], h(notice["rules"].encode()),
                                               notice["group_id"], notice["recorder_url"], notice["recorder_pub"], notice["issuer_pub"],
                                               notice["issuer_url"], offer_roles=list(notice.get("policy", {}).get("roles", [])), policy=dict(notice.get("policy", {})),
+                                              elements=dict(notice.get("elements") or {}), schedule=event_times(notice), drive=self.initial_drive(ctx),
                                               notice_ver=notice.get("ver", 1))
             st.peers[notice["issuer_pub"]] = notice["issuer_url"]
             self.save(ctx, st)
-            await self.feed(ctx, ev, f"[새 공지] '{notice.get('title', '')}' (개최자 pub={notice['issuer_pub']}). 규칙과 실행 방식이 원장에 공증된 것과 같음을 확인했다.")
+            await self.feed(ctx, ev, f"[새 공지] '{notice.get('title', '')}' (개최자 pub={notice['issuer_pub']}). 규칙과 실행 방식이 원장에 공증된 것과 같음을 확인했다.", kind="notice")
         elif st is not None and change == "updated":
             st.notice_ver = notice.get("ver", st.notice_ver)
-            await self.feed(ctx, ev, f"[공지 수정] 버전 {st.notice_ver}: {notice.get('text', '')}")
+            await self.feed(ctx, ev, f"[공지 수정] 버전 {st.notice_ver}: {notice.get('text', '')}", kind="notice")
         elif st is not None and change == "closed" and not st.notice_closed:
             st.notice_closed = True
-            await self.feed(ctx, ev, "[공지 마감] 개최자가 이 이벤트의 공지를 마감했다.")
+            await self.feed(ctx, ev, "[공지 마감] 개최자가 이 이벤트의 공지를 마감했다.", kind="notice")
+
+    async def on_timer(self, ctx, timer):
+        """the scheduler woke me at a time (P6-S3): the event's notarized schedule, or a reminder I set myself"""
+        st = self.events.get(timer.get("event_id"))
+        if st is None or st.closed:
+            return
+        d, when = timer.get("data", {}), fmt_time(timer["at"])
+        if timer["kind"] == "remind":
+            text = f"[내 예약] {when}: {d.get('note', '')} (내가 remind로 걸어 둔 시각이 되었다)"
+        else:
+            what = " ".join(x for x in (d.get("code", ""), d.get("subject", "")) if x)
+            text = (f"[일정 시각] {when} {what}{': ' + d['note'] if d.get('note') else ''}. 원장에 공증된 이 이벤트의 일정 시각이 되었다(코드가 깨움). "
+                    "규칙에 따라 지금 할 일을 하라")
+        await self.feed(ctx, st.event_id, text, kind="timer")
 
     MINE = ("author", "issuer")
 
@@ -367,7 +457,7 @@ class EventAssistant:
             self.save(ctx, st)
             if new and not first:
                 lines = [self.progress_line(ctx, st, e) for e in new]
-                await self.feed(ctx, st.event_id, f"[원장 새 기록] 이 이벤트의 원장에 다른 사람의 기록이 올랐다(코드가 읽음). {self.SETTLED_NOTE}\n" + "\n".join(lines))
+                await self.feed(ctx, st.event_id, f"[원장 새 기록] 이 이벤트의 원장에 다른 사람의 기록이 올랐다(코드가 읽음). {self.SETTLED_NOTE}\n" + "\n".join(lines), kind="ledger")
 
     WAKE_HOST = ("attest",)  # results are what a host collects; its own moves come by message or tool result
 
@@ -416,8 +506,26 @@ class EventAssistant:
                 st.roster.append(p["pub"])
                 st.peers.setdefault(p["pub"], p.get("url"))
 
-    async def feed(self, ctx, event_id: str, text: str, idle: bool = False):
+    NOTIFY_IN_AUTO = ("notice", "timer")  # the owner hears of these even while the LLM drives
+
+    def _notifier(self, ctx):
+        return ctx.owner if isinstance(ctx.owner, Notifier) else None
+
+    async def feed(self, ctx, event_id: str, text: str, idle: bool = False, kind: str = "message"):
+        """a new input for an event. Who handles it depends on the event's drive (P6-P4): in manual the owner gets it on the
+        desk and no LLM runs; otherwise the LLM takes a turn (and the owner still hears of notices and scheduled times)"""
         st = self.events[event_id]
+        note = self._notifier(ctx)
+        if st.drive == "manual":
+            if idle:
+                return  # nobody to wake: the owner sees the event on the desk
+            st.transcript.append(self.shorten(ctx, st, f"[입력] {text}"))
+            self.save(ctx, st)
+            if note and kind != "owner":
+                note.notify(kind, self.shorten(ctx, st, text.split("\n", 1)[0])[:120], self.shorten(ctx, st, text), event_id)
+            return
+        if note and kind in self.NOTIFY_IN_AUTO:
+            note.notify(kind, self.shorten(ctx, st, text.split("\n", 1)[0])[:120], self.shorten(ctx, st, text), event_id)
         await self.learn_keys(ctx, st, text)
         st.inbox.append(text)
         st.last_input_at = ctx.clock()
@@ -432,28 +540,43 @@ class EventAssistant:
 
     def _tools_for(self, st) -> list[str]:
         return [n for n, t in self.tools.items() if (st.role == "host" or not t.host_only) and (st.role != "host" or not t.participant_only)
-                and (not st.closed or t.after_close)]
+                and (not st.closed or t.after_close) and (t.element is None or t.element in st.elements)]
 
-    def _system(self, ctx, st) -> str:
+    def state_line(self, ctx, st) -> str:
+        """the code-made line on where this event stands (shown to the LLM, and to the owner on the desk)"""
         h = lambda pub: self.handle(ctx, st, pub)
-        tools = "\n".join(f"- {n} {self.tools[n].description}" for n in self._tools_for(st))
         revealed = [k for k, v in st.secrets.items() if v.get("reveal_hash")]
         sent = [f"{k}→{'·'.join(h(p) for p in v)}" for k, v in st.sent_reveals.items()]
         mine = [k for k, v in st.assignments.items() if ctx.pub in v]
         assigned = (f"배정(원장): {'; '.join(f'{k}=' + '·'.join(h(p) for p in v) for k, v in st.assignments.items())} / "
                     f"내 배정: {', '.join(mine) or '없음'} / ") if st.assignments else ""
-        state = assigned + (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 원장에 공개한 내 라벨: {', '.join(revealed) or '없음'} / "
+        sealed = (" / ".join(st.sealed_view) + " / ") if st.sealed_view else ""
+        now = f"지금 시각: {fmt_time(ctx.clock())} / "
+        plan = ("일정(원장): " + "; ".join(f"{fmt_time(x['at'])} {x['code']}{' ' + x['subject'] if x.get('subject') else ''}" for x in st.schedule) + " / "
+                if st.schedule else "")
+        mine_t = [t for t in ctx.timers(st.event_id) if t["kind"] == "remind"]
+        reminders = ("내 예약: " + "; ".join(f"{fmt_time(t['at'])} {t['data'].get('note', '')}" for t in mine_t) + " / ") if mine_t else ""
+        state = now + plan + reminders + assigned + sealed + (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 원장에 공개한 내 라벨: {', '.join(revealed) or '없음'} / "
                  f"내가 보낸 공개값: {', '.join(sent) or '없음'} / 내가 받은 서명 요청: {', '.join(st.pending) or '없음'} / "
                  f"내가 제안한 공동 확인: {', '.join(st.proposals) or '없음'} / 참가 신청: {'함' if st.joined else '안 함'} / 닫힘: {st.closed} / "
                  f"아는 peer: {', '.join(h(p) for p in st.peers) or '없음'} / "
                  f"이 이벤트에서 맺은 역할 계약 {len(st.contracts)}건: {', '.join(f'{c[0]}={h(c[1])}' for c in st.contracts) or '없음'}"
                  + ((f" / 참가 신청자(코드 확인) {len(st.applicants)}명: {', '.join(h(p) for p in st.applicants) or '없음'}"
                      f" / 아직 계약하지 않은 신청자: {', '.join(h(p) for p in st.applicants if p not in {c[1] for c in st.contracts}) or '없음'}"
-                     " / 나는 개최자다(참가 신청은 참가자가 하는 일이고, 개최자는 신청자와 계약한다)") if st.role == "host" else ""))
+                     + (" / 아직 계약 없는 역할: " + "; ".join(f"{r}(프로필에 내건 peer: {', '.join(h(p) for p in v) or '없음'})"
+                                                         for r, v in st.role_offers.items()) if st.role_offers else "")
+                     + " / 나는 개최자다(참가 신청은 참가자가 하는 일이고, 개최자는 신청자와 계약한다)") if st.role == "host" else ""))
+        return state
+
+    def _system(self, ctx, st) -> str:
+        h = lambda pub: self.handle(ctx, st, pub)
+        tools = "\n".join(f"- {n} {self.tools[n].description}" for n in self._tools_for(st))
+        state = self.state_line(ctx, st)
         return (f"당신은 peer '{ctx.pen}'의 비서 에이전트입니다. 이벤트 '{st.title}'(event_id {st.event_id}, broker 그룹 {st.group_id})에 "
                 f"{'개최자' if st.role == 'host' else '참가자'}로 참여합니다. 아래 이벤트 규칙을 정확히 따르세요. 규칙에 없는 일은 하지 말고, "
                 "확실하지 않으면 note로 적은 뒤 wait 하세요. 소유자(사람)에게 묻는 말은 한국어로 씁니다. "
                 "peer는 필명(필명-xxxxxx)으로, 해시는 #로 시작하는 짧은 참조로 부르며, 도구에도 그대로 넣으면 됩니다.\n\n[이벤트 규칙]\n" + st.rules
+                + (f"\n\n[소유자의 지시] {self.shorten(ctx, st, st.instruction)}" if st.instruction else "")
                 + (f"\n[등록 값] 이 이벤트에서 등록(commit)하는 값은 다음 중 하나다: {', '.join(st.policy['reveal_values'])}" if st.policy.get("reveal_values") else "") +
                 f"\n\n[나] {h(ctx.pub)}\n[개최자] {h(st.issuer_pub)}\n[지금 상태] {state}\n\n[쓸 수 있는 도구]\n{tools}\n\n"
                 "먼저 도구 하나를 고르면, 그 도구의 인자를 따로 묻습니다. 이번 입력에 대해 규칙이 정한 일을 다 했으면 wait를 고르세요.")
@@ -485,16 +608,72 @@ class EventAssistant:
             if isinstance(inner, dict) and set(args) <= {"tool", "name", "arguments", "args"}:  # {"tool": .., "arguments": {..}} -> {..}
                 args = inner
             key = [name, json.dumps(args, ensure_ascii=False, sort_keys=True)]
-            if key == st.last_action:  # the same call twice in a row: do not run it again
+            if st.drive == "suggest" and name not in self.READ_ONLY and not await self._approved(ctx, st, name, args, d.get("thought", "")):
+                st.transcript.append(self.shorten(ctx, st, f"[소유자 거절] {name} {json.dumps(args, ensure_ascii=False)[:300]}: 소유자가 이 행동을 승인하지 않았다"))
+                ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] {name} 제안 → 소유자 거절")
+                self.save(ctx, st)
+                break
+            if key == st.last_action:  # the same successful call twice in a row: do not run it again
                 result = {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
             else:
                 result = await self._run_tool(ctx, st, name, dict(args))
-                st.last_action = key
+                # a call that failed may be retried as it is once things changed (comparison run with-2: a reveal refused
+                # before the assignment could never be retried, and the round stalled)
+                failed = isinstance(result, dict) and (result.get("ok") is False or bool(result.get("error")))
+                st.last_action = [] if failed else key
             st.transcript.append(self.shorten(ctx, st, f"[행동] {name} {json.dumps(args, ensure_ascii=False)[:400]}"))
             st.transcript.append(self.shorten(ctx, st, f"{name} 결과: {json.dumps(result, ensure_ascii=False)[:1500]}"))
             ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] {name} → {json.dumps(result, ensure_ascii=False)[:120]}")
             self.save(ctx, st)
         self.save(ctx, st)
+
+    # ---------------- drives (P6-P4) ----------------
+    READ_ONLY = ("note", "event_progress", "verify", "my_reveal", "check_reveal", "contact", "submissions", "verdicts", "ask_owner")
+    DRIVES = ("auto", "suggest", "manual")
+
+    def initial_drive(self, ctx) -> str:
+        if isinstance(ctx.llm, NoLLM):
+            return "manual"  # no LLM: the owner drives
+        return self.s.peer_default_drive if self.s.peer_default_drive in self.DRIVES else "auto"
+
+    def set_drive(self, ctx, event_id: str, drive: str) -> dict:
+        st = self.events.get(event_id)
+        if st is None:
+            return {"ok": False, "error": "모르는 이벤트"}
+        if drive not in self.DRIVES:
+            return {"ok": False, "error": f"운전석은 {', '.join(self.DRIVES)} 가운데 하나"}
+        if drive != "manual" and isinstance(ctx.llm, NoLLM):
+            return {"ok": False, "error": "LLM이 없는 peer는 수동(manual)만 된다"}
+        st.drive = drive
+        self.save(ctx, st)
+        return {"ok": True, "drive": drive}
+
+    async def _approved(self, ctx, st, name, args, thought) -> bool:
+        note = self._notifier(ctx)
+        if note is None:
+            return True  # nobody to ask: suggest falls back to auto
+        return await note.suggest(f"비서가 '{name}'을(를) 하려 합니다", self.shorten(ctx, st, f"{thought}\n인자: {json.dumps(args, ensure_ascii=False)}"),
+                                  name, args, st.event_id)
+
+    def tools_view(self, st) -> list[dict]:
+        """the tools the owner may run on this event, with their argument schemas (the screen draws forms from them)"""
+        return [{"name": n, "description": self.tools[n].description, "args": self.tools[n].args or {"type": "object", "properties": {}}}
+                for n in self._tools_for(st) if n != "wait"]
+
+    async def owner_run(self, ctx, event_id: str, name: str, args: dict) -> dict:
+        """the owner runs a tool by hand (any drive): the same code path as the LLM's, so the same checks hold"""
+        st = self.events.get(event_id)
+        if st is None:
+            return {"ok": False, "error": "모르는 이벤트"}
+        if name not in self._tools_for(st) or name == "wait":
+            return {"ok": False, "error": f"이 이벤트에서 쓸 수 없는 도구: {name}"}
+        args = {k: self.expand(st, v) if isinstance(v, str) else v for k, v in (args or {}).items()}
+        result = await self._run_tool(ctx, st, name, dict(args))
+        st.transcript.append(self.shorten(ctx, st, f"[소유자 행동] {name} {json.dumps(args, ensure_ascii=False)[:400]}"))
+        st.transcript.append(self.shorten(ctx, st, f"{name} 결과: {json.dumps(result, ensure_ascii=False)[:1500]}"))
+        ctx.log.emit("assistant", ctx.pen, f"[{event_id}] 소유자가 {name} → {json.dumps(result, ensure_ascii=False)[:120]}")
+        self.save(ctx, st)
+        return result
 
     async def _run_tool(self, ctx, st, name, args):
         tool = self.tools.get(name)
@@ -509,7 +688,7 @@ class EventAssistant:
             return {"error": f"인자가 맞지 않음: {', '.join(missing)} 없음"}
         if tool.participant_only and st.role == "host":
             return {"error": "참가자만 쓰는 도구"}
-        for k in ("data_json", "value_json", "subjects_json"):
+        for k in ("data_json", "value_json", "subjects_json", "input_json"):
             if k in args:
                 try:
                     args[k[:-5]] = json.loads(args.pop(k) or "{}")

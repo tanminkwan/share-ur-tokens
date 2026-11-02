@@ -23,9 +23,10 @@ class ProfileBuilder:
                            system=SUMMARY_SYSTEM, schema=SUMMARY_SCHEMA, user="[공개 영역]\n" + "\n".join(f"- {x}" for x in lines))
         self.version += 1
         caps = await CapabilityLabeler(peer.settings).compute(peer) if peer.settings.label_auto else []
-        profile = {"url": peer.config.url, "summary": d["summary"], "offers": peer.offers(),
+        profile = {"url": peer.config.url, "connections": peer.connections(), "operator": peer.operator(), "summary": d["summary"], "offers": peer.offers(),
                    "labels": list(peer.config.labels) + [c["label"] for c in caps], "capabilities": caps,
-                   "until": peer.clock() + peer.settings.profile_ttl_sec, "ver": self.version}
+                   "until": peer.clock() + peer.settings.profile_ttl_sec, "ver": self.version,
+                   **({"codebook": dict(peer.config.codebook)} if peer.config.codebook else {})}
         for app in peer.apps:
             if isinstance(app, ProfileContributor):
                 profile.update(app.profile_extra())

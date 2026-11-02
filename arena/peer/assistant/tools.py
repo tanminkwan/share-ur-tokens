@@ -26,6 +26,7 @@ class Tool:
     host_only: bool = False
     participant_only: bool = False
     after_close: bool = False               # still usable once the event is closed
+    element: str | None = None              # a built-in element's tool: offered only where the event switched it on
 
 
 # ---------------- implementations ----------------
@@ -44,7 +45,8 @@ async def _record(A, ctx, st, kind, payload):
 
 
 async def ask_owner(A, ctx, st, question):
-    a = await ctx.owner.ask(question, st.rules)
+    from ..owner import Notifier
+    a = await (ctx.owner.ask(question, st.rules, event_id=st.event_id) if isinstance(ctx.owner, Notifier) else ctx.owner.ask(question, st.rules))
     ctx.log.emit("decide", ctx.pen, f"소유자에게 물음 '{question[:40]}' → {'예' if a.yes else '아니오'}: {a.why}")
     return {"yes": a.yes, "why": a.why}
 
@@ -63,8 +65,9 @@ async def contract(A, ctx, st, role, peer):
     peer_pub, peer_url = await A.resolve_peer(ctx, st, peer)
     if not peer_pub or not peer_url:
         return {"ok": False, "error": f"{peer}를 찾지 못했다(필명이나 공개키를 확인)"}
-    if peer_pub not in st.applicants:  # enforced by code: only peers whose signed join carried this event's rules hash
-        return {"ok": False, "error": f"참가 신청한 peer만 계약할 수 있다(신청자: {len(st.applicants)}명)"}
+    if peer_pub not in st.applicants and not await A.offers_role(ctx, peer_pub, role):
+        # enforced by code: peers whose signed join carried this event's rules hash, or peers whose profile offers the role
+        return {"ok": False, "error": f"참가 신청한 peer나 그 역할을 프로필에 내건 peer만 계약할 수 있다(신청자: {len(st.applicants)}명)"}
     c = {"event_id": st.event_id, "role": role, "issuer": ctx.pub, "contractor": peer_pub, "nonce": nonce(peer_pub, role),
          "group_id": st.group_id, "rules_hash": st.rules_hash, **(await ledger_tag(ctx, st))}
     eng = await ctx.call(peer_url, {"op": "engage", "role": role, "contract": c, "request": {"event_id": st.event_id, "rules_hash": st.rules_hash}},
@@ -76,6 +79,39 @@ async def contract(A, ctx, st, role, peer):
         st.peers[peer_pub] = peer_url
         st.contracts.append([role, peer_pub])
     return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error"), "contracts_so_far": len(st.contracts)}
+
+
+async def call_service(A, ctx, st, peer, op, input=None, subject=None):
+    """call an API-providing peer; the code checks the signed receipt and keeps it (P6-A5). With a subject, the service
+    may record its result on this event's ledger (an op marked record, e.g. a judging peer)"""
+    from ...sdk.service import verify_service_receipt
+    pub, _ = await A.resolve_peer(ctx, st, peer, need_url=False)
+    if not pub:
+        return {"ok": False, "error": f"{peer}를 찾지 못했다"}
+    req = {"op": op, "input": input if isinstance(input, dict) else {},
+           **({"event_id": st.event_id, "subject": subject, "recorder_url": st.recorder_url, "group_id": st.group_id} if subject else {})}
+    r = await ctx.call_peer(pub, req, group=st.group_id, event=st.event_id)  # a2a or api, by the peer's profile
+    if not r.get("ok"):
+        err = str(r.get("error"))
+        if err.startswith("unknown op"):
+            offering = [A.handle(ctx, st, q) for q in await A.offering_op(ctx, op) if q != pub]
+            err += f" / op {op}를 프로필에 내건 peer: {', '.join(offering) or '찾지 못함'}"
+        return {"ok": False, "error": err}
+    bad = verify_service_receipt(r, req, pub)
+    if bad:
+        return {"ok": False, "error": f"서비스 영수증이 맞지 않는다(코드 확인): {bad}"}
+    st.service_receipts.append({"peer": pub, "op": op, "receipt": r["receipt"], "receipt_sig": r["receipt_sig"]})
+    return {"ok": True, "result": r["result"], **({"record": r["record"]} if r.get("record") else {})}
+
+
+async def contact(A, ctx, st, peer):
+    """the human connection of a peer, for the owner to use themselves: never sent automatically (P6-A8)"""
+    pub, _ = await A.resolve_peer(ctx, st, peer, need_url=False)
+    prof = await ctx.profile_of(pub) if pub else None
+    humans = [c["contact"] for c in (prof or {}).get("connections", []) if c.get("kind") == "human"]
+    if not humans:
+        return {"ok": False, "error": f"{peer}는 사람 연락처를 공개하지 않았다"}
+    return {"ok": True, "contact": humans, "note": "사람끼리 연결: 플랫폼은 대신 보내지 않는다. 소유자에게 알려 직접 연락하게 하라"}
 
 
 async def send(A, ctx, st, to, text, data=None, attach_reveals=()):
@@ -262,12 +298,29 @@ async def close_event(A, ctx, st, result_hash):
     r = await _record(A, ctx, st, "close", c)
     if r.get("ok"):
         st.closed = True
+        ctx.cancel_timer(event_id=st.event_id)  # a closed event wakes no one
         await ctx.brokers[A.group].close_notice(ctx.identity, st.event_id)
     return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error")}
 
 
 async def note(A, ctx, st, text):
     return {"ok": True}
+
+
+async def remind(A, ctx, st, when, note):
+    """wake me at a time with a note (P6-S4); the peer's scheduler keeps it, no LLM runs until then"""
+    from ..scheduler import fmt_time, parse_when
+    try:
+        at = parse_when(when, ctx.clock())
+    except (ValueError, TypeError):
+        return {"ok": False, "error": "when은 '+초'(지금부터 몇 초 뒤) 또는 ISO 8601 시각(예: 2026-11-02T18:00:00+09:00)이어야 한다"}
+    if at <= ctx.clock():
+        return {"ok": False, "error": f"이미 지난 시각이다(지금 {fmt_time(ctx.clock())})"}
+    mine = [t for t in ctx.timers(st.event_id) if t["kind"] == "remind"]
+    if len(mine) >= ctx.settings.assistant_max_reminders:
+        return {"ok": False, "error": f"이 이벤트에 걸 수 있는 예약은 {ctx.settings.assistant_max_reminders}개까지다"}
+    tid = ctx.schedule(at, "remind", {"note": note}, event_id=st.event_id)
+    return {"ok": True, "id": tid, "at": fmt_time(at), "note": "그 시각에 코드가 깨운다. 그때까지 확인하러 깨어날 필요가 없다"}
 
 
 async def wait(A, ctx, st):
@@ -284,6 +337,10 @@ def default_tools() -> list[Tool]:
              "내 공개값을 보낼 때는 손으로 옮기지 말고 attach_reveals에 라벨을 넣는다. 코드가 공개값 묶음을 data.reveals에 그대로 붙인다",
              dict(_obj(to=S, text=S, data_json=S), properties={"to": S, "text": S, "data_json": S, "attach_reveals": {"type": "array", "items": S}}),
              send),
+        Tool("call_service", "{peer, op, input_json, subject?}: API를 제공하는 peer(필명)의 op를 부른다(input_json은 JSON 객체 문자열). "
+             "subject를 주면 그 peer가 결과를 이 이벤트의 원장에 그 주제로 기록할 수 있다(record). 서명 영수증은 코드가 확인하고 보관한다",
+             dict(_obj(peer=S, op=S, input_json=S), properties={"peer": S, "op": S, "input_json": S, "subject": S}), call_service),
+        Tool("contact", "{peer}: 상대 peer(필명)의 사람 연락처(human 연결)를 찾아 알려 준다. 자동으로 보내지 않는다", _obj(peer=S), contact),
         Tool("solicit", "{targets: [필명...], text, data_json}: 고른 peer들에게 직접 요청을 한 번에 보낸다(data_json은 JSON 객체 문자열)",
              _obj(targets={"type": "array", "items": S}, text=S, data_json=S), solicit),
         Tool("publish_text", "{text}: 글을 원장에 먼저 등록한다. 결과 content_hash, publish_hash", _obj(text=S), publish_text),
@@ -308,5 +365,6 @@ def default_tools() -> list[Tool]:
              "배정된 종류의 공동 확인은 원장이 배정된 당사자에게서만 받는다", _obj(subjects_json=S), assign, host_only=True),
         Tool("close_event", "{result_hash}: 이 이벤트를 원장에서 닫고 공지를 마감한다", _obj(result_hash=S), close_event, host_only=True),
         Tool("note", "{text}: 나중을 위해 메모를 남긴다", _obj(text=S), note, after_close=True),
+        Tool("remind", "{when, note}: 그 시각에 나를 깨운다(when: '+초' 또는 ISO 8601 시각). 시각이 정해진 일을 기다릴 때 쓴다", _obj(when=S, note=S), remind),
         Tool("wait", "{}: 이번 입력에 대해 할 일을 다 했다. 다음 입력을 기다린다", None, wait, after_close=True),
     ]

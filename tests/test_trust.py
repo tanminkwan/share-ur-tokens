@@ -220,3 +220,114 @@ async def test_p5g9_a_peer_anchored_at_the_original_trusts_a_linked_community_re
     assert not (await peer.recorder_trust("mem://stranger"))["ok"]  # linked, but not into this peer's original chain
     root = await peer.recorder_trust("mem://root")
     assert root["ok"] and root["ledger_id"] == net.ledger_id
+
+
+async def test_p5g10_only_the_trunk_takes_branch_links(net, settings):
+    """user 2026-11-02: branches grow only from the trunk (the root chain). A community chain cannot start a branch of its
+    own: its ledger refuses chain_link, and a peer anchored at the trunk does not follow a branch of a branch. A community
+    divides itself with broker groups inside its chain instead."""
+    child = await Child(settings, net).boot()
+    grandchild = await Child(settings, child, parent_url="mem://child").boot()
+    assert not grandchild.link["ok"] and "trunk" in grandchild.link["error"]
+    # even a link entry written by hand into a branch chain is refused by its ledger
+    g = Identity.generate()
+    p = {"child_ledger_id": "1" * 64, "child_god": g.pub, "child_recorder": g.pub, "name": "x", "group_id": "public",
+         "ledger_id": child.ledger_id, "nonce": "n"}
+    assert "trunk" in (await child.svc.record("chain_link", p, {g.pub: g.sign(p)}))["error"]
+
+
+async def test_p5g11_every_entry_carries_the_recorder_time_and_the_audit_checks_its_order(net):
+    """user 2026-11-02: the ledger always stamps the time. The recorder sets ts on every entry, inside the hash and the
+    seal; the ledger refuses a time earlier than the last entry, and the audit of any copy now checks the order too."""
+    import copy
+    from arena.crypto import canon, h
+    from arena.ledger import BODY
+    who = Identity.generate()
+    assert (await net.publish(who, "a"))["ok"] and (await net.publish(who, "b"))["ok"]
+    chain = net.svc.ledger.chain
+    assert all(isinstance(e["ts"], float) for e in chain) and audit_chain(chain) == "ok"
+    forged = copy.deepcopy(chain)  # a recorder that put a later entry before an earlier one in time, sealing it again
+    forged[-1]["ts"] = forged[-2]["ts"] - 60
+    forged[-1]["hash"] = h(canon({k: forged[-1][k] for k in BODY}))
+    forged[-1]["seal"] = {"pub": net.rec.pub, "sig": net.rec.sign(forged[-1]["hash"])}
+    assert "time" in audit_chain(forged)
+
+
+async def test_codebook_a_branch_chain_may_add_its_own_purpose_codes(net, settings):
+    """user 2026-11-02: "가지 체인 자체 코드는 허용하자". A branch community declares x-<community>.<code> purposes in an
+    edition on its own chain; the trunk's codes come only with the platform's table, and meanings never change."""
+    from arena.codebook import builtin_document, document_hash
+    child = await Child(settings, net).boot()
+    pub = Identity.generate()
+
+    async def edition(svc, ledger_id, version, local):
+        d = builtin_document(name="acme", version=version)
+        p = {"publisher": pub.pub, "name": "acme", "version": version, "content_hash": document_hash(d), "codes": d["codes"],
+             "local": local, "group_id": "public", "ledger_id": ledger_id}
+        return await svc.record("codebook", p, {pub.pub: pub.sign(p)})
+    minutes = {"purposes": {"x-acme.minutes": {"types": ["publish"], "description": "회의록 원문의 시점 증명"}}}
+    assert "branch chain" in (await edition(net.svc, net.ledger_id, "1.0", minutes))["error"]  # not on the trunk
+    assert "x-<community>" in (await edition(child.svc, child.ledger_id, "1.0", {"purposes": {"minutes": minutes["purposes"]["x-acme.minutes"]}}))["error"]
+    assert (await edition(child.svc, child.ledger_id, "1.0", minutes))["ok"]
+    assert "already defined" in (await edition(child.svc, child.ledger_id, "1.1", minutes))["error"]  # meanings never change
+    who = Identity.generate()
+
+    async def publish(svc, ledger_id, text, purpose):
+        p = {"author": who.pub, "content_hash": text * 8, "group_id": "public", "ledger_id": ledger_id, "purpose": purpose}
+        return await svc.record("publish", p, {who.pub: who.sign(p)})
+    assert (await publish(child.svc, child.ledger_id, "a", "x-acme.minutes"))["ok"]
+    assert "not declared" in (await publish(child.svc, child.ledger_id, "b", "x-acme.poems"))["error"]
+    assert "not declared" in (await publish(net.svc, net.ledger_id, "c", "x-acme.minutes"))["error"]  # local to its chain
+
+
+async def test_codebook_a_branch_follows_a_trunk_edition_by_copying_it(net, settings):
+    """user 2026-11-02: "뿌리 체인의 판도 따를 수 있게 하자". A branch copies the trunk's edition entry as it is; its ledger
+    checks the copy (hash, publisher's signature, seal, the trunk named in its genesis) without the network, and an event
+    on the branch names the trunk edition the same way as on the trunk."""
+    import copy
+    from arena.codebook import builtin_document, document_hash
+    from arena.ledger.codebook import check_event_codebook
+    child = await Child(settings, net).boot()
+    pub = Identity.generate()
+    d = builtin_document()
+    p = {"publisher": pub.pub, "name": d["name"], "version": "1.0", "content_hash": document_hash(d), "codes": d["codes"],
+         "group_id": "public", "ledger_id": net.ledger_id}
+    trunk_ed = await net.svc.record("codebook", p, {pub.pub: pub.sign(p)})
+    whole = next(e for e in net.svc.codebooks()["codebooks"] if e["hash"] == trunk_ed["hash"])
+    copier = Identity.generate()
+
+    async def copy_into(svc, ledger_id, entry):
+        q = {"copier": copier.pub, "copied": {k: entry[k] for k in ("type", "payload", "sigs", "prev", "ts", "hash", "seal")},
+             "group_id": "public", "ledger_id": ledger_id}
+        return await svc.record("codebook", q, {copier.pub: copier.sign(q)})
+    forged = copy.deepcopy(whole)
+    forged["payload"]["version"] = "9.9"
+    assert "hash" in (await copy_into(child.svc, child.ledger_id, forged))["error"]
+    assert "branch chain" in (await copy_into(net.svc, net.ledger_id, whole))["error"]  # the trunk copies nothing
+    got = await copy_into(child.svc, child.ledger_id, whole)
+    assert got["ok"] and child.svc.verify(got["hash"])["copied_from"] == {"ledger_id": net.ledger_id, "entry": whole["hash"]}
+    assert "already copied" in (await copy_into(child.svc, child.ledger_id, whole))["error"]
+    ref = {"entry": whole["hash"], "publisher": pub.pub, "version": "1.0"}
+    assert check_event_codebook(child.svc.ledger.chain, {"codebook": ref}) is None  # the branch follows the trunk edition
+    stranger = await Child(settings, await Net(settings).boot()).boot()  # a branch of another trunk
+    assert "not of the trunk" in (await copy_into(stranger.svc, stranger.ledger_id, whole))["error"]
+
+
+async def test_codebook_any_branch_peer_copies_a_trunk_edition_with_the_helper(tmp_path, settings, net):
+    from arena.codebook import builtin_document, document_hash
+    from arena.peer.foundation_role import FoundationRole
+    from tests.test_event_apps import World
+    child = await Child(settings, net).boot()
+    pub = Identity.generate()
+    d = builtin_document()
+    p = {"publisher": pub.pub, "name": d["name"], "version": "1.0", "content_hash": document_hash(d), "codes": d["codes"],
+         "group_id": "public", "ledger_id": net.ledger_id}
+    ed = await net.svc.record("codebook", p, {pub.pub: pub.sign(p)})
+    from arena.ledger.codebook import editions
+    w = World(tmp_path, settings)
+    role = FoundationRole(settings, documents=[])
+    peer = w.peer("p", [role])
+    clients = {"mem://root": InMemoryRecorderClient(net.svc), "mem://child": InMemoryRecorderClient(child.svc)}
+    peer.recorder_factory = lambda url: clients[url]
+    r = await FoundationRole.copy_edition(peer.ctx(role), "mem://root", ed["hash"], "mem://child")
+    assert r["ok"] and ed["hash"] in editions(child.svc.ledger.chain)

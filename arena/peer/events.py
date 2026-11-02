@@ -7,15 +7,34 @@ import os
 import time
 
 from ..crypto import canon, h
-from .plugin import ASSISTANT_APP_ID, BaseApp, EventHandler, app_fingerprint, valid_run, version_ok
+from .plugin import ASSISTANT_APP_ID, BaseApp, EventHandler, TimerHandler, app_fingerprint, valid_run, version_ok
 
 
 def _nonce(*parts) -> str:
     return h(canon([*parts, time.time(), os.urandom(8).hex()]))[:10]
 
 
+def event_times(n: dict) -> list[dict]:
+    """the times an event set: its notarized schedule, plus the deadline of the intake element"""
+    out = [dict(x) for x in n.get("schedule") or []]
+    dl = ((n.get("elements") or {}).get("intake") or {}).get("deadline")
+    if dl is not None:
+        out.append({"at": dl, "code": "deadline", "note": "제출 받기 마감"})
+    return sorted(out, key=lambda x: x["at"])
+
+
+def schedule_event_times(actx, n: dict) -> int:
+    """ask the peer's scheduler to wake this app at the event's future times (P6-S2); returns how many were set"""
+    now = actx.clock()
+    times = [x for x in event_times(n) if x["at"] > now]
+    for x in times:
+        actx.schedule(x["at"], "schedule", x, event_id=n.get("notice_id") or n.get("event_id"))
+    return len(times)
+
+
 async def announce_event(ctx, *, group: str, title: str, kind: str, rules: str, policy: dict, mode: str, apps: list | None = None,
-                         audience: dict | None = None, recorder: dict | None = None, text: str | None = None) -> dict:
+                         audience: dict | None = None, recorder: dict | None = None, text: str | None = None,
+                         elements: dict | None = None, codebook: dict | None = None, schedule: list | None = None) -> dict:
     """declare the event on the ledger and post its notice. Separate blocks: rules (natural language), policy (roles),
     mode (how it runs) and apps (the app list block); the rules hash, mode and app list are notarized"""
     apps = list(apps or [])
@@ -28,12 +47,13 @@ async def announce_event(ctx, *, group: str, title: str, kind: str, rules: str, 
     rules_hash = h(rules.encode())
     lid = await ctx.ledger_id(rec["recorder_url"])
     decl = {"event_id": ev, "issuer": ctx.pub, "kind": kind, "policy": policy, "approvers": [], "group_id": gid, "rules_hash": rules_hash,
-            "mode": mode, "apps": apps, **({"ledger_id": lid} if lid else {})}
+            "mode": mode, "apps": apps, **({"elements": elements} if elements else {}), **({"codebook": codebook} if codebook else {}),
+            **({"schedule": schedule} if schedule else {}), **({"ledger_id": lid} if lid else {})}
     r = await ctx.recorder(rec["recorder_url"]).record("event", decl, {ctx.pub: ctx.sign(decl)})
     if not r.get("ok"):
         raise RuntimeError(f"event declaration refused: {r.get('error')}")
     notice = {"notice_id": ev, "kind": kind, "title": title, "text": text or f"{title}: 규칙은 rules, 실행 방식은 mode, 쓰는 앱은 apps에 있다",
-              "rules": rules, "policy": policy, "mode": mode, "apps": apps, "until": ctx.clock() + ctx.settings.event_notice_ttl_sec, "issuer_pub": ctx.pub,
+              "rules": rules, "policy": policy, "mode": mode, "apps": apps, "elements": dict(elements or {}), **({"codebook": codebook} if codebook else {}), **({"schedule": schedule} if schedule else {}), "until": ctx.clock() + ctx.settings.event_notice_ttl_sec, "issuer_pub": ctx.pub,
               "issuer_url": ctx.url, "event_hash": r["hash"], "recorder_pub": rec["pub"], "recorder_url": rec["recorder_url"], "group_id": gid,
               **({"audience": audience} if audience else {})}
     posted = await broker.post_notice(ctx.identity, notice)
@@ -143,6 +163,9 @@ class EventRouter(BaseApp):
         v = await ctx.recorder(n["recorder_url"]).verify(n["event_hash"])
         rules_ok = "rules" not in n or v.get("rules_hash") == h(n["rules"].encode())
         run_ok = ("mode" not in n) or (v.get("mode") == mode and v.get("apps") == apps)
+        run_ok = run_ok and (v.get("elements") or {}) == (n.get("elements") or {})  # the elements block is notarized too
+        run_ok = run_ok and v.get("codebook") == n.get("codebook")  # so is the code table edition it follows
+        run_ok = run_ok and v.get("schedule") == n.get("schedule")  # and its schedule: everyone acts at the same notarized times
         if not (v.get("exists") and v.get("type") == "event" and v.get("event_id") == ev and v.get("issuer") == n["issuer_pub"] and rules_ok and run_ok):
             ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 공지의 규칙·실행 방식·앱 목록이 원장에 공증된 것과 다름 → 무시")
             return
@@ -158,3 +181,5 @@ class EventRouter(BaseApp):
         ctx.log.emit("events", ctx.pen, f"이벤트 {ev} → 앱 {', '.join(a.name for a in handlers)} (방식 {mode})")
         for app in handlers:
             await app.on_event(ctx.ctx_of(app), n, "new")
+            if isinstance(app, TimerHandler):  # the scheduler wakes the app at the event's notarized times
+                schedule_event_times(ctx.ctx_of(app), n)

@@ -24,7 +24,7 @@ class LLMError(Exception):
 
 class LLM(Protocol):
     async def ask_json(self, *, system: str, schema: dict, user: str | None = None, messages: list | None = None,
-                       effort: str | None = None, model: str | None = None) -> dict: ...
+                       effort: str | None = None, model: str | None = None, on_usage: Callable | None = None) -> dict: ...
 
 
 def parse_first_json(text: str) -> dict:
@@ -67,7 +67,7 @@ class CompatLLM:
         async with httpx.AsyncClient(timeout=s.llm_timeout_sec) as hc:
             return await hc.post(url, json=body, headers=headers)
 
-    async def ask_json(self, *, system, schema, user=None, messages=None, effort=None, model=None):
+    async def ask_json(self, *, system, schema, user=None, messages=None, effort=None, model=None, on_usage=None):
         s = self.settings
         body = {"model": model or s.llm_model_agent, "max_tokens": s.llm_max_tokens,
                 "messages": [{"role": "system", "content": system}] + _messages(user, messages),
@@ -89,7 +89,11 @@ class CompatLLM:
                         attempts += 1
                         continue
                     r.raise_for_status()
-                    content = r.json()["choices"][0]["message"].get("content")
+                    data = r.json()
+                    if on_usage is not None:
+                        u = data.get("usage") or {}
+                        on_usage({"prompt_tokens": u.get("prompt_tokens", 0), "completion_tokens": u.get("completion_tokens", 0)})
+                    content = data["choices"][0]["message"].get("content")
                     if not content:
                         raise ValueError("empty content")
                     return parse_first_json(content)
@@ -106,7 +110,7 @@ class ClaudeLLM:
         self._client = anthropic.AsyncAnthropic(api_key=settings.llm_claude_api_key, timeout=settings.llm_timeout_sec)
         self._sem = asyncio.Semaphore(settings.llm_concurrency)
 
-    async def ask_json(self, *, system, schema, user=None, messages=None, effort=None, model=None):
+    async def ask_json(self, *, system, schema, user=None, messages=None, effort=None, model=None, on_usage=None):
         s, last = self.settings, None
         kwargs = dict(model=model or s.llm_model_agent, max_tokens=s.llm_max_tokens, system=system, messages=_messages(user, messages))
         async with self._sem:
@@ -116,6 +120,8 @@ class ClaudeLLM:
                         **kwargs, output_config={"effort": effort or s.llm_effort, "format": {"type": "json_schema", "schema": schema}})
                     if resp.stop_reason == "refusal":
                         raise ValueError("refusal")
+                    if on_usage is not None and getattr(resp, "usage", None) is not None:
+                        on_usage({"prompt_tokens": resp.usage.input_tokens, "completion_tokens": resp.usage.output_tokens})
                     return parse_first_json("".join(b.text for b in resp.content if b.type == "text"))
                 except (self._anthropic.APIError, ValueError) as e:
                     last = e
@@ -134,11 +140,39 @@ def build_llm(settings: Settings) -> LLM:
         return CompatLLM(settings)
     if settings.llm_backend == "claude":
         return ClaudeLLM(settings)
-    raise ConfigError(f"{settings.key_of('llm_backend')} 값은 compat 또는 claude여야 합니다: {settings.llm_backend!r}")
+    if settings.llm_backend == "none":
+        return NoLLM()  # a peer without an LLM: a human peer, or a service peer
+    raise ConfigError(f"{settings.key_of('llm_backend')} 값은 compat, claude, none 가운데 하나여야 합니다: {settings.llm_backend!r}")
+
+
+class UsageMeter:
+    """LLM calls and tokens per asking peer (P6-V1). Attach one to an LLM (`llm.meter = UsageMeter()`)."""
+
+    def __init__(self):
+        self._by: dict[str, dict] = {}
+
+    def add(self, actor: str, usage: dict | None) -> None:
+        row = self._by.setdefault(actor, {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0})
+        row["calls"] += 1
+        for k in ("prompt_tokens", "completion_tokens"):
+            row[k] += int((usage or {}).get(k) or 0)
+
+    def totals(self) -> dict:
+        return {k: dict(v) for k, v in self._by.items()}
+
+    def total(self) -> dict:
+        out = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0}
+        for v in self._by.values():
+            for k in out:
+                out[k] += v[k]
+        return out
 
 
 async def ask_json(llm: LLM, log, actor: str, fallback: Callable[[], dict], **kw) -> dict:
-    """ask, and on LLMError log it and return fallback() so a flow never stalls"""
+    """ask, and on LLMError log it and return fallback() so a flow never stalls; usage goes to the LLM's meter if it has one"""
+    meter = getattr(llm, "meter", None)
+    if meter is not None:
+        kw["on_usage"] = lambda u: meter.add(actor, u)
     try:
         return await llm.ask_json(**kw)
     except LLMError as e:
