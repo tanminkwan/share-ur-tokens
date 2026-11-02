@@ -146,7 +146,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `attest` | `parties` 전원 | 선택 `event_id`, `kind`, `subject`, `value`, `parties`, `nonce` |
 | `close` | `issuer` | `event_id`, `issuer`, `result_hash`(이 이벤트의 항목) |
 | `key_rotate` | `old`, `new`, 기록자면 `god`도 | `role`(`recorder`·`god`), `old`(그 시점의 유효한 키), `new`, 기록자면 `god`(지금의 god 키), `nonce` |
-| `codebook` | `publisher` | `publisher`, `name`, `version`(`x.y`), `content_hash`(코드표 문서의 해시), `codes`(`entry_types`·`purposes`·`elements`·`connections` 목록), 선택 `supersedes`(앞 판의 기록 해시). 같은 낸 이·이름·번호는 한 번만, 같은 표의 새 판은 번호가 더 커야 함([codebook.md](codebook.md)) |
+| `codebook` | `publisher` | `publisher`, `name`, `version`(`x.y`), `content_hash`(코드표 문서의 해시), `codes`(`entry_types`·`purposes`·`elements`·`connections` 목록), 선택 `supersedes`(앞 판의 기록 해시), 선택 `local`(가지 체인만: `{"purposes": {"x-<커뮤니티>.<코드>": {types, description}}}`, 그 체인 안에서만 쓰는 자체 목적 코드). 같은 낸 이·이름·번호는 한 번만, 같은 표의 새 판은 번호가 더 커야 함([codebook.md](codebook.md)) |
 | `chain_link` | `child_god`, `child_recorder` | `child_ledger_id`(새 체인의 제네시스 해시), `child_god`, `child_recorder`(새 체인의 첫 기록자 키), `name`, `nonce`. 원래 체인에 남긴다. 한 체인은 한 번만 |
 
 **코드 칸과 자유 영역**: 위 표의 칸과 공통 칸(`group_id`, `ledger_id`, `event_id`, `purpose`, `nonce`)이 원장이 확인하는 코드 칸이다. payload의 나머지는 자유 영역으로, 원장이 읽지 않고 공개 확인에도 보이지 않는다(서명 범위 안이라 바꿀 수는 없다). 목적 코드 `purpose`는 등록된 값만 받는다. 지금 코드: `authorship`(`publish`, 저작 내용과 그 시점의 증명, 이름표 없음), `commit`(`publish`, 봉인 등록, 이름표 있음), `delivery`(`share`, 자료 전달), `submission`(`share`, 이벤트 제출, 이벤트 필수), `evaluation`(`share`, 평가 건넴, 이벤트 필수). 칸 정책 전체: [entry-columns.md](entry-columns.md).

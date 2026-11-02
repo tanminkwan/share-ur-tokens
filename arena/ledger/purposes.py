@@ -35,6 +35,12 @@ def check_purpose(chain, e) -> str | None:
     code = e["payload"].get("purpose")
     if code is None:
         return None
+    if isinstance(code, str) and code.startswith("x-"):  # a branch community's own code, declared in one of its editions
+        from .codebook import local_purposes
+        d = local_purposes(chain).get(code)
+        if d is None:
+            return f"unknown purpose {code!r} (not declared in this chain's code table)"
+        return None if e["type"] in d["types"] else f"purpose {code!r} is not for {e['type']} entries"
     p = PURPOSES.get(code)
     if p is None:
         return f"unknown purpose {code!r}"

@@ -251,3 +251,30 @@ async def test_p5g11_every_entry_carries_the_recorder_time_and_the_audit_checks_
     forged[-1]["hash"] = h(canon({k: forged[-1][k] for k in BODY}))
     forged[-1]["seal"] = {"pub": net.rec.pub, "sig": net.rec.sign(forged[-1]["hash"])}
     assert "time" in audit_chain(forged)
+
+
+async def test_codebook_a_branch_chain_may_add_its_own_purpose_codes(net, settings):
+    """user 2026-11-02: "가지 체인 자체 코드는 허용하자". A branch community declares x-<community>.<code> purposes in an
+    edition on its own chain; the trunk's codes come only with the platform's table, and meanings never change."""
+    from arena.codebook import builtin_document, document_hash
+    child = await Child(settings, net).boot()
+    pub = Identity.generate()
+
+    async def edition(svc, ledger_id, version, local):
+        d = builtin_document(name="acme", version=version)
+        p = {"publisher": pub.pub, "name": "acme", "version": version, "content_hash": document_hash(d), "codes": d["codes"],
+             "local": local, "group_id": "public", "ledger_id": ledger_id}
+        return await svc.record("codebook", p, {pub.pub: pub.sign(p)})
+    minutes = {"purposes": {"x-acme.minutes": {"types": ["publish"], "description": "회의록 원문의 시점 증명"}}}
+    assert "branch chain" in (await edition(net.svc, net.ledger_id, "1.0", minutes))["error"]  # not on the trunk
+    assert "x-<community>" in (await edition(child.svc, child.ledger_id, "1.0", {"purposes": {"minutes": minutes["purposes"]["x-acme.minutes"]}}))["error"]
+    assert (await edition(child.svc, child.ledger_id, "1.0", minutes))["ok"]
+    assert "already defined" in (await edition(child.svc, child.ledger_id, "1.1", minutes))["error"]  # meanings never change
+    who = Identity.generate()
+
+    async def publish(svc, ledger_id, text, purpose):
+        p = {"author": who.pub, "content_hash": text * 8, "group_id": "public", "ledger_id": ledger_id, "purpose": purpose}
+        return await svc.record("publish", p, {who.pub: who.sign(p)})
+    assert (await publish(child.svc, child.ledger_id, "a", "x-acme.minutes"))["ok"]
+    assert "not declared" in (await publish(child.svc, child.ledger_id, "b", "x-acme.poems"))["error"]
+    assert "not declared" in (await publish(net.svc, net.ledger_id, "c", "x-acme.minutes"))["error"]  # local to its chain

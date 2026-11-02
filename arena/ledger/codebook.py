@@ -15,6 +15,7 @@ from .purposes import PURPOSES
 from .types import ENTRY_TYPES, EntryType, _inc, register_entry_type
 
 VERSION = re.compile(r"^\d+\.\d+$")
+LOCAL = re.compile(r"^x-[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9_-]*$")  # a branch community's own code: x-<community>.<code>
 CODE_KINDS = ("entry_types", "purposes", "elements", "connections")  # connections are the brokers' codes, listed for peers
 
 
@@ -42,8 +43,42 @@ def _shape(chain, e, now, s):
         return f"codebook codes must map {', '.join(CODE_KINDS)} to lists of code names"
 
 
+def is_branch(chain) -> bool:
+    return bool(chain) and chain[0]["type"] == "genesis" and "parent" in chain[0]["payload"]
+
+
+def local_purposes(chain) -> dict:
+    """a branch chain's own purpose codes, declared in its editions: code -> {types, description}"""
+    out = {}
+    for x in editions(chain).values():
+        out.update((x.get("local") or {}).get("purposes", {}))
+    return out
+
+
+def _check_local(chain, local) -> str | None:
+    """user 2026-11-02: a branch chain may add its own codes. Only purposes (a name and the types it is for): elements and
+    entry types need ledger software, so they come only in the platform's table"""
+    if not isinstance(local, dict) or not set(local) <= {"purposes"}:
+        return "local codes: only purposes may be added by a community"
+    if not is_branch(chain):
+        return "local codes belong to a branch chain; the trunk's codes come with the platform's table"
+    for code, d in (local.get("purposes") or {}).items():
+        if not LOCAL.match(code):
+            return f"local code {code!r} must be named x-<community>.<code>"
+        if not isinstance(d, dict) or not isinstance(d.get("types"), list) or not d["types"] or any(t not in ENTRY_TYPES for t in d["types"]):
+            return f"local code {code!r} needs the entry types it is for"
+        if not isinstance(d.get("description"), str) or not d["description"]:
+            return f"local code {code!r} needs a description"
+        if code in local_purposes(chain):
+            return f"local code {code!r} is already defined on this chain (meanings never change; use a new name)"
+
+
 def _rule(chain, e, now, s):
     p = e["payload"]
+    if "local" in p:
+        bad = _check_local(chain, p["local"])
+        if bad:
+            return bad
     for x in editions(chain).values():
         if (x["publisher"], x["name"], x["version"]) == (p["publisher"], p["name"], p["version"]):
             return "this edition is already published"
@@ -78,5 +113,5 @@ def check_event_codebook(chain, p) -> str | None:
 
 register_entry_type(EntryType(
     "codebook", lambda p: [p.get("publisher")], shape=_shape, rules=(_rule,),
-    public=lambda p, c: {k: p[k] for k in ("publisher", "name", "version", "content_hash", "codes", "supersedes") if k in p},
+    public=lambda p, c: {k: p[k] for k in ("publisher", "name", "version", "content_hash", "codes", "supersedes", "local") if k in p},
     counters={"codebooks": 0, "codebook_followers": 0}, contribute=lambda rec, p, index: _inc(rec, p["publisher"], "codebooks")))
