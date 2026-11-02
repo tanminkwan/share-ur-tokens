@@ -44,6 +44,9 @@ def build_recorder_app(svc: RecorderService) -> Starlette:
     async def codes(_):
         return JSONResponse(svc.codes())
 
+    async def codebooks(_):
+        return JSONResponse(svc.codebooks())
+
     async def health(_):
         return JSONResponse(svc.health())
 
@@ -58,5 +61,6 @@ def build_recorder_app(svc: RecorderService) -> Starlette:
         Route("/trust", guarded(trust), methods=["GET"]),
         Route("/links/{ledger_id}", guarded(link), methods=["GET"]),
         Route("/codes", guarded(codes), methods=["GET"]),
+        Route("/codebooks", guarded(codebooks), methods=["GET"]),
         Route("/health", guarded(health), methods=["GET"]),
     ])

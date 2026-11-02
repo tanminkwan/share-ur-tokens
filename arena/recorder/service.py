@@ -75,6 +75,10 @@ class RecorderService:
         e = next((x for x in self.ledger.chain if x["type"] == "chain_link" and x["payload"]["child_ledger_id"] == child_ledger_id), None)
         return {"ok": True, "link": e} if e else {"ok": False, "error": "no chain_link for this ledger"}
 
+    def codebooks(self) -> dict:
+        """public: the code table editions on this ledger, as whole entries (a branch copies the trunk's from here)"""
+        return {"ok": True, "codebooks": [e for e in self.ledger.chain if e["type"] == "codebook"]}
+
     def codes(self) -> dict:
         """public: the ledger codes this recorder implements and the built-in edition it ships with. An event that follows
         an edition listing codes outside these is refused here"""

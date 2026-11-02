@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 
+from ..crypto import canon, h, verify
 from .elements import LEDGER_ELEMENTS
 from .purposes import PURPOSES
 from .types import ENTRY_TYPES, EntryType, _inc, register_entry_type
@@ -29,11 +30,52 @@ def _v(version: str) -> tuple:
 
 
 def editions(chain) -> dict:
-    return {x["hash"]: x["payload"] for x in chain if x["type"] == "codebook"}
+    """the editions known on this chain: its own, and the trunk's it copied (keyed by the trunk entry's hash, so an event
+    names a trunk edition the same way on the trunk and on a branch)"""
+    out = {}
+    for x in chain:
+        if x["type"] == "codebook":
+            a = x["payload"].get("adopted")
+            out.update({a["hash"]: a["payload"]} if a else {x["hash"]: x["payload"]})
+    return out
+
+
+def _signers(p):
+    return [p.get("adopter")] if "adopted" in p else [p.get("publisher")]
+
+
+BODY = ("type", "payload", "sigs", "prev", "ts")
+
+
+def _adopted_ok(chain, p) -> str | None:
+    """user 2026-11-02: a branch may follow the trunk's editions. The branch copies the trunk's edition entry as it is; its
+    ledger checks, without the network, that the copy hashes to its hash, carries the publisher's signature, was sealed,
+    and belongs to the trunk named in this branch's genesis. Peers may also look the entry up on the trunk itself."""
+    a = p["adopted"]
+    if not isinstance(a, dict) or a.get("type") != "codebook" or not isinstance(a.get("payload"), dict) or not all(k in a for k in (*BODY, "hash", "seal")):
+        return "adopted must be a whole codebook entry of the trunk"
+    if not is_branch(chain):
+        return "only a branch chain copies the trunk's editions"
+    if a["hash"] != h(canon({k: a[k] for k in BODY})):
+        return "the copied edition does not hash to its hash"
+    ap = a["payload"]
+    if "adopted" in ap or "local" in ap:
+        return "only the trunk's own editions are copied"
+    if ap.get("ledger_id") != chain[0]["payload"]["parent"].get("ledger_id"):
+        return "the copied edition is not of the trunk this branch came from"
+    if not verify(ap.get("publisher", ""), ap, a["sigs"].get(ap.get("publisher", ""), "")):
+        return "the copied edition lacks its publisher's signature"
+    seal = a.get("seal") or {}
+    if not seal.get("pub") or not verify(seal["pub"], a["hash"], seal.get("sig", "")):
+        return "the copied edition lacks the trunk recorder's seal"
+    if a["hash"] in editions(chain):
+        return "this edition is already copied"
 
 
 def _shape(chain, e, now, s):
     p = e["payload"]
+    if "adopted" in p:
+        return None if p.get("adopter") else "a copied edition needs the adopter who records it"
     if not p.get("publisher") or not isinstance(p.get("name"), str) or not p["name"] or not isinstance(p.get("version"), str) \
             or not VERSION.match(p["version"]) or not isinstance(p.get("content_hash"), str) or len(p["content_hash"]) != 64:
         return "codebook needs publisher, name, version x.y and the content_hash of the code table document"
@@ -51,7 +93,7 @@ def local_purposes(chain) -> dict:
     """a branch chain's own purpose codes, declared in its editions: code -> {types, description}"""
     out = {}
     for x in editions(chain).values():
-        out.update((x.get("local") or {}).get("purposes", {}))
+        out.update((x.get("local") or {}).get("purposes", {}))  # copied trunk editions carry no local codes
     return out
 
 
@@ -75,6 +117,8 @@ def _check_local(chain, local) -> str | None:
 
 def _rule(chain, e, now, s):
     p = e["payload"]
+    if "adopted" in p:
+        return _adopted_ok(chain, p)
     if "local" in p:
         bad = _check_local(chain, p["local"])
         if bad:
@@ -111,7 +155,18 @@ def check_event_codebook(chain, p) -> str | None:
         return f"codebook: elements {', '.join(outside)} are not codes of that edition"
 
 
-register_entry_type(EntryType(
-    "codebook", lambda p: [p.get("publisher")], shape=_shape, rules=(_rule,),
-    public=lambda p, c: {k: p[k] for k in ("publisher", "name", "version", "content_hash", "codes", "supersedes", "local") if k in p},
-    counters={"codebooks": 0, "codebook_followers": 0}, contribute=lambda rec, p, index: _inc(rec, p["publisher"], "codebooks")))
+def _public(p, chain):
+    if "adopted" in p:
+        a = p["adopted"]
+        return {"adopter": p["adopter"], "adopted_from": {"ledger_id": a["payload"].get("ledger_id"), "entry": a["hash"]},
+                **{k: a["payload"][k] for k in ("publisher", "name", "version", "content_hash", "codes") if k in a["payload"]}}
+    return {k: p[k] for k in ("publisher", "name", "version", "content_hash", "codes", "supersedes", "local") if k in p}
+
+
+def _contribute(rec, p, index):
+    if "adopted" not in p:  # a copy is not a new edition
+        _inc(rec, p["publisher"], "codebooks")
+
+
+register_entry_type(EntryType("codebook", _signers, shape=_shape, rules=(_rule,), public=_public,
+                              counters={"codebooks": 0, "codebook_followers": 0}, contribute=_contribute))

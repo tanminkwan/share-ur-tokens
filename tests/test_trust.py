@@ -278,3 +278,56 @@ async def test_codebook_a_branch_chain_may_add_its_own_purpose_codes(net, settin
     assert (await publish(child.svc, child.ledger_id, "a", "x-acme.minutes"))["ok"]
     assert "not declared" in (await publish(child.svc, child.ledger_id, "b", "x-acme.poems"))["error"]
     assert "not declared" in (await publish(net.svc, net.ledger_id, "c", "x-acme.minutes"))["error"]  # local to its chain
+
+
+async def test_codebook_a_branch_follows_a_trunk_edition_by_copying_it(net, settings):
+    """user 2026-11-02: "뿌리 체인의 판도 따를 수 있게 하자". A branch copies the trunk's edition entry as it is; its ledger
+    checks the copy (hash, publisher's signature, seal, the trunk named in its genesis) without the network, and an event
+    on the branch names the trunk edition the same way as on the trunk."""
+    import copy
+    from arena.codebook import builtin_document, document_hash
+    from arena.ledger.codebook import check_event_codebook
+    child = await Child(settings, net).boot()
+    pub = Identity.generate()
+    d = builtin_document()
+    p = {"publisher": pub.pub, "name": d["name"], "version": "1.0", "content_hash": document_hash(d), "codes": d["codes"],
+         "group_id": "public", "ledger_id": net.ledger_id}
+    trunk_ed = await net.svc.record("codebook", p, {pub.pub: pub.sign(p)})
+    whole = next(e for e in net.svc.codebooks()["codebooks"] if e["hash"] == trunk_ed["hash"])
+    adopter = Identity.generate()
+
+    async def copy_into(svc, ledger_id, entry):
+        q = {"adopter": adopter.pub, "adopted": {k: entry[k] for k in ("type", "payload", "sigs", "prev", "ts", "hash", "seal")},
+             "group_id": "public", "ledger_id": ledger_id}
+        return await svc.record("codebook", q, {adopter.pub: adopter.sign(q)})
+    forged = copy.deepcopy(whole)
+    forged["payload"]["version"] = "9.9"
+    assert "hash" in (await copy_into(child.svc, child.ledger_id, forged))["error"]
+    assert "branch chain" in (await copy_into(net.svc, net.ledger_id, whole))["error"]  # the trunk copies nothing
+    got = await copy_into(child.svc, child.ledger_id, whole)
+    assert got["ok"] and child.svc.verify(got["hash"])["adopted_from"] == {"ledger_id": net.ledger_id, "entry": whole["hash"]}
+    assert "already copied" in (await copy_into(child.svc, child.ledger_id, whole))["error"]
+    ref = {"entry": whole["hash"], "publisher": pub.pub, "version": "1.0"}
+    assert check_event_codebook(child.svc.ledger.chain, {"codebook": ref}) is None  # the branch follows the trunk edition
+    stranger = await Child(settings, await Net(settings).boot()).boot()  # a branch of another trunk
+    assert "not of the trunk" in (await copy_into(stranger.svc, stranger.ledger_id, whole))["error"]
+
+
+async def test_codebook_any_branch_peer_copies_a_trunk_edition_with_the_helper(tmp_path, settings, net):
+    from arena.codebook import builtin_document, document_hash
+    from arena.peer.foundation_role import FoundationRole
+    from tests.test_event_apps import World
+    child = await Child(settings, net).boot()
+    pub = Identity.generate()
+    d = builtin_document()
+    p = {"publisher": pub.pub, "name": d["name"], "version": "1.0", "content_hash": document_hash(d), "codes": d["codes"],
+         "group_id": "public", "ledger_id": net.ledger_id}
+    ed = await net.svc.record("codebook", p, {pub.pub: pub.sign(p)})
+    from arena.ledger.codebook import editions
+    w = World(tmp_path, settings)
+    role = FoundationRole(settings, documents=[])
+    peer = w.peer("p", [role])
+    clients = {"mem://root": InMemoryRecorderClient(net.svc), "mem://child": InMemoryRecorderClient(child.svc)}
+    peer.recorder_factory = lambda url: clients[url]
+    r = await FoundationRole.adopt(peer.ctx(role), "mem://root", ed["hash"], "mem://child")
+    assert r["ok"] and ed["hash"] in editions(child.svc.ledger.chain)
