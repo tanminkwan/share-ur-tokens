@@ -328,6 +328,8 @@ def _link_shape(chain, e, now, s):
 
 
 def _link_rule(chain, e, now, s):
+    if chain and "parent" in chain[0]["payload"]:  # branches grow only from the trunk (user 2026-11-02, dev/chain-policy.md)
+        return "only the trunk (the root chain) takes branch links; a branch chain cannot start a branch"
     if any(x["type"] == "chain_link" and x["payload"]["child_ledger_id"] == e["payload"]["child_ledger_id"] for x in chain):
         return "this chain is already linked"
 

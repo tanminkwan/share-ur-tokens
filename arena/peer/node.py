@@ -183,9 +183,10 @@ class Peer:
         if self.home:
             self.home.save_state({"profile_ver": self.profiles.version, "known_recorders": self.known_recorders, "apps": self.app_states})
 
-    async def recorder_trust(self, url: str, depth: int = 0) -> dict:
+    async def recorder_trust(self, url: str) -> dict:
         """is the recorder at url the one this peer's root of trust proves? {ok, anchored, recorder, ledger_id, why}.
-        The root is the original chain; a community chain is proven through its chain_link in its parent (P5-G9).
+        The root is the trunk (the original chain); a branch chain is proven through its chain_link in the trunk (P5-G9).
+        Branches grow only from the trunk (P5-G10), so the proof is always one step.
         Without a root of trust in the settings every recorder passes (anchored False). Checked once per url."""
         if url in self._trust:
             return self._trust[url]
@@ -202,9 +203,11 @@ class Peer:
             out = {"ok": ok, "anchored": True, "recorder": keys.get("recorder"), "ledger_id": doc.get("ledger_id") if ok else None, "why": why}
         else:
             parent = ((doc.get("genesis") or {}).get("payload") or {}).get("parent")
-            if not parent or depth >= s.trust_max_link_depth:
-                return fail("not the original chain and not linked into it")
-            pt = await self.recorder_trust(parent["recorder_url"], depth + 1)
+            if not parent:
+                return fail("not the trunk and not linked into it")
+            if parent.get("ledger_id") != s.trust_genesis_hash:
+                return fail("branches grow only from the trunk; this chain names another chain as its origin")
+            pt = await self.recorder_trust(parent["recorder_url"])
             if not pt["ok"] or pt["ledger_id"] != parent["ledger_id"]:
                 return fail(f"parent chain not proven: {pt.get('why')}")
             try:

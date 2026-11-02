@@ -97,6 +97,8 @@ async def start(settings: Settings, viewers=None) -> Genesis:
             pt = await parent_client.trust()
             if not pt.get("ok"):
                 raise RuntimeError(f"parent recorder: {pt.get('error')}")
+            if "parent" in ((pt.get("genesis") or {}).get("payload") or {}):  # P5-G10: branches grow only from the trunk
+                raise ConfigError("ARENA_GENESIS_PARENT_RECORDER_URL must be the trunk's recorder: a branch chain cannot start a branch")
             parent = {"ledger_id": pt["ledger_id"], "recorder_url": settings.genesis_parent_recorder_url}
         r = await record_genesis(svc, god_id, settings, broker.identity.pub, rec_id.pub, parent)
         if not r["ok"]:

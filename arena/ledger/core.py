@@ -67,6 +67,8 @@ def audit_chain(chain: list[dict], anchor: dict | None = None) -> str:
             return f"TAMPERED at seq {i} (hash chain)"
         if e["type"] not in ENTRY_TYPES or any(not s or not verify(s, e["payload"], e["sigs"].get(s, "")) for s in signers(e)):
             return f"TAMPERED at seq {i} (signature)"
+        if i > 0 and e["ts"] < chain[i - 1]["ts"]:
+            return f"TAMPERED at seq {i} (time goes backwards)"
         if "seal" in e and (e["seal"]["pub"] != sealer or not verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"])):
             return f"TAMPERED at seq {i} (recorder seal)"
         if genesis and i > 0 and "ledger_id" in e["payload"] and e["payload"]["ledger_id"] != genesis["hash"]:

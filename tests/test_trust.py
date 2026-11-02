@@ -220,3 +220,34 @@ async def test_p5g9_a_peer_anchored_at_the_original_trusts_a_linked_community_re
     assert not (await peer.recorder_trust("mem://stranger"))["ok"]  # linked, but not into this peer's original chain
     root = await peer.recorder_trust("mem://root")
     assert root["ok"] and root["ledger_id"] == net.ledger_id
+
+
+async def test_p5g10_only_the_trunk_takes_branch_links(net, settings):
+    """user 2026-11-02: branches grow only from the trunk (the root chain). A community chain cannot start a branch of its
+    own: its ledger refuses chain_link, and a peer anchored at the trunk does not follow a branch of a branch. A community
+    divides itself with broker groups inside its chain instead."""
+    child = await Child(settings, net).boot()
+    grandchild = await Child(settings, child, parent_url="mem://child").boot()
+    assert not grandchild.link["ok"] and "trunk" in grandchild.link["error"]
+    # even a link entry written by hand into a branch chain is refused by its ledger
+    g = Identity.generate()
+    p = {"child_ledger_id": "1" * 64, "child_god": g.pub, "child_recorder": g.pub, "name": "x", "group_id": "public",
+         "ledger_id": child.ledger_id, "nonce": "n"}
+    assert "trunk" in (await child.svc.record("chain_link", p, {g.pub: g.sign(p)}))["error"]
+
+
+async def test_p5g11_every_entry_carries_the_recorder_time_and_the_audit_checks_its_order(net):
+    """user 2026-11-02: the ledger always stamps the time. The recorder sets ts on every entry, inside the hash and the
+    seal; the ledger refuses a time earlier than the last entry, and the audit of any copy now checks the order too."""
+    import copy
+    from arena.crypto import canon, h
+    from arena.ledger import BODY
+    who = Identity.generate()
+    assert (await net.publish(who, "a"))["ok"] and (await net.publish(who, "b"))["ok"]
+    chain = net.svc.ledger.chain
+    assert all(isinstance(e["ts"], float) for e in chain) and audit_chain(chain) == "ok"
+    forged = copy.deepcopy(chain)  # a recorder that put a later entry before an earlier one in time, sealing it again
+    forged[-1]["ts"] = forged[-2]["ts"] - 60
+    forged[-1]["hash"] = h(canon({k: forged[-1][k] for k in BODY}))
+    forged[-1]["seal"] = {"pub": net.rec.pub, "sig": net.rec.sign(forged[-1]["hash"])}
+    assert "time" in audit_chain(forged)
