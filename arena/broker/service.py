@@ -6,6 +6,7 @@ import logging
 import time
 from typing import Callable, Iterable
 
+from ..connections import check_connections
 from ..config import ConfigError, Settings
 from ..crypto import Identity, pen_name, verify
 from ..search import BM25Searcher, Searcher
@@ -74,6 +75,9 @@ class BrokerService:
         pub, prof = ad.get("pub", ""), ad.get("profile", {})
         if not verify(pub, prof, ad.get("sig", "")):
             return {"ok": False, "error": "bad signature"}
+        bad = check_connections(prof["connections"]) if "connections" in prof else None
+        if bad:
+            return {"ok": False, "error": f"bad connection information: {bad}"}
         if not self.is_member(pub):
             return {"ok": False, "error": "members of this peer group only"}
         updated = pub in self.profiles

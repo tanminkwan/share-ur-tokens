@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from ..a2a import Transport, build_a2a_app
+from ..connections import pick
+from ..rest import RestTransport
 from ..config import Settings
 from ..crypto import Identity, pen_name
 from ..events import EventLog
@@ -31,6 +33,7 @@ class PeerConfig:
     url: str
     offers: list[str] = field(default_factory=list)
     labels: list[str] = field(default_factory=list)
+    connections: list = field(default_factory=list)  # how to reach this peer (arena/connections.py); empty = a2a at url
 
 
 class Peer:
@@ -52,7 +55,8 @@ class Peer:
             self.app_states.setdefault(DirectRequests.name, {"inbox": saved["inbox"]})
         self.last_profile: dict | None = None
         self._group_ids: dict[str, str] = {}
-        self._trust: dict[str, dict] = {}  # recorder url -> its trust check against the root of trust (P5-G6)
+        self._trust: dict[str, dict] = {}
+        self.rest = RestTransport(settings)  # the api connection method (P6-A8)  # recorder url -> its trust check against the root of trust (P5-G6)
         self._requests = DirectRequests(settings)
         self.events = EventRouter(settings, installer=AppInstaller(settings) if (settings.app_store_urls or settings.app_store_discover) else None)
         self.builtins = [RoleContracts(), EventApprovals(), self._requests, self.events]
@@ -113,6 +117,35 @@ class Peer:
 
     def sign(self, payload) -> str:
         return self.identity.sign(payload)
+
+    def connections(self) -> list:
+        """the connections this peer's profile lists (P6-A7): the person's choice, or a2a at its url; a human contact only if set"""
+        out = [dict(c) for c in self.config.connections] or [{"kind": "a2a", "url": self.config.url}]
+        if self.settings.peer_human_contact and not any(c["kind"] == "human" for c in out):
+            out.append({"kind": "human", "contact": self.settings.peer_human_contact})
+        return out
+
+    async def profile_of(self, pub: str) -> dict | None:
+        for broker in self.brokers.values():
+            try:
+                found = next((p for p in (await broker.list_profiles(identity=self.identity)).get("profiles", []) if p["pub"] == pub), None)
+            except Exception:
+                continue
+            if found:
+                return found
+        return None
+
+    async def call_peer(self, pub: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None) -> dict:
+        """reach a peer by the connection its profile lists that code may use: a2a first, else api (P6-A8)"""
+        prof = await self.profile_of(pub)
+        conns = (prof or {}).get("connections") or ([{"kind": "a2a", "url": prof["url"]}] if prof and prof.get("url") else [])
+        c = pick(conns)
+        if c is None:
+            return {"ok": False, "error": "no connection method this peer can use (a2a or api)"}
+        if c["kind"] == "a2a":
+            return await self.call(c["url"], msg, timeout, group=group, event=event)
+        meta = {"group_id": group, "event_id": event} if (group or event) else None
+        return await self.rest.call(c["url"], msg, timeout, meta)
 
     def offers(self) -> list[str]:
         out = list(self.config.offers)

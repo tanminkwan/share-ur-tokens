@@ -87,6 +87,22 @@ op 설정에 `record: {kind}`가 있으면, 호출에 `event_id`, `subject`가 �
 
 `call_service {peer, op, input_json, event_subject?}`: 코드가 필명을 주소로 바꾸고, 보내고, 영수증 서명과 요청·결과 해시를 확인해 이벤트 상태에 보관한다. 결과만 LLM에 보여 준다.
 
+### 2.6 연결 방식 (P6-A6 ~ A8)
+
+```mermaid
+flowchart LR
+    C["부르는 peer의 코드"] --> P["상대 프로필 connections"]
+    P -->|"a2a가 있으면"| A["A2A 1.0 JSON-RPC<br/>(에이전트 카드)"]
+    P -->|"api만 있으면"| R["POST {주소}/ops/{op}<br/>{input} → {ok, result, receipt}"]
+    P -->|"human"| H["자동으로 쓰지 않음<br/>소유자에게 연락처만 알림"]
+```
+
+- **등록부**(`arena/peer/connections.py`): `ConnectionKind(name, label, fields, automatic)`. 처음 등록: `human`(칸 `contact`, 자동 아님), `a2a`(칸 `url`), `api`(칸 `url`, 선택 `ops`). broker와 peer가 같은 등록부로 검사한다.
+- **프로필**: `connections: [{kind, url | contact, ...}]`. `url`(지금 칸)은 A2A 호환을 위해 남긴다. 에이전트 peer는 `PeerConfig.connections`가 비면 `[{kind: a2a, url}]`. 사람 연락처는 설정 `ARENA_PEER_HUMAN_CONTACT`가 있을 때만.
+- **`api` 묶음**(`arena/rest.py`): 서버 `build_rest_app(handler)`는 `POST /ops/{op}`를 받아 `{op, **body}`를 peer의 메시지 처리기(`Peer.handle`)에 머리와 함께 넘긴다. 즉 같은 op가 두 방식으로 열린다. 클라이언트 `RestTransport.call(url, msg, meta)`.
+- **고르기**: `Peer.call_peer(pub, msg, group, event)`가 broker 프로필의 연결 정보를 읽어 `a2a` → `api` 순으로 쓴다. `call_service` 도구가 이것을 쓴다.
+- **API 전용 peer**: 서비스 peer 실행기 `--connections api`(또는 `ARENA_SERVICE_PEER_CONNECTIONS`)면 A2A 서버 없이 REST만 열고 프로필 연결 정보도 `api`만 싣는다. 신원 키와 서명된 프로필, 서명 영수증은 그대로다.
+
 ## 3. 6-B 제출 받기 (`intake`)
 
 **설정**: `{"deadline": 유닉스 초, "max_per_author": 1, "receiver": "issuer" 또는 역할 이름, "audience": [라벨...]}`.

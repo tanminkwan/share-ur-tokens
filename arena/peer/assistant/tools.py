@@ -83,11 +83,11 @@ async def contract(A, ctx, st, role, peer):
 async def call_service(A, ctx, st, peer, op, input=None):
     """call an API-providing peer; the code checks the signed receipt and keeps it (P6-A5)"""
     from ...sdk.service import verify_service_receipt
-    pub, url = await A.resolve_peer(ctx, st, peer)
-    if not pub or not url:
+    pub, _ = await A.resolve_peer(ctx, st, peer, need_url=False)
+    if not pub:
         return {"ok": False, "error": f"{peer}를 찾지 못했다"}
     req = {"op": op, "input": input if isinstance(input, dict) else {}}
-    r = await ctx.call(url, req, group=st.group_id, event=st.event_id)
+    r = await ctx.call_peer(pub, req, group=st.group_id, event=st.event_id)  # a2a or api, by the peer's profile
     if not r.get("ok"):
         return {"ok": False, "error": r.get("error")}
     bad = verify_service_receipt(r, req, pub)
@@ -95,6 +95,16 @@ async def call_service(A, ctx, st, peer, op, input=None):
         return {"ok": False, "error": f"서비스 영수증이 맞지 않는다(코드 확인): {bad}"}
     st.service_receipts.append({"peer": pub, "op": op, "receipt": r["receipt"], "receipt_sig": r["receipt_sig"]})
     return {"ok": True, "result": r["result"]}
+
+
+async def contact(A, ctx, st, peer):
+    """the human connection of a peer, for the owner to use themselves: never sent automatically (P6-A8)"""
+    pub, _ = await A.resolve_peer(ctx, st, peer, need_url=False)
+    prof = await ctx.profile_of(pub) if pub else None
+    humans = [c["contact"] for c in (prof or {}).get("connections", []) if c.get("kind") == "human"]
+    if not humans:
+        return {"ok": False, "error": f"{peer}는 사람 연락처를 공개하지 않았다"}
+    return {"ok": True, "contact": humans, "note": "사람끼리 연결: 플랫폼은 대신 보내지 않는다. 소유자에게 알려 직접 연락하게 하라"}
 
 
 async def send(A, ctx, st, to, text, data=None, attach_reveals=()):
@@ -305,6 +315,7 @@ def default_tools() -> list[Tool]:
              send),
         Tool("call_service", "{peer, op, input_json}: API를 제공하는 peer(필명)의 op를 부른다(input_json은 JSON 객체 문자열). "
              "결과와 함께 온 서명 영수증은 코드가 확인하고 보관한다", _obj(peer=S, op=S, input_json=S), call_service),
+        Tool("contact", "{peer}: 상대 peer(필명)의 사람 연락처(human 연결)를 찾아 알려 준다. 자동으로 보내지 않는다", _obj(peer=S), contact),
         Tool("solicit", "{targets: [필명...], text, data_json}: 고른 peer들에게 직접 요청을 한 번에 보낸다(data_json은 JSON 객체 문자열)",
              _obj(targets={"type": "array", "items": S}, text=S, data_json=S), solicit),
         Tool("publish_text", "{text}: 글을 원장에 먼저 등록한다. 결과 content_hash, publish_hash", _obj(text=S), publish_text),

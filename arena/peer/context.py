@@ -96,6 +96,13 @@ class AppContext:
     async def call(self, url: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None) -> dict:
         return await self._peer.call(url, msg, timeout, group=group, event=event)
 
+    async def call_peer(self, pub: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None) -> dict:
+        """reach a peer by a connection method its profile lists (a2a, else api)"""
+        return await self._peer.call_peer(pub, msg, timeout, group=group, event=event)
+
+    async def profile_of(self, pub: str) -> dict | None:
+        return await self._peer.profile_of(pub)
+
     async def solicit(self, targets: list[str], request: dict) -> dict:
         return await self._peer.solicit(targets, request)
 
