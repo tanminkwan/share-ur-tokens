@@ -312,3 +312,29 @@ sequenceDiagram
 ```
 
 실행 시간 상한: 실행 10은 세 경기에 비긴 판이 여럿 나오고 LLM 서비스 바쁨(429)으로 쉬는 시간이 겹쳐 900초 안에 끝나지 않았다. 인수 테스트의 상한을 1500초로 늘렸다(플랫폼 동작은 바뀌지 않음).
+
+
+## 14. 앱 배포 peer (5단계 마지막, 선택 기능)
+
+```mermaid
+sequenceDiagram
+    participant D as 앱 개발자(배포자)
+    participant S as 앱 배포 peer
+    participant ER as 참가 peer의 이벤트 배정기
+    participant O as 참가 peer의 소유자
+    D->>S: app_publish (원본 + 목록표 + 배포자 서명)
+    Note over S: 서명·해시 검사 후 보관
+    ER->>ER: 이벤트가 지정한 필수 앱이 없음
+    ER->>S: app_get (app_id, version)
+    S-->>ER: 목록표 + 서명 + 원본(또는 내려받기 주소)
+    ER->>ER: 코드만으로 검사: 원본 해시, 배포자 서명, 신뢰 배포자, 크기, id·버전
+    ER->>O: 앱 X(배포자 Y, 코드 해시 Z)를 설치할까요?
+    O-->>ER: 예
+    ER->>ER: 홈에 저장 → 불러오기 → id·버전·코드 해시 다시 확인 → 설치
+    ER->>ER: 그 이벤트를 다시 배정 (앱의 on_event)
+```
+
+- **나눈 책임**: 꾸러미 만들기·검사는 `arena/sdk/packaging.py`(개발자와 플랫폼이 같은 규칙을 씀), 배포 peer 역할은 `arena/peer/app_store.py`, 받아서 설치하기는 `arena/peer/app_install.py`. 이벤트 배정기는 설치기를 주입받아 쓰고(`EventRouter(settings, installer)`), 설치기가 없으면 지금처럼 "설치되어 있지 않음"으로 끝난다.
+- **원본 한 파일**: 꾸러미는 모듈 원본 한 파일이다. 불러올 때 앱마다 겹치지 않는 모듈 이름을 붙인다. 이벤트의 코드 해시(`app_fingerprint`)는 앱 클래스 원본의 해시이므로, 꾸러미 해시(파일 전체)와 따로 확인한다.
+- **배포 peer 찾기**: 지금은 설정(`ARENA_APP_STORE_URLS`)으로만 정한다. 배포 peer를 broker에서 찾는 일은 이후 과제다.
+- **격리 없음**: 설치한 코드는 peer 프로세스 안에서 그대로 실행된다. 승인 질문에 이 사실을 함께 보여 준다.
