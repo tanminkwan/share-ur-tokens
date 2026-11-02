@@ -173,6 +173,8 @@ class EventAssistant:
         except Exception:
             return []
         entries = r.get("entries", []) if r.get("ok") else []
+        if "sealed" in st.elements:
+            st.sealed_view = self._sealed_view(ctx, st, entries)
         for e in entries:
             if e["type"] == "assign":
                 st.assignments.update(e.get("subjects", {}))
@@ -186,6 +188,22 @@ class EventAssistant:
                     if isinstance(pub, str) and HEX64.fullmatch(pub) and pub not in st.roster:
                         st.roster.append(pub)
         return entries
+
+    def _sealed_view(self, ctx, st, entries) -> list[str]:
+        """for each sealed label of a subject I am assigned to: how many registered, and whether it may open (P6-D3)"""
+        asg = {e2: v for e in entries if e["type"] == "assign" for e2, v in e.get("subjects", {}).items()}
+        out = []
+        for subject, parties in asg.items():
+            if ctx.pub not in parties:
+                continue
+            labels = sorted({e["label"] for e in entries if e["type"] == "publish" and e.get("label")
+                             and (e["label"] == subject or e["label"].rpartition("-")[0] == subject and e["label"].rpartition("-")[2].isdigit())})
+            for label in labels:
+                regs = {e["author"] for e in entries if e["type"] == "publish" and e.get("label") == label} & set(parties)
+                opened = {e["author"] for e in entries if e["type"] == "reveal" and e.get("label") == label}
+                state = f"공개 {len(opened)}/{len(parties)}" if opened else ("공개 가능" if len(regs) == len(parties) else "공개 기다림")
+                out.append(f"봉인 {label}: 등록 {len(regs)}/{len(parties)}, {state}")
+        return out
 
     async def progress_lines(self, ctx, st) -> list[str]:
         """one short line per entry, the latest ones only; handles and short refs instead of 64-hex"""
@@ -468,7 +486,8 @@ class EventAssistant:
         mine = [k for k, v in st.assignments.items() if ctx.pub in v]
         assigned = (f"배정(원장): {'; '.join(f'{k}=' + '·'.join(h(p) for p in v) for k, v in st.assignments.items())} / "
                     f"내 배정: {', '.join(mine) or '없음'} / ") if st.assignments else ""
-        state = assigned + (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 원장에 공개한 내 라벨: {', '.join(revealed) or '없음'} / "
+        sealed = (" / ".join(st.sealed_view) + " / ") if st.sealed_view else ""
+        state = assigned + sealed + (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 원장에 공개한 내 라벨: {', '.join(revealed) or '없음'} / "
                  f"내가 보낸 공개값: {', '.join(sent) or '없음'} / 내가 받은 서명 요청: {', '.join(st.pending) or '없음'} / "
                  f"내가 제안한 공동 확인: {', '.join(st.proposals) or '없음'} / 참가 신청: {'함' if st.joined else '안 함'} / 닫힘: {st.closed} / "
                  f"아는 peer: {', '.join(h(p) for p in st.peers) or '없음'} / "

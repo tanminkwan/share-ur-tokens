@@ -4,7 +4,7 @@ from __future__ import annotations
 import numbers
 
 from .elements import LedgerElement, register_ledger_element
-from .types import events, roles_of
+from .types import assignments, events, roles_of
 
 
 # ---------------- intake: accepting submissions (P6-B) ----------------
@@ -79,3 +79,47 @@ def _evaluation_rule(chain, e, cfg, s) -> str | None:
 
 
 register_ledger_element(LedgerElement("evaluation", _evaluation_cfg, (_evaluation_rule,)))
+
+
+# ---------------- sealed: register everything first, then open (P6-D) ----------------
+def sealed_subject(chain, ev, label) -> str | None:
+    """the assigned subject a label belongs to: the subject itself, or subject-<number>; None when not sealed"""
+    asg = assignments(chain, ev)
+    if not isinstance(label, str):
+        return None
+    if label in asg:
+        return label
+    head, _, tail = label.rpartition("-")
+    return head if tail.isdigit() and head in asg else None
+
+
+def _sealed_cfg(cfg: dict) -> str | None:
+    return None if cfg == {} else "the sealed element takes no setting ({}): every assigned subject's labels are sealed"
+
+
+def _labelled(chain, ev, kind, label) -> list:
+    return [x for x in chain if x["type"] == kind and x["payload"].get("event_id") == ev and x["payload"].get("label") == label]
+
+
+def _sealed_rule(chain, e, cfg, s) -> str | None:
+    p = e["payload"]
+    if e["type"] not in ("publish", "reveal"):
+        return None
+    ev, label = p["event_id"], p.get("label")
+    subject = sealed_subject(chain, ev, label)
+    if subject is None:
+        return None
+    parties = assignments(chain, ev)[subject]
+    if e["type"] == "publish":
+        if p["author"] not in parties:
+            return f"sealed: only the parties assigned to {subject} register {label}"
+        if _labelled(chain, ev, "reveal", label):
+            return f"sealed: {label} is already open; no new registration"
+    else:
+        registered = {x["payload"]["author"] for x in _labelled(chain, ev, "publish", label)}
+        if not set(parties) <= registered:
+            return f"sealed: {label} opens only after every party assigned to {subject} registered it ({len(registered & set(parties))}/{len(parties)})"
+    return None
+
+
+register_ledger_element(LedgerElement("sealed", _sealed_cfg, (_sealed_rule,)))
