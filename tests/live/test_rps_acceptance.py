@@ -72,7 +72,8 @@ def ranking_from_ledger(chain, ev, players):
     return sorted(rec.values(), key=lambda r: (-r["rate"], -r["wins"], pen(r["pub"])))
 
 
-async def start_world(live, tmp):
+async def start_world(live, tmp, n_players=None):
+    n_players = N_PLAYERS if n_players is None else n_players
     procs, servers, msgs = [], [], []
     ports = {k: free_port() for k in ("broker", "rec", "api", "god")}
     reader = Identity.generate()
@@ -85,7 +86,7 @@ async def start_world(live, tmp):
     burl = f"http://127.0.0.1:{ports['broker']}"
     log, llm, base = EventLog(echo=True), build_llm(live), A2ATransport(live)
     peers = {}
-    for name, yes in [("host", True)] + [(f"p{i}", i < N_PLAYERS) for i in range(N_PLAYERS + 1)]:
+    for name, yes in [("host", True)] + [(f"p{i}", i < n_players) for i in range(n_players + 1)]:
         port = free_port()
         url = f"http://127.0.0.1:{port}"
         (tmp / name).mkdir()
