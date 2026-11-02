@@ -91,7 +91,11 @@ async def call_service(A, ctx, st, peer, op, input=None, subject=None):
            **({"event_id": st.event_id, "subject": subject, "recorder_url": st.recorder_url, "group_id": st.group_id} if subject else {})}
     r = await ctx.call_peer(pub, req, group=st.group_id, event=st.event_id)  # a2a or api, by the peer's profile
     if not r.get("ok"):
-        return {"ok": False, "error": r.get("error")}
+        err = str(r.get("error"))
+        if err.startswith("unknown op"):
+            offering = [A.handle(ctx, st, q) for q in await A.offering_op(ctx, op) if q != pub]
+            err += f" / op {op}를 프로필에 내건 peer: {', '.join(offering) or '찾지 못함'}"
+        return {"ok": False, "error": err}
     bad = verify_service_receipt(r, req, pub)
     if bad:
         return {"ok": False, "error": f"서비스 영수증이 맞지 않는다(코드 확인): {bad}"}

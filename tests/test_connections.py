@@ -83,3 +83,17 @@ def test_p6a8_the_service_runner_opens_the_configured_connection_methods(tmp_pat
     assert [c["kind"] for c in both.connections()] == ["a2a", "api"]
     with pytest.raises(ConfigError):
         service.build(dataclasses.replace(settings, service_peer_connections=["human"], **base), str(f))
+
+
+async def test_p6a8_a_call_to_a_peer_without_the_op_names_the_peers_that_offer_it(eco):
+    """live with-elements run 1: a player sent op judge to a peer that has no such op and got only "unknown op". The tool
+    now names the peers whose posted profile offers the op, so the agent can call the right one."""
+    svc = eco.peer("svc", apps=[ServiceApp(eco.s, spec())])
+    await svc.advertise()
+    ev = await joined(eco)
+    a = eco.a
+    a.llm.push("call_service", peer=eco.host.pen, op="add", input_json=json.dumps({"a": 1, "b": 2}))
+    await asst(a).feed(ctx(a), ev, "계산을 맡겨라")
+    await settle(a)
+    out = [x for x in asst(a).events[ev].transcript if "call_service 결과" in x][-1]
+    assert "unknown op" in out and svc.pen in out

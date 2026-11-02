@@ -127,6 +127,14 @@ class EventAssistant:
             return False
         return any(p["pub"] == pub and role in p.get("offers", []) for p in profiles)
 
+    async def offering_op(self, ctx, op: str) -> list[str]:
+        """public keys of the peers whose posted profile offers the service op (P6-A5)"""
+        try:
+            profiles = (await ctx.brokers[self.group].list_profiles(identity=ctx.identity)).get("profiles", [])
+        except Exception:
+            return []
+        return [p["pub"] for p in profiles if op in ((p.get("service") or {}).get("ops") or {})]
+
     async def resolve_peer(self, ctx, st, ref: str, need_url: bool = True) -> tuple[str | None, str | None]:
         """a peer named by handle, public key or address -> (public key, address); unknown handles are looked up on the broker"""
         ref = self.expand(st, str(ref))
