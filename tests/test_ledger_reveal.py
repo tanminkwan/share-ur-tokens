@@ -6,12 +6,14 @@ attached nothing, believed it had sent it, and both sides waited for each other)
   "공개:<handle>:<label>" is filled from a ledger reveal without any message
 - the assistant's state line says, from code, which of my labels are revealed on the ledger and to whom I sent reveals"""
 from arena.crypto import commit_hash
+from tests.fakes import ledger_id_of
 from tests.test_assistant import asst, ctx, eco, joined, settle  # noqa: F401  (eco is a fixture)
 from tests.test_reveal_carry import _commit
 
 
 def _reveal(p, ev, label, value, salt, commit):
-    payload = {"author": p.identity.pub, "label": label, "value": value, "salt": salt, "commit": commit, "event_id": ev, "group_id": "public"}
+    payload = {"author": p.identity.pub, "label": label, "value": value, "salt": salt, "commit": commit, "event_id": ev, "group_id": "public",
+               "ledger_id": ledger_id_of(p)}
     return payload, {p.identity.pub: p.identity.sign(payload)}
 
 

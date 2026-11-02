@@ -28,7 +28,7 @@ async def opened(e):
 
 def _attest(e, ev, kind, subject, signers):
     p = {"event_id": ev, "kind": kind, "subject": subject, "value": {}, "parties": [x.identity.pub for x in signers], "nonce": subject + kind,
-         "group_id": "public"}
+         "group_id": "public", "ledger_id": e.svc.ledger.chain[0]["hash"]}
     return p, {x.identity.pub: x.identity.sign(p) for x in signers}
 
 
@@ -45,10 +45,12 @@ async def test_p5c40_joint_confirmations_of_assigned_kinds_need_exactly_the_assi
     assert "assigned" in (await rec("attest", *_attest(eco, ev, "pair", "s2", [a, b])))["error"]          # subject never assigned
     assert (await rec("attest", *_attest(eco, ev, "pair", "s1", [b, a])))["ok"]                            # the assigned pair, any order
     # only the issuer assigns, a subject once, and only to contractors of the event
-    p = {"event_id": ev, "issuer": a.identity.pub, "subjects": {"s3": [a.identity.pub]}, "group_id": "public"}
+    p = {"event_id": ev, "issuer": a.identity.pub, "subjects": {"s3": [a.identity.pub]}, "group_id": "public",
+         "ledger_id": eco.svc.ledger.chain[0]["hash"]}
     assert "issuer" in (await rec("assign", p, {a.identity.pub: a.identity.sign(p)}))["error"]
     for subjects, word in (({"s1": [a.identity.pub, b.identity.pub]}, "already"), ({"s4": [stranger.identity.pub]}, "contract")):
-        p = {"event_id": ev, "issuer": host.identity.pub, "subjects": subjects, "group_id": "public"}
+        p = {"event_id": ev, "issuer": host.identity.pub, "subjects": subjects, "group_id": "public",
+             "ledger_id": eco.svc.ledger.chain[0]["hash"]}
         assert word in (await rec("assign", p, {host.identity.pub: host.identity.sign(p)}))["error"]
 
 
@@ -90,7 +92,8 @@ async def test_p5c42_ledger_wake_ups_only_for_what_concerns_me(eco):
     assert not [x for x in asst(a).events[ev].transcript[n_a:] if "[원장 새 기록]" in x]
     assert not [x for x in asst(host).events[ev].transcript[n_h:] if "[원장 새 기록]" in x]
     # a joint confirmation wakes the host (results are what the host collects)
-    p = {"event_id": ev, "kind": "pair", "subject": "s2", "value": {}, "parties": [b.identity.pub], "nonce": "n", "group_id": "public"}
+    p = {"event_id": ev, "kind": "pair", "subject": "s2", "value": {}, "parties": [b.identity.pub], "nonce": "n", "group_id": "public",
+         "ledger_id": eco.svc.ledger.chain[0]["hash"]}
     assert (await eco.svc.record("attest", p, {b.identity.pub: b.identity.sign(p)}))["ok"]
     await asst(host).ledger_check(ctx(host))
     await settle(host)

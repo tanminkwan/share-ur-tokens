@@ -10,7 +10,8 @@ from typing import Callable, Iterable
 
 from ..config import Settings
 from ..crypto import Identity, pen_name, verify
-from ..ledger import JsonlStore, Ledger, LedgerStore, contribution, empty_record, public_view
+from ..ledger import JsonlStore, Ledger, LedgerCorrupt, LedgerStore, contribution, empty_record, public_view
+from ..ledger.types import current_keys
 
 
 class RecorderService:
@@ -25,17 +26,62 @@ class RecorderService:
             with open(access_log_path, encoding="utf-8") as f:
                 self.access_log.extend(json.loads(line) for line in f if line.strip())
         self._lock = asyncio.Lock()
+        self.key_file: str | None = None
 
     @classmethod
     def build(cls, settings: Settings, identity: Identity, store: LedgerStore, readers: Iterable[str] | None = None,
-              clock: Callable[[], float] = time.time, access_log_path: str | None = None) -> "RecorderService":
+              clock: Callable[[], float] = time.time, access_log_path: str | None = None, key_file: str | None = None) -> "RecorderService":
         ledger = Ledger(identity, store, settings, clock=clock)
-        return cls(settings, ledger, settings.recorder_readers if readers is None else readers, clock=clock, access_log_path=access_log_path)
+        if ledger.chain and current_keys(ledger.chain)["recorder"] != identity.pub:
+            raise LedgerCorrupt("this key is not the ledger's current recorder key (follow key_rotate from the genesis)")
+        svc = cls(settings, ledger, settings.recorder_readers if readers is None else readers, clock=clock, access_log_path=access_log_path)
+        svc.key_file = key_file
+        return svc
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "RecorderService":
         identity = Identity.load_or_create(settings.recorder_key_file)
-        return cls.build(settings, identity, JsonlStore(settings.recorder_ledger_file), access_log_path=settings.recorder_access_log_file)
+        return cls.build(settings, identity, JsonlStore(settings.recorder_ledger_file), access_log_path=settings.recorder_access_log_file,
+                         key_file=settings.recorder_key_file)
+
+    # ---- key succession (P5-G2) ----
+    def rotation_request(self, role: str, new_pub: str) -> dict:
+        """what the old key, the new key (and god, for the recorder) sign to hand a key over"""
+        keys, chain = current_keys(self.ledger.chain), self.ledger.chain
+        p = {"role": role, "old": keys[role], "new": new_pub, "group_id": chain[0]["payload"]["group_id"],
+             "ledger_id": chain[0]["hash"], "nonce": os.urandom(8).hex()}
+        if role == "recorder":
+            p["god"] = keys["god"]
+        return p
+
+    async def rotate_key(self, new: Identity, payload: dict, god_sig: str) -> dict:
+        """hand the recorder key over: sign as the old and the new key, record with god's approval, then seal with the new key"""
+        if payload.get("role") != "recorder" or payload.get("old") != self.identity.pub or payload.get("new") != new.pub:
+            return {"ok": False, "error": "not a handover of this recorder's key"}
+        sigs = {self.identity.pub: self.identity.sign(payload), new.pub: new.sign(payload), payload.get("god", ""): god_sig}
+        async with self._lock:
+            entry, err = self.ledger.propose("key_rotate", payload, sigs)
+            if err:
+                return {"ok": False, "error": err}
+            old = self.identity
+            self.ledger.identity = self.identity = new
+        if self.key_file:
+            old.save(f"{self.key_file}.retired-{entry['seq']}")
+            new.save(self.key_file)
+        return {"ok": True, "seq": entry["seq"], "hash": entry["hash"], "seal": entry["seal"], "recorder": new.pub}
+
+    def link(self, child_ledger_id: str) -> dict:
+        """public: the entry by which a community chain linked its start into this chain (P5-G9)"""
+        e = next((x for x in self.ledger.chain if x["type"] == "chain_link" and x["payload"]["child_ledger_id"] == child_ledger_id), None)
+        return {"ok": True, "link": e} if e else {"ok": False, "error": "no chain_link for this ledger"}
+
+    def trust(self) -> dict:
+        """public: what anyone needs to prove the current keys from the root of trust (P5-G5)"""
+        chain = self.ledger.chain
+        if not chain or chain[0]["type"] != "genesis":
+            return {"ok": False, "error": "this ledger was not begun by a genesis"}
+        return {"ok": True, "ledger_id": chain[0]["hash"], "genesis": chain[0], "recorder": self.identity.pub,
+                "rotations": [e for e in chain if e["type"] == "key_rotate"]}
 
     async def record(self, kind: str, payload: dict, sigs: dict) -> dict:
         async with self._lock:
@@ -96,6 +142,8 @@ class RecorderService:
 
     def health(self) -> dict:
         s = self.settings
+        chain = self.ledger.chain
         return {"ok": True, "name": s.recorder_name, "pub": self.identity.pub,
+                "ledger_id": chain[0]["hash"] if chain and chain[0]["type"] == "genesis" else None,
                 "pen_name": pen_name(self.identity.pub, s.pen_name_prefix, s.pen_name_len),
                 "length": len(self.ledger.chain), "head": self.ledger.head()}

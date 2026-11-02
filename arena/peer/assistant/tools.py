@@ -29,7 +29,14 @@ class Tool:
 
 
 # ---------------- implementations ----------------
+async def ledger_tag(ctx, st) -> dict:
+    """{"ledger_id": ...} for payloads recorded on this event's ledger (binds the signature to that ledger)"""
+    lid = await ctx.ledger_id(st.recorder_url)
+    return {"ledger_id": lid} if lid else {}
+
+
 async def _record(A, ctx, st, kind, payload):
+    payload = {**payload, **(await ledger_tag(ctx, st))}
     r = await ctx.recorder(st.recorder_url).record(kind, payload, {ctx.pub: ctx.sign(payload)})
     if r.get("ok"):
         ctx.receipts.keep(r, kind, payload, expected_recorder=st.recorder_pub)
@@ -59,7 +66,7 @@ async def contract(A, ctx, st, role, peer):
     if peer_pub not in st.applicants:  # enforced by code: only peers whose signed join carried this event's rules hash
         return {"ok": False, "error": f"참가 신청한 peer만 계약할 수 있다(신청자: {len(st.applicants)}명)"}
     c = {"event_id": st.event_id, "role": role, "issuer": ctx.pub, "contractor": peer_pub, "nonce": nonce(peer_pub, role),
-         "group_id": st.group_id, "rules_hash": st.rules_hash}
+         "group_id": st.group_id, "rules_hash": st.rules_hash, **(await ledger_tag(ctx, st))}
     eng = await ctx.call(peer_url, {"op": "engage", "role": role, "contract": c, "request": {"event_id": st.event_id, "rules_hash": st.rules_hash}},
                          group=st.group_id, event=st.event_id)
     if not eng.get("ok"):
@@ -196,7 +203,7 @@ async def propose_attest(A, ctx, st, kind, subject, value, parties):
     if refused:  # what the ledger would refuse is refused here, before anyone is asked to sign
         return {"error": refused}
     p = {"event_id": st.event_id, "kind": kind, "subject": subject, "value": value, "parties": pubs, "nonce": nonce(kind, subject),
-         "group_id": st.group_id}
+         "group_id": st.group_id, **(await ledger_tag(ctx, st))}
     if pubs == [ctx.pub]:
         r = await _record(A, ctx, st, "attest", p)
         return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error")}

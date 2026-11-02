@@ -35,6 +35,12 @@ def build_recorder_app(svc: RecorderService) -> Starlette:
     async def event_entries(r: Request):
         return reply(svc.event_entries(r.path_params["event_id"]), fail_status=404)
 
+    async def trust(_):
+        return reply(svc.trust(), fail_status=404)
+
+    async def link(r: Request):
+        return reply(svc.link(r.path_params["ledger_id"]), fail_status=404)
+
     async def health(_):
         return JSONResponse(svc.health())
 
@@ -46,5 +52,7 @@ def build_recorder_app(svc: RecorderService) -> Starlette:
         Route("/access-log", guarded(access_log), methods=["GET"]),
         Route("/track/{pub}", guarded(track), methods=["GET"]),
         Route("/events/{event_id}", guarded(event_entries), methods=["GET"]),
+        Route("/trust", guarded(trust), methods=["GET"]),
+        Route("/links/{ledger_id}", guarded(link), methods=["GET"]),
         Route("/health", guarded(health), methods=["GET"]),
     ])

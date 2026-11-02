@@ -26,8 +26,9 @@ async def announce_event(ctx, *, group: str, title: str, kind: str, rules: str, 
     rec = recorder or (await broker.find("기록", role="record", identity=ctx.identity))["peers"][0]
     ev = "ev-" + _nonce(title)
     rules_hash = h(rules.encode())
+    lid = await ctx.ledger_id(rec["recorder_url"])
     decl = {"event_id": ev, "issuer": ctx.pub, "kind": kind, "policy": policy, "approvers": [], "group_id": gid, "rules_hash": rules_hash,
-            "mode": mode, "apps": apps}
+            "mode": mode, "apps": apps, **({"ledger_id": lid} if lid else {})}
     r = await ctx.recorder(rec["recorder_url"]).record("event", decl, {ctx.pub: ctx.sign(decl)})
     if not r.get("ok"):
         raise RuntimeError(f"event declaration refused: {r.get('error')}")
@@ -134,6 +135,10 @@ class EventRouter(BaseApp):
         mode, apps = n.get("mode", "assistant"), n.get("apps", [])
         if not valid_run(mode, apps):
             ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 실행 방식이나 앱 목록이 잘못됨 → 무시")
+            return
+        trust = await ctx.recorder_trust(n["recorder_url"])
+        if not trust["ok"] or (trust["anchored"] and n.get("recorder_pub") != trust["recorder"]):
+            ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 기록자가 뿌리 신뢰로 증명되지 않음({trust.get('why') or '공지의 기록자 키가 지금 키와 다름'}) → 무시")
             return
         v = await ctx.recorder(n["recorder_url"]).verify(n["event_hash"])
         rules_ok = "rules" not in n or v.get("rules_hash") == h(n["rules"].encode())

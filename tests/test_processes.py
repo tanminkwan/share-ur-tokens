@@ -185,13 +185,21 @@ async def test_p5a18_genesis_process_god_creates_broker_and_recorder(tmp_path, p
     assert (await B.health())["group_id"] == "public" and (await B.health())["closed"] is False
     rec_hit = (await B.find("기록", role="record"))["peers"][0]
     R = RecorderClient(rec_hit["recorder_url"], s)
+    # P5-G7: the genesis leaves the root values to publish; they prove the recorder's trust document
+    from arena.ledger.trust import verify_trust
+    anchor = (tmp_path / "genesis" / "trust-anchor.md").read_text(encoding="utf-8")
+    doc = await R.trust()
+    assert f"ARENA_TRUST_GENESIS_HASH={doc['ledger_id']}" in anchor
+    god_line = next(x for x in anchor.splitlines() if x.startswith("ARENA_TRUST_GOD_PUB="))
+    assert verify_trust(doc, doc["ledger_id"], god_line.split("=", 1)[1])[0]
     snap = (await t.call(gurl, dict({"op": "god_snapshot"}, **sign_message(viewer, "god_snapshot"))))["snapshot"]
     god_pub = snap["stats"]["genesis"]["god"]
     assert snap["stats"]["entries"] == 1 and snap["stats"]["by_type"] == {"genesis": 1} and snap["integrity"]["agree"]
     assert snap["stats"]["genesis"]["recorder"] == rec_hit["pub"] and snap["stats"]["genesis"]["broker"] == (await B.health())["pub"]
     # a newcomer founds its own group and records in both groups
     me, cast = Identity.generate(), Cast()
-    g = {"group_id": "g-new", "founder": me.pub, "closed": False, "brokers": []}
+    cast.ledger_id = (await R.health())["ledger_id"]  # every payload names the ledger it is signed for (P5-G4)
+    g = {"group_id": "g-new", "founder": me.pub, "closed": False, "brokers": [], "ledger_id": cast.ledger_id}
     assert (await R.record("group", g, {me.pub: me.sign(g)}))["ok"]
     cast.group = "public"
     assert (await R.record(*cast.publish(ev=None)))["ok"]
@@ -246,3 +254,31 @@ async def test_p5c22_peer_moves_to_the_secondary_broker_process(tmp_path, procs)
     assert got["ok"] and [n["notice_id"] for n in got["notices"]] == ["n1"]
     assert (await fo.health())["name"] == "B"
     assert [p["pub"] for p in (await fo.find("기록", role="record"))["peers"]] == [me.pub]
+
+
+async def test_p5g9_a_community_genesis_process_links_into_the_original_chain(tmp_path, procs):
+    """two genesis processes: the second is a community starting its own ledger, linked into the first (the original)"""
+    from arena.ledger.trust import verify_linked
+    ports = {k: free_port() for k in ("broker", "rec", "api", "god", "broker2", "rec2", "api2", "god2")}
+    root_env = make_env(tmp_path, ARENA_GENESIS_DIR=str(tmp_path / "root"), ARENA_GENESIS_BROKER_PORT=ports["broker"],
+                        ARENA_GENESIS_RECORDER_PORT=ports["rec"], ARENA_GENESIS_RECORDER_API_PORT=ports["api"], ARENA_GENESIS_GOD_PORT=ports["god"],
+                        ARENA_RECORDER_REQUIRE_GROUP="true")
+    a = Proc("arena.genesis", root_env, tmp_path)
+    procs.append(a)
+    a.wait_up(f"http://127.0.0.1:{ports['god']}", path="/.well-known/agent-card.json")
+    root_api = f"http://127.0.0.1:{ports['api']}"
+    child_env = make_env(tmp_path, ARENA_GENESIS_DIR=str(tmp_path / "child"), ARENA_GENESIS_BROKER_PORT=ports["broker2"],
+                         ARENA_GENESIS_RECORDER_PORT=ports["rec2"], ARENA_GENESIS_RECORDER_API_PORT=ports["api2"], ARENA_GENESIS_GOD_PORT=ports["god2"],
+                         ARENA_RECORDER_REQUIRE_GROUP="true", ARENA_GENESIS_PARENT_RECORDER_URL=root_api, ARENA_GENESIS_BROKER_NAME="team-a")
+    b = Proc("arena.genesis", child_env, tmp_path)
+    procs.append(b)
+    b.wait_up(f"http://127.0.0.1:{ports['god2']}", path="/.well-known/agent-card.json")
+    s = Settings.load(env=root_env, dotenv_path=None)
+    root, child = RecorderClient(root_api, s), RecorderClient(f"http://127.0.0.1:{ports['api2']}", s)
+    rdoc, cdoc = await root.trust(), await child.trust()
+    assert cdoc["genesis"]["payload"]["parent"] == {"ledger_id": rdoc["ledger_id"], "recorder_url": root_api}
+    link = (await root.link(cdoc["ledger_id"]))["link"]
+    assert link["payload"]["name"] == "team-a"
+    ok, why, keys = verify_linked(cdoc, rdoc, link, rdoc["ledger_id"], rdoc["genesis"]["payload"]["god"])
+    assert ok and keys["recorder"] == cdoc["recorder"], why
+    assert "연결된 원래 체인" in (tmp_path / "child" / "trust-anchor.md").read_text(encoding="utf-8")

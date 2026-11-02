@@ -21,11 +21,15 @@ class Cast:
     def __init__(self):
         self.author, self.issuer, self.judge, self.keeper, self.approver, self.other = (Identity.generate() for _ in range(6))
         self.ev, self.group = "ev-1", GROUP
+        self.ledger_id = None  # set it to write into a ledger begun by a genesis (P5-G4)
+
+    def _tag(self) -> dict:
+        return {"group_id": self.group, **({"ledger_id": self.ledger_id} if self.ledger_id else {})}
 
     def event(self, ev=None, policy=None, approvers=(), issuer=None, sign_by=None):
         i = issuer or self.issuer
         p = {"event_id": ev or self.ev, "issuer": i.pub, "kind": "test", "policy": POLICY if policy is None else policy,
-             "approvers": [a.pub for a in approvers], "group_id": self.group}
+             "approvers": [a.pub for a in approvers], **self._tag()}
         sigs = {i.pub: i.sign(p)}
         for a in (approvers if sign_by is None else sign_by):
             sigs[a.pub] = a.sign(p)
@@ -33,7 +37,7 @@ class Cast:
 
     def publish(self, content="doc A", author=None, ev="__default__"):
         a = author or self.author
-        p = {"author": a.pub, "content_hash": h(canon({"c": content})), "group_id": self.group}
+        p = {"author": a.pub, "content_hash": h(canon({"c": content})), **self._tag()}
         if ev is not None:
             p["event_id"] = self.ev if ev == "__default__" else ev
         return "publish", p, {a.pub: a.sign(p)}
@@ -41,30 +45,30 @@ class Cast:
     def share(self, content="doc A", provider=None, consumer=None, nonce="n1"):
         pr, co = provider or self.author, consumer or self.issuer
         p = {"provider": pr.pub, "consumer": co.pub, "content_hash": h(canon({"c": content})), "terms": "t", "nonce": nonce,
-             "group_id": self.group}
+             **self._tag()}
         return "share", p, {pr.pub: pr.sign(p), co.pub: co.sign(p)}
 
     def contract(self, role="judge", contractor=None, nonce="c1", ev=None, issuer=None):
         c, i = contractor or self.judge, issuer or self.issuer
-        p = {"event_id": ev or self.ev, "role": role, "issuer": i.pub, "contractor": c.pub, "nonce": nonce, "group_id": self.group}
+        p = {"event_id": ev or self.ev, "role": role, "issuer": i.pub, "contractor": c.pub, "nonce": nonce, **self._tag()}
         return "contract", p, {i.pub: i.sign(p), c.pub: c.sign(p)}
 
     def close(self, ev=None, issuer=None, result_hash=None):
         i = issuer or self.issuer
-        p = {"event_id": ev or self.ev, "issuer": i.pub, "group_id": self.group, **({"result_hash": result_hash} if result_hash else {})}
+        p = {"event_id": ev or self.ev, "issuer": i.pub, **self._tag(), **({"result_hash": result_hash} if result_hash else {})}
         return "close", p, {i.pub: i.sign(p)}
 
     def attest(self, kind="match", subject="m1", value=None, parties=None, nonce="a1", ev="__default__", sign_by=None):
         ps = parties if parties is not None else [self.judge, self.keeper]
         p = {"kind": kind, "subject": subject, "value": value if value is not None else {"winner": "x"},
-             "parties": [x.pub for x in ps], "nonce": nonce, "group_id": self.group}
+             "parties": [x.pub for x in ps], "nonce": nonce, **self._tag()}
         if ev is not None:
             p["event_id"] = self.ev if ev == "__default__" else ev
         return "attest", p, {x.pub: x.sign(p) for x in (ps if sign_by is None else sign_by)}
 
     def feedback(self, verdict="score", evaluator=None, content="doc A", ev="__default__", **extra):
         e = evaluator or self.judge
-        p = {"evaluator": e.pub, "content_hash": h(canon({"c": content})), "verdict": verdict, "group_id": self.group, **extra}
+        p = {"evaluator": e.pub, "content_hash": h(canon({"c": content})), "verdict": verdict, **self._tag(), **extra}
         if ev is not None:
             p["event_id"] = self.ev if ev == "__default__" else ev
         return "feedback", p, {e.pub: e.sign(p)}
@@ -367,7 +371,8 @@ def bare(tmp_path, clock):
     """a strict ledger before the genesis"""
     from arena.config import Settings
     from tests.conftest import make_env
-    s = Settings.load(env=make_env(tmp_path, ARENA_RECORDER_REQUIRE_GROUP="true"), dotenv_path=None)
+    # these tests are about groups and the genesis; the ledger id inside payloads is tested in test_trust.py
+    s = Settings.load(env=make_env(tmp_path, ARENA_RECORDER_REQUIRE_GROUP="true", ARENA_RECORDER_REQUIRE_LEDGER_ID="false"), dotenv_path=None)
     return Ledger(Identity.generate(), MemoryStore(), s, clock=clock)
 
 

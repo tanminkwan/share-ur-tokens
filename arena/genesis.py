@@ -20,6 +20,9 @@ from .config import ConfigError, Settings
 from .crypto import Identity
 from .events import EventLog
 from .ledger import JsonlStore
+from .ledger.trust import anchor_block, link_to_parent
+from .ledger.types import current_keys
+from .recorder.client import RecorderClient
 from .llm import NoLLM, build_llm
 from .peer.area import LocalFolderArea
 from .peer.god_role import GodRole
@@ -34,14 +37,24 @@ from .serve import serve_background
 GENESIS_GROUP_NAME = "public"  # how peers refer to the genesis group among their broker groups
 
 
-def genesis_payload(settings: Settings, god_pub: str, broker_pub: str, recorder_pub: str) -> dict:
-    return {"group_id": settings.genesis_group_id, "god": god_pub, "broker": broker_pub, "recorder": recorder_pub}
+def genesis_payload(settings: Settings, god_pub: str, broker_pub: str, recorder_pub: str, parent: dict | None = None) -> dict:
+    """entry 0. A community that starts its own ledger names the original chain it links into (P5-G9)"""
+    return {"group_id": settings.genesis_group_id, "god": god_pub, "broker": broker_pub, "recorder": recorder_pub,
+            **({"parent": parent} if parent else {})}
 
 
-async def record_genesis(recorder, god: Identity, settings: Settings, broker_pub: str, recorder_pub: str) -> dict:
+async def record_genesis(recorder, god: Identity, settings: Settings, broker_pub: str, recorder_pub: str, parent: dict | None = None) -> dict:
     """god signs entry 0 on a recorder (RecorderAPI client or RecorderService)"""
-    p = genesis_payload(settings, god.pub, broker_pub, recorder_pub)
+    p = genesis_payload(settings, god.pub, broker_pub, recorder_pub, parent)
     return await recorder.record("genesis", p, {god.pub: god.sign(p)})
+
+
+def write_anchor(settings: Settings, chain: list[dict]) -> str:
+    """the root values to publish outside the ledger (P5-G7): <genesis dir>/trust-anchor.md"""
+    path = os.path.join(settings.genesis_dir, "trust-anchor.md")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(anchor_block(chain))
+    return path
 
 
 @dataclass
@@ -73,17 +86,32 @@ async def start(settings: Settings, viewers=None) -> Genesis:
     broker = BrokerService(settings, Identity.load_or_create(os.path.join(d, "broker.key")), BM25Searcher(settings.bm25_k1, settings.bm25_b),
                            HttpNeighbors(settings.neighbor_timeout_sec), name=settings.genesis_broker_name, neighbors=[],
                            group_id=settings.genesis_group_id, store=FileBrokerStore(os.path.join(d, "broker-state.json")))
-    rec_id = Identity.load_or_create(os.path.join(d, "recorder.key"))
+    rec_key = os.path.join(d, "recorder.key")
+    rec_id = Identity.load_or_create(rec_key)
     svc = RecorderService.build(settings, rec_id, JsonlStore(os.path.join(d, "ledger.jsonl")), readers=[god_id.pub, *settings.recorder_readers],
-                                access_log_path=os.path.join(d, "recorder-access.jsonl"))
+                                access_log_path=os.path.join(d, "recorder-access.jsonl"), key_file=rec_key)
+    parent_client = RecorderClient(settings.genesis_parent_recorder_url, settings) if settings.genesis_parent_recorder_url else None
     if not svc.ledger.chain:
-        r = await record_genesis(svc, god_id, settings, broker.identity.pub, rec_id.pub)
+        parent = None
+        if parent_client:  # a community starting its own ledger: its start is linked into the original chain (P5-G9)
+            pt = await parent_client.trust()
+            if not pt.get("ok"):
+                raise RuntimeError(f"parent recorder: {pt.get('error')}")
+            parent = {"ledger_id": pt["ledger_id"], "recorder_url": settings.genesis_parent_recorder_url}
+        r = await record_genesis(svc, god_id, settings, broker.identity.pub, rec_id.pub, parent)
         if not r["ok"]:
             raise RuntimeError(f"genesis failed: {r['error']}")
     else:
-        g = svc.ledger.chain[0]
-        if g["type"] != "genesis" or g["payload"] != genesis_payload(settings, god_id.pub, broker.identity.pub, rec_id.pub):
-            raise ConfigError("the stored ledger was not begun by this god, broker and recorder")
+        g, keys = svc.ledger.chain[0], current_keys(svc.ledger.chain)
+        if g["type"] != "genesis" or g["payload"].get("broker") != broker.identity.pub or keys["god"] != god_id.pub:
+            raise ConfigError("the stored ledger was not begun by this god and broker (keys follow key_rotate from the genesis)")
+    if parent_client and not (await parent_client.link(svc.ledger.chain[0]["hash"])).get("ok"):
+        if svc.ledger.chain[0]["payload"]["recorder"] != rec_id.pub:
+            raise RuntimeError("this ledger is not linked into the original chain and its first recorder key is already retired")
+        r = await link_to_parent(parent_client, god_id, rec_id, svc.ledger.chain, settings.genesis_broker_name)
+        if not r.get("ok"):
+            raise RuntimeError(f"could not link this ledger into the original chain: {r.get('error')}")
+    anchor_file = write_anchor(settings, svc.ledger.chain)
     urls = {"broker": url(settings.genesis_broker_port), "recorder": url(settings.genesis_recorder_port),
             "recorder_api": url(settings.genesis_recorder_api_port), "god": url(settings.genesis_god_port)}
     try:
@@ -108,7 +136,8 @@ async def start(settings: Settings, viewers=None) -> Genesis:
     world.servers.append(await serve_background(god.a2a_app(), host, settings.genesis_god_port))
     for p in (recorder, god):
         await p.start()
-    log.emit("genesis", god.pen, "제네시스: " + json.dumps({"god": god_id.pub, "broker": broker.identity.pub, "recorder": rec_id.pub, **urls}))
+    log.emit("genesis", god.pen, "제네시스: " + json.dumps({"god": god_id.pub, "broker": broker.identity.pub, "recorder": rec_id.pub,
+                                                        "ledger_id": svc.ledger.chain[0]["hash"], "anchor": anchor_file, **urls}))
     return world
 
 

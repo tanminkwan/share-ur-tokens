@@ -45,6 +45,14 @@ def r_group(chain, e, now, s):
         return f"unknown group: {gid}"
 
 
+def r_ledger_id(chain, e, now, s):
+    """in a ledger begun by a genesis, every later payload names this ledger (its genesis hash), inside what is signed"""
+    if not getattr(s, "recorder_require_ledger_id", False) or not chain or chain[0]["type"] != "genesis":
+        return None
+    if e["payload"].get("ledger_id") != chain[0]["hash"]:
+        return "ledger_id missing or not this ledger's (the genesis hash)"
+
+
 def r_shape(chain, e, now, s):
     t = ENTRY_TYPES[e["type"]]
     return t.shape(chain, e, now, s) if t.shape else None
@@ -83,7 +91,7 @@ def r_nonce(chain, e, now, s):
         return "replay (nonce already used)"
 
 
-GENERIC = (r_type, r_prev, r_group, r_shape, r_signatures, r_time, r_event_ref, r_known_content, r_nonce)
+GENERIC = (r_type, r_prev, r_group, r_ledger_id, r_shape, r_signatures, r_time, r_event_ref, r_known_content, r_nonce)
 
 
 def check(chain: list[dict], e: dict, now: float, settings) -> str | None:

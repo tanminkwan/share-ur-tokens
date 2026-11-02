@@ -13,7 +13,7 @@ from arena.peer.track import meets, track_of
 from arena.signing import sign_message
 from tests.fakes import FakeOwner, HashEmbedder
 from tests.motif.doubles import OPEN, REVIEW, AcceptRole, Judge
-from tests.motif.flow import apply, check_notice, open_event, review_and_adopt
+from tests.motif.flow import lid, apply, check_notice, open_event, review_and_adopt
 from tests.motif.test_motif_memory import SDS, MemoryWorld
 
 
@@ -50,10 +50,11 @@ async def world(tmp_path, settings):
     for p in (w.rev2, w.search):
         await p.advertise()
     # an earlier event in which the experienced reviewer already served
-    past = {"event_id": "past", "issuer": w.org.identity.pub, "kind": "earlier", "policy": {}, "approvers": [], "group_id": "g-review"}
     R = w.org.recorder("mem://rec/recorder")
+    L = await lid(R)
+    past = {"event_id": "past", "issuer": w.org.identity.pub, "kind": "earlier", "policy": {}, "approvers": [], "group_id": "g-review", **L}
     assert (await R.record("event", past, {w.org.identity.pub: w.org.sign(past)}))["ok"]
-    c = {"event_id": "past", "role": "review", "issuer": w.org.identity.pub, "contractor": w.rev.identity.pub, "nonce": "past-1", "group_id": "g-review"}
+    c = {"event_id": "past", "role": "review", "issuer": w.org.identity.pub, "contractor": w.rev.identity.pub, "nonce": "past-1", "group_id": "g-review", **L}
     assert (await R.record("contract", c, {w.org.identity.pub: w.org.sign(c), w.rev.identity.pub: w.rev.sign(c)}))["ok"]
     await w.search_role.sync(w.search)
     return w

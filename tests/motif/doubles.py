@@ -91,7 +91,8 @@ class Judge(PeerApp):
         for r in d["reviews"]:
             if r["id"] in full:
                 p = {"evaluator": ctx.identity.pub, "event_id": msg["event_id"], "content_hash": full[r["id"]], "verdict": "review",
-                     "score": float(r["score"]), "comment_hash": h(r["comment"].encode()), "group_id": msg["group_id"]}
+                     "score": float(r["score"]), "comment_hash": h(r["comment"].encode()), "group_id": msg["group_id"],
+                     **({"ledger_id": msg["ledger_id"]} if msg.get("ledger_id") else {})}
                 out.append({"payload": p, "sig": ctx.sign(p), "comment": r["comment"]})
         return {"ok": True, "receipts": {k: ctx.sign(p) for k, p in msg["share_payloads"].items()}, "reviews": out}
 

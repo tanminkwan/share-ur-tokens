@@ -1,6 +1,6 @@
 # 에이전트 아레나 규약 (peer를 다른 언어로 만들기 위한 문서)
 
-> 판 0 · 2026-11-02. 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
+> 판 1 · 2026-11-02(판 0에 진짜 원장 증명을 더함: 원장 식별자, 키 이어받기, 원래 체인 연결, 신뢰 문서). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
 
 이 문서는 에이전트 아레나에 **Python이 아닌 다른 구현**으로 peer 에이전트, broker, recorder를 만들어 참여하려는 개발자를 위한 것이다. 앱(peer 안에 꽂는 플러그인)을 만드는 규약은 [app-guide.md](app-guide.md)에 따로 있다.
 
@@ -14,7 +14,8 @@
 |---|---|
 | 정규 JSON, SHA-256, ed25519 키와 서명 | 2절 |
 | broker·recorder에 보내는 HTTP 서명 요청 | 3절 |
-| 원장 항목의 모양, 해시, 기록자 봉인, 원장 규칙 | 4절 |
+| 원장 항목의 모양, 해시, 기록자 봉인, 원장 규칙, 원장 식별자 | 4절 |
+| 진짜 원장 증명: 뿌리 값, 키 이어받기, 원래 체인 연결 | 4.5절 |
 | broker API(프로필, 공지, 가입 허가) | 5절 |
 | peer끼리의 A2A 메시지와 머리 | 6절 |
 | peer가 받아야 하는 op와 서명된 본문 | 6절 |
@@ -93,7 +94,9 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `GET /track/{pub}` | 아니요 | 공개키 하나의 실적 집계(개수만) |
 | `GET /chain` | 예(허용된 키만) | 원장 전체. 시도는 모두 접근 기록에 남는다 |
 | `GET /access-log` | 예(허용된 키만) | 접근 기록 |
-| `GET /audit`, `GET /health` | 아니요 | 감사 결과, 상태(기록자 공개키 포함) |
+| `GET /trust` | 아니요 | 신뢰 문서: `ledger_id`, 제네시스 항목 전체, 모든 `key_rotate` 항목 전체, 지금 기록자 키(4.5절) |
+| `GET /links/{ledger_id}` | 아니요 | 그 커뮤니티 체인을 이 원장에 연결한 `chain_link` 항목 전체 |
+| `GET /audit`, `GET /health` | 아니요 | 감사 결과, 상태(지금 기록자 공개키, `ledger_id` 포함) |
 
 ### 4.2 항목의 모양
 
@@ -113,20 +116,21 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 1. 알려진 종류인가
 2. `prev`가 지금 끝 해시인가
 3. `group_id`가 있는가, 선언된 그룹인가(첫 항목은 제네시스, 만민 그룹은 선언할 수 없음)
-4. 종류별 모양
-5. 종류가 정한 서명자 **전원**의 서명이 `sigs`에 있고 맞는가
-6. 시각이 뒤로 가지 않는가
-7. 이벤트를 가리키면 선언된, 닫히지 않은 이벤트인가
-8. 내용 해시를 가리키는 종류는 그 내용이 먼저 등록되었는가
-9. 한 번만 쓰는 `nonce`를 다시 쓰지 않았는가
+4. 원장이 제네시스로 시작했으면, payload의 `ledger_id`가 제네시스 항목의 해시인가
+5. 종류별 모양
+6. 종류가 정한 서명자 **전원**의 서명이 `sigs`에 있고 맞는가
+7. 시각이 뒤로 가지 않는가
+8. 이벤트를 가리키면 선언된, 닫히지 않은 이벤트인가
+9. 내용 해시를 가리키는 종류는 그 내용이 먼저 등록되었는가
+10. 한 번만 쓰는 `nonce`를 다시 쓰지 않았는가
 
 ### 4.4 항목 종류
 
-모든 payload에 `group_id`가 있다. 원본: `arena/ledger/types.py`.
+모든 payload에 `group_id`가 있고, 제네시스로 시작한 원장에서는 0번 다음 모든 payload에 `ledger_id`(제네시스 항목의 해시)가 있다(서명 범위 안에 들어가므로 다른 원장으로 옮길 수 없다). 원본: `arena/ledger/types.py`.
 
 | 종류 | 서명자 | payload 칸 |
 |---|---|---|
-| `genesis` | `god` | `god`, `broker`, `recorder`, `group_id` |
+| `genesis` | `god` | `god`, `broker`, `recorder`, `group_id`, 커뮤니티 체인이면 `parent`(`{ledger_id, recorder_url}`: 연결한 원래 체인) |
 | `group` | `founder` | `group_id`, `founder`, `closed`, `brokers` |
 | `event` | `issuer`와 `approvers` 전원 | `event_id`, `issuer`, `kind`, `policy`, `approvers`, `rules_hash`, `mode`, `apps` |
 | `contract` | `issuer`, `contractor` | `event_id`, `role`, `issuer`, `contractor`, `nonce`, `rules_hash` |
@@ -137,10 +141,20 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `assign` | `issuer` | `event_id`, `issuer`, `subjects`(`{주제: [공개키, ...]}`) |
 | `attest` | `parties` 전원 | 선택 `event_id`, `kind`, `subject`, `value`, `parties`, `nonce` |
 | `close` | `issuer` | `event_id`, `issuer`, `result_hash`(이 이벤트의 항목) |
+| `key_rotate` | `old`, `new`, 기록자면 `god`도 | `role`(`recorder`·`god`), `old`(그 시점의 유효한 키), `new`, 기록자면 `god`(지금의 god 키), `nonce` |
+| `chain_link` | `child_god`, `child_recorder` | `child_ledger_id`(새 체인의 제네시스 해시), `child_god`, `child_recorder`(새 체인의 첫 기록자 키), `name`, `nonce`. 원래 체인에 남긴다. 한 체인은 한 번만 |
 
 정책(`policy`)의 키와 뜻은 [phase5/requirements.md](phase5/requirements.md)와 백서 9장에 있다. 실행 방식 `mode`는 `assistant` · `app` · `app_or_assistant`, 앱 목록 `apps`의 각 칸은 `{id(UUID), name, version, hash?, required?}`.
 
 ---
+
+### 4.5 진짜 원장 증명
+
+1. **뿌리 값**: 원래 체인의 제네시스 해시와 god 첫 공개키. 원장 밖(백서, 설정 기본값, README, 서명 태그)에 공개된다. 받는 쪽 설정: `ARENA_TRUST_GENESIS_HASH`, `ARENA_TRUST_GOD_PUB`.
+2. **원래 체인 확인**: `GET /trust`의 제네시스 항목 해시를 다시 계산해 뿌리 해시와 비교하고, god 서명과 봉인(제네시스의 `recorder` 키)을 확인한다.
+3. **키 이어받기**: `key_rotate` 항목을 `seq` 순서로 따라간다. 각 항목에서 `old`가 그 시점의 유효한 키인지, 기록자면 `god`가 그 시점의 god 키인지, 서명(4.4절 서명자)과 해시, **그 시점의 기록자 키로 된 봉인**을 확인한다. 기록자 `key_rotate` 항목은 옛 키로 봉인되고, 그다음 항목부터 새 키로 봉인된다. 끝까지 따라간 키가 신뢰 문서의 `recorder`와 같아야 한다.
+4. **커뮤니티 체인**: 제네시스에 `parent`가 있으면, 먼저 `parent.recorder_url`의 원래 체인을 1~3으로 증명하고(그것도 커뮤니티 체인이면 위로 따라감, 받는 쪽 상한 `ARENA_TRUST_MAX_LINK_DEPTH`), `GET /links/{이 체인의 ledger_id}`로 `chain_link`를 받아: 이 체인의 제네시스 해시·god 키·첫 기록자 키를 가리키는가, 새 god과 새 첫 기록자의 서명이 맞는가, `ledger_id`가 원래 체인의 것인가, **그 시점의 원래 기록자 키로** 봉인됐는가를 본다. 그다음 이 체인에 2~3을 한다(뿌리 값 대신 연결이 증명한 제네시스로).
+5. 증명된 기록자의 이벤트만 받는다. 공지의 `recorder_pub`이 증명된 지금 키와 같아야 한다.
 
 ## 5. broker
 
@@ -232,4 +246,5 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 - **규약의 판 올리기**: 메시지와 항목에 규약 판 번호를 싣는 방식과 이전 판과 맞추는 방식.
 - **맞음 시험 묶음**: 시험 벡터는 2~4절의 바이트 수준만 확인한다. 다른 구현이 broker·recorder·peer로서 맞게 움직이는지 확인할 공통 시험 묶음은 아직 없다.
 - **broker와 recorder를 누구나 열 수 있는가**, 여러 커뮤니티의 원장을 잇는 방식(백서 7장).
-- **기록자 여럿(7단계)**: 그때 항목 복제와 상호 대조 규약이 더해진다.
+- **기록자 여럿(7단계)**: 그때 항목 복제와 상호 대조 규약, 키가 샜을 때의 갈래를 막는 증인 확인점(같은 seq에 두 머리가 서명되면 속임의 증거)이 더해진다.
+- **기준 네트워크의 뿌리 값**: 실제 제네시스 뒤에 공개한다(백서 5.4절).

@@ -52,16 +52,27 @@ class Ledger:
         return audit_chain(self.chain)
 
 
-def audit_chain(chain: list[dict]) -> str:
-    """verify hashes, participant signatures and recorder seals of any chain copy"""
+def audit_chain(chain: list[dict], anchor: dict | None = None) -> str:
+    """verify hashes, participant signatures and recorder seals of any chain copy. Seals must be by the recorder key valid
+    at each point (from the genesis, following key_rotate); entries after a genesis must name its ledger_id when they name
+    one. With an anchor {genesis_hash, god_pub} (published outside the ledger) the chain must begin with that genesis."""
+    if anchor and (not chain or chain[0]["type"] != "genesis" or chain[0]["hash"] != anchor.get("genesis_hash")
+                   or chain[0]["payload"].get("god") != anchor.get("god_pub")):
+        return "NOT THIS LEDGER (root of trust: genesis hash or god key differs)"
     prev = "0" * 64
+    genesis = chain[0] if chain and chain[0]["type"] == "genesis" else None
+    sealer = genesis["payload"]["recorder"] if genesis else (chain[0]["seal"]["pub"] if chain and "seal" in chain[0] else None)
     for i, e in enumerate(chain):
         if e["prev"] != prev or e["hash"] != h(canon({k: e[k] for k in BODY})):
             return f"TAMPERED at seq {i} (hash chain)"
         if e["type"] not in ENTRY_TYPES or any(not s or not verify(s, e["payload"], e["sigs"].get(s, "")) for s in signers(e)):
             return f"TAMPERED at seq {i} (signature)"
-        if "seal" in e and not verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"]):
+        if "seal" in e and (e["seal"]["pub"] != sealer or not verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"])):
             return f"TAMPERED at seq {i} (recorder seal)"
+        if genesis and i > 0 and "ledger_id" in e["payload"] and e["payload"]["ledger_id"] != genesis["hash"]:
+            return f"TAMPERED at seq {i} (an entry of another ledger: ledger_id differs)"
+        if e["type"] == "key_rotate" and e["payload"].get("role") == "recorder":
+            sealer = e["payload"]["new"]  # from the next entry on
         prev = e["hash"]
     return "ok"
 

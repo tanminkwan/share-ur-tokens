@@ -275,6 +275,59 @@ def _assign_rule(chain, e, now, s):
             return f"every party of {k!r} must hold a contract in this event"
 
 
+# ---------------- key_rotate: key succession ----------------
+ROTATABLE = ("recorder", "god")
+
+
+def current_keys(chain) -> dict:
+    """the recorder and god keys valid at the end of this chain: from the genesis, following every key_rotate"""
+    if not chain or chain[0]["type"] != "genesis":
+        return {"recorder": chain[0]["seal"]["pub"] if chain and "seal" in chain[0] else None, "god": None}
+    keys = {"recorder": chain[0]["payload"]["recorder"], "god": chain[0]["payload"]["god"]}
+    for x in chain[1:]:
+        if x["type"] == "key_rotate":
+            keys[x["payload"]["role"]] = x["payload"]["new"]
+    return keys
+
+
+def _rotate_signers(p):
+    return [p.get("old"), p.get("new")] + ([p.get("god")] if p.get("role") == "recorder" else [])
+
+
+def _rotate_shape(chain, e, now, s):
+    p = e["payload"]
+    if p.get("role") not in ROTATABLE or not p.get("old") or not p.get("new") or p["old"] == p["new"]:
+        return "key_rotate needs role (recorder or god), old and new keys"
+    if p["role"] == "recorder" and not p.get("god"):
+        return "a recorder key change needs god's approval"
+
+
+def _rotate_rule(chain, e, now, s):
+    p, keys = e["payload"], current_keys(chain)
+    if chain and chain[0]["type"] != "genesis":
+        return "key succession needs a ledger begun by a genesis"
+    if p["old"] != keys[p["role"]]:
+        return f"old key is not the current {p['role']} key"
+    if p["role"] == "recorder" and p["god"] != keys["god"]:
+        return "approved by a key that is not the current god key"
+
+
+# ---------------- chain_link: a community chain links its start into the original (parent) chain ----------------
+def _is_hex64(x) -> bool:
+    return isinstance(x, str) and len(x) == 64 and all(c in "0123456789abcdef" for c in x)
+
+
+def _link_shape(chain, e, now, s):
+    p = e["payload"]
+    if not _is_hex64(p.get("child_ledger_id")) or not p.get("child_god") or not p.get("child_recorder"):
+        return "chain_link needs child_ledger_id (the new chain's genesis hash), child_god and child_recorder"
+
+
+def _link_rule(chain, e, now, s):
+    if any(x["type"] == "chain_link" and x["payload"]["child_ledger_id"] == e["payload"]["child_ledger_id"] for x in chain):
+        return "this chain is already linked"
+
+
 # ---------------- close ----------------
 def _close_rule(chain, e, now, s):
     if e["payload"].get("issuer") != events(chain)[e["payload"]["event_id"]]["issuer"]:
@@ -291,7 +344,8 @@ def _map_count(key, who_field, name_field):
 
 # ---------------- the built-in types ----------------
 for _t in (
-    EntryType("genesis", lambda p: [p.get("god")], public=lambda p, c: {"god": p["god"], "broker": p["broker"], "recorder": p["recorder"]}),
+    EntryType("genesis", lambda p: [p.get("god")], public=lambda p, c: {"god": p["god"], "broker": p["broker"], "recorder": p["recorder"],
+                                                                         **({"parent": p["parent"]} if "parent" in p else {})}),
     EntryType("group", lambda p: [p.get("founder")], public=lambda p, c: {"founder": p["founder"], "closed": p["closed"], "brokers": list(p.get("brokers", []))},
               counters={"groups": 0}, contribute=_count("groups", "founder")),
     EntryType("event", lambda p: [p.get("issuer"), *p.get("approvers", [])], shape=_event_shape, rules=(_event_once,),
@@ -318,6 +372,10 @@ for _t in (
               counters={"revealed": 0}, contribute=_count("revealed", "author")),
     EntryType("assign", lambda p: [p.get("issuer")], event_ref="required", shape=_assign_shape, rules=(_assign_rule,),
               public=lambda p, c: {"issuer": p["issuer"], "subjects": p["subjects"]}),
+    EntryType("chain_link", lambda p: [p.get("child_god"), p.get("child_recorder")], unique_nonce=True, shape=_link_shape, rules=(_link_rule,),
+              public=lambda p, c: {k: p.get(k) for k in ("child_ledger_id", "child_god", "child_recorder", "name")}),
+    EntryType("key_rotate", _rotate_signers, unique_nonce=True, shape=_rotate_shape, rules=(_rotate_rule,),
+              public=lambda p, c: {"role": p.get("role"), "old": p.get("old"), "new": p.get("new"), **({"god": p["god"]} if "god" in p else {})}),
     EntryType("close", lambda p: [p.get("issuer")], event_ref="required", rules=(_close_rule,),
               public=lambda p, c: {"issuer": p["issuer"], "result_hash": p.get("result_hash")}, counters={"closed": 0},
               contribute=_count("closed", "issuer")),

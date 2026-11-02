@@ -60,7 +60,8 @@ class World:
 
     async def boot(self, *peers):
         assert (await record_genesis(self.svc, self.god, self.s, self.public.identity.pub, self.rec.identity.pub))["ok"]
-        g = {"group_id": "g-team", "founder": self.god.pub, "closed": False, "brokers": [self.other.identity.pub]}
+        g = {"group_id": "g-team", "founder": self.god.pub, "closed": False, "brokers": [self.other.identity.pub],
+             "ledger_id": self.svc.ledger.chain[0]["hash"]}
         assert (await self.svc.record("group", g, {self.god.pub: self.god.sign(g)}))["ok"]
         for p in (self.rec, *peers):
             await p.advertise()
@@ -122,7 +123,7 @@ async def test_p5e2_p5e6_mode_and_app_list_are_separate_notarized_blocks(w):
     with pytest.raises(ValueError):
         await announce(w.host, "app", [])  # an app mode needs a non-empty app list
     bad = {"event_id": "x", "issuer": w.host.identity.pub, "kind": "k", "policy": {}, "approvers": [], "group_id": "public",
-           "mode": "app", "apps": [{"id": "nope", "version": "1"}]}
+           "mode": "app", "apps": [{"id": "nope", "version": "1"}], "ledger_id": w.svc.ledger.chain[0]["hash"]}
     r = await w.svc.record("event", bad, {w.host.identity.pub: w.host.sign(bad)})
     assert r["error"] == "bad mode or app list"
 

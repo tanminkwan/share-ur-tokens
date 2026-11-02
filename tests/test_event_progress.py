@@ -10,11 +10,13 @@ import json
 
 from arena.crypto import h
 from arena.recorder.client import InMemoryRecorderClient
+from tests.fakes import ledger_id_of
 from tests.test_assistant import asst, ctx, eco, joined, settle  # noqa: F401  (eco is a fixture)
 
 
 def _publish(p, ev, content, label=None):
-    payload = {"author": p.identity.pub, "content_hash": h(content.encode()), "event_id": ev, "group_id": "public"}
+    payload = {"author": p.identity.pub, "content_hash": h(content.encode()), "event_id": ev, "group_id": "public",
+               "ledger_id": ledger_id_of(p)}
     if label is not None:
         payload["label"] = label
     return payload, {p.identity.pub: p.identity.sign(payload)}

@@ -12,6 +12,7 @@ from ..config import Settings
 from ..crypto import Identity, pen_name
 from ..events import EventLog
 from ..llm import LLM
+from ..ledger.trust import verify_link_entry, verify_trust
 from ..recorder.client import RecorderAPI, RecorderClient
 from .area import PublicArea
 from .builtin import RESERVED_OPS, DirectRequests, EventApprovals, RoleContracts
@@ -51,6 +52,7 @@ class Peer:
             self.app_states.setdefault(DirectRequests.name, {"inbox": saved["inbox"]})
         self.last_profile: dict | None = None
         self._group_ids: dict[str, str] = {}
+        self._trust: dict[str, dict] = {}  # recorder url -> its trust check against the root of trust (P5-G6)
         self._requests = DirectRequests(settings)
         self.events = EventRouter(settings, installer=AppInstaller(settings) if settings.app_store_urls else None)
         self.builtins = [RoleContracts(), EventApprovals(), self._requests, self.events]
@@ -142,6 +144,51 @@ class Peer:
     def persist(self) -> None:
         if self.home:
             self.home.save_state({"profile_ver": self.profiles.version, "known_recorders": self.known_recorders, "apps": self.app_states})
+
+    async def recorder_trust(self, url: str, depth: int = 0) -> dict:
+        """is the recorder at url the one this peer's root of trust proves? {ok, anchored, recorder, ledger_id, why}.
+        The root is the original chain; a community chain is proven through its chain_link in its parent (P5-G9).
+        Without a root of trust in the settings every recorder passes (anchored False). Checked once per url."""
+        if url in self._trust:
+            return self._trust[url]
+        s = self.settings
+        fail = lambda why: {"ok": False, "anchored": bool(s.trust_genesis_hash), "why": why}
+        try:
+            doc = await self.recorder(url).trust()
+        except Exception as e:
+            return fail(f"{type(e).__name__}: {e}")
+        if not s.trust_genesis_hash:
+            out = {"ok": True, "anchored": False, "recorder": doc.get("recorder"), "ledger_id": doc.get("ledger_id")}
+        elif (doc.get("genesis") or {}).get("hash") == s.trust_genesis_hash:
+            ok, why, keys = verify_trust(doc, s.trust_genesis_hash, s.trust_god_pub)
+            out = {"ok": ok, "anchored": True, "recorder": keys.get("recorder"), "ledger_id": doc.get("ledger_id") if ok else None, "why": why}
+        else:
+            parent = ((doc.get("genesis") or {}).get("payload") or {}).get("parent")
+            if not parent or depth >= s.trust_max_link_depth:
+                return fail("not the original chain and not linked into it")
+            pt = await self.recorder_trust(parent["recorder_url"], depth + 1)
+            if not pt["ok"] or pt["ledger_id"] != parent["ledger_id"]:
+                return fail(f"parent chain not proven: {pt.get('why')}")
+            try:
+                pdoc = await self.recorder(parent["recorder_url"]).trust()
+                link = (await self.recorder(parent["recorder_url"]).link(doc["genesis"]["hash"])).get("link")
+            except Exception as e:
+                return fail(f"parent recorder: {type(e).__name__}: {e}")
+            pok, _, pkeys = verify_trust(pdoc, pt["ledger_id"], (pdoc.get("genesis") or {}).get("payload", {}).get("god", ""))
+            bad = None if pok and pkeys.get("recorder") == pt["recorder"] else "the parent's trust document changed"
+            bad = bad or verify_link_entry(link, pdoc, doc["genesis"])
+            if bad:
+                return fail(bad)
+            ok, why, keys = verify_trust(doc, doc["genesis"]["hash"], doc["genesis"]["payload"]["god"])
+            out = {"ok": ok, "anchored": True, "recorder": keys.get("recorder"), "ledger_id": doc.get("ledger_id") if ok else None,
+                   "why": why, "linked_from": parent["ledger_id"]}
+        if out["ok"]:
+            self._trust[url] = out
+        return out
+
+    async def ledger_id(self, url: str) -> str | None:
+        """the id of the ledger kept at url (its genesis hash), to put inside every payload this peer signs for it"""
+        return (await self.recorder_trust(url)).get("ledger_id")
 
     async def group_id(self, group: str) -> str:
         """the broker group identifier of one of my broker groups (asked once, then remembered)"""

@@ -102,6 +102,14 @@ class AppContext:
     async def group_id(self, group: str) -> str:
         return await self._peer.group_id(group)
 
+    async def recorder_trust(self, url: str) -> dict:
+        """is the recorder at url proven by this peer's root of trust? {ok, anchored, recorder, ledger_id, why}"""
+        return await self._peer.recorder_trust(url)
+
+    async def ledger_id(self, url: str) -> str | None:
+        """the id of the ledger at url (its genesis hash): every payload signed for that ledger carries it as ledger_id"""
+        return await self._peer.ledger_id(url)
+
     def offers(self) -> list[str]:
         return self._peer.offers()
 

@@ -101,6 +101,9 @@ def make_app(settings):          # 팩토리: 설정을 받아 앱을 돌려준�
 - 기록 응답은 `ctx.receipts.keep(...)`으로 영수증을 남긴다(나중에 원장이 잘려도 증명).
 - 새 항목 종류가 필요하면 플랫폼에 `EntryType`을 등록한다(플랫폼 기여로 다룸).
 
+- **원장 식별자**(P5-G4): 제네시스로 시작한 원장에 쓰는 모든 payload에는 `ledger_id`(그 원장의 제네시스 해시)를 넣는다. `await ctx.ledger_id(recorder_url)`로 얻는다. 없으면 기록자가 거절한다. 참여자 서명이 그 원장에 묶여 다른 원장으로 옮길 수 없게 된다.
+- **기록자 확인**(P5-G6): `await ctx.recorder_trust(recorder_url)`는 그 기록자가 이 peer의 뿌리 신뢰(원래 체인, 연결 포함)로 증명되는지 알려 준다.
+
 ## 8. 지속성
 
 - 앱 상태는 `ctx.state`(작은 dict)와 `ctx.data_dir`(파일)에 둔다. 둘 다 peer의 홈 아래라 재시작 뒤에도 남는다.

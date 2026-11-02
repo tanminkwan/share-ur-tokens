@@ -43,9 +43,11 @@ async def test_p5c38_allowed_revealed_values_are_checked_by_code_and_ledger(eco)
     assert (await asst(a).tools["commit"].run(asst(a), ctx(a), st, label="v-1", value="바위"))["ok"]
     # the ledger refuses a reveal outside the list even when the sealed hash matches
     salt = "s"
-    pay = {"author": a.identity.pub, "content_hash": commit_hash("v-2", "rock", salt, a.identity.pub), "event_id": ev, "group_id": "public", "label": "v-2"}
+    pay = {"author": a.identity.pub, "content_hash": commit_hash("v-2", "rock", salt, a.identity.pub), "event_id": ev, "group_id": "public", "label": "v-2",
+           "ledger_id": eco.svc.ledger.chain[0]["hash"]}
     pub = await eco.svc.record("publish", pay, {a.identity.pub: a.identity.sign(pay)})
-    rev = {"author": a.identity.pub, "label": "v-2", "value": "rock", "salt": salt, "commit": pub["hash"], "event_id": ev, "group_id": "public"}
+    rev = {"author": a.identity.pub, "label": "v-2", "value": "rock", "salt": salt, "commit": pub["hash"], "event_id": ev, "group_id": "public",
+           "ledger_id": eco.svc.ledger.chain[0]["hash"]}
     assert "allowed" in (await eco.svc.record("reveal", rev, {a.identity.pub: a.identity.sign(rev)}))["error"]
 
 

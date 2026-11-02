@@ -92,7 +92,7 @@ async def test_pc2_pc3_event_is_approved_by_the_ceo_and_noticed(world):
     assert [e["type"] for e in chain] == ["genesis", "group", "event", "contract", "contract"]
     assert chain[0]["payload"]["god"] == world.god.pub and chain[0]["payload"]["group_id"] == "public"  # god's genesis is entry 0
     assert chain[1]["payload"] == {"group_id": "g-review", "founder": world.org.identity.pub, "closed": True,
-                                   "brokers": [world.brokers[REVIEW].identity.pub]}  # the review group's founding is notarized
+                                   "brokers": [world.brokers[REVIEW].identity.pub], "ledger_id": chain[0]["hash"]}  # the review group's founding is notarized
     assert set(chain[2]["sigs"]) == {world.org.identity.pub, world.ceo.identity.pub}
     assert [e["payload"]["group_id"] for e in chain[2:]] == ["public", "public", "g-review"]  # where each thing happened
     assert world.rev.identity.pub not in str(o["notice"])  # the reviewer stays unnamed to applicants
@@ -139,13 +139,14 @@ async def test_pc5_policy_is_enforced(world):
     ch = next(iter(world.inbox.items[o["event_id"]]))
     # a review by someone without the review contract
     p = {"evaluator": a.identity.pub, "event_id": o["event_id"], "content_hash": ch, "verdict": "review", "score": 10.0, "comment_hash": "0" * 64,
-         "group_id": "public"}
+         "group_id": "public", "ledger_id": world.ledger.chain[0]["hash"]}
     assert (await R.record("feedback", p, {a.identity.pub: a.sign(p)}))["error"] == "verdict 'review' requires the 'review' role in this event"
     # an adoption by someone other than the issuer
-    q = {"evaluator": a.identity.pub, "event_id": o["event_id"], "content_hash": ch, "verdict": "adopt", "group_id": "public"}
+    q = {"evaluator": a.identity.pub, "event_id": o["event_id"], "content_hash": ch, "verdict": "adopt", "group_id": "public", "ledger_id": world.ledger.chain[0]["hash"]}
     assert (await R.record("feedback", q, {a.identity.pub: a.sign(q)}))["error"] == "verdict 'adopt' requires the event issuer"
     # the contracted recorder cannot publish into the event; the organizer's inbox also refuses it
-    rp = {"author": world.rec.identity.pub, "content_hash": h(canon({"x": 1})), "event_id": o["event_id"], "group_id": "public"}
+    rp = {"author": world.rec.identity.pub, "content_hash": h(canon({"x": 1})), "event_id": o["event_id"], "group_id": "public",
+          "ledger_id": world.ledger.chain[0]["hash"]}
     assert (await R.record("publish", rp, {world.rec.identity.pub: world.rec.sign(rp)}))["error"].startswith("a contractor in a conflicting role")
     assert (await apply(world.rec, n, {"title": "x", "idea": "y"}))["ok"] is False
     # one submission per peer

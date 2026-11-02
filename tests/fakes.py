@@ -79,3 +79,8 @@ class HashEmbedder:
             n = math.sqrt(sum(x * x for x in v)) or 1.0
             out.append([x / n for x in v])
         return out
+
+
+def ledger_id_of(peer) -> str:
+    """test worlds route every recorder url to one in-memory recorder: the id of its ledger (the genesis hash)"""
+    return peer.recorder_factory("any").svc.ledger.chain[0]["hash"]
