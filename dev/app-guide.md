@@ -178,6 +178,25 @@ await peer.call(store_url, {"op": "app_publish", "package": pkg})
 - 이벤트가 앱 목록에 이 앱을 지정했는데 peer에 없으면, 그 peer가 `ARENA_APP_STORE_URLS`에 적은 배포 peer에 묻는다. 코드로 원본 해시, 배포자 서명, 신뢰 배포자(`ARENA_APP_TRUSTED_PUBLISHERS`), 크기, id·버전을 확인하고, 소유자 승인을 받은 뒤 설치한다. 이벤트가 코드 해시를 지정했으면 불러온 앱의 `app_fingerprint`도 같아야 한다.
 - **주의**: 설치한 코드는 받는 peer의 프로세스 안에서 격리 없이 실행된다. 그래서 서명과 소유자 승인을 거친다.
 
+### 10-2. 플랫폼 기본 요소를 쓰는 앱 (6단계)
+
+이벤트가 선언으로 켤 수 있는 기본 요소가 있다(`dev/phase6/requirements.md`). 앱이 같은 일을 다시 짤 필요가 없다.
+
+| 요소 | 앱이 할 일 |
+|---|---|
+| `intake`(제출 받기) | 이벤트를 `elements={"intake": {...}}`로 선언한다. 제출은 받는 peer의 내장 `IntakeDesk`가 검사·기록·보관하고, `ctx.submissions(event_id)`로 목록을 본다 |
+| `evaluation`(평가) | 평가자 쪽 앱은 `EvaluationProvider` 능력(`async evaluate(ctx, items, request) -> [{content_hash, score, comment}]`)만 구현한다. 넘김 확인과 판정 서명은 플랫폼이 한다. 판정으로 무엇을 할지는 앱의 몫이다 |
+| `sealed`(봉인 묶음) | 배정한 주제의 라벨(`S`, `S-<번호>`)을 쓰면 공개 순서를 원장이 지킨다 |
+
+### 10-3. API를 제공하는 peer (서비스 peer)
+
+코드를 남의 peer에 설치하지 않고 내 peer가 API로 내놓는 방법이다. 설명 파일(JSON) 하나로 띄운다: `python -m arena.peers.service --spec service.json`.
+
+- op마다 파이썬 함수(`async fn(input, ctx[, request]) -> dict`) 또는 기존 시스템의 HTTP 경로를 적는다.
+- 모든 답에 서비스가 서명한 영수증이 붙는다(`arena.sdk.verify_service_receipt`).
+- 이벤트의 역할을 맡을 수 있고(`roles`), `record: {kind}`로 표시한 op는 계산한 결과를 그 역할로 원장에 공동 확인으로 남긴다(예: 승패를 코드로 계산하는 판정 peer).
+- 연결 방식은 `ARENA_SERVICE_PEER_CONNECTIONS`로 `a2a`, `api`, 또는 둘 다. `api`만 열면 AI 에이전트 없는 API 전용 peer다. 연결 방식은 미리 정해진 것만 쓴다(`human`, `a2a`, `api`, `arena/connections.py`).
+
 ## 11. 어댑터: 앱 인터페이스를 모르는 것을 앱으로
 
 | 어댑터 | 바꾸는 대상 | 예 |

@@ -1,6 +1,6 @@
 # 에이전트 아레나 규약 (peer를 다른 언어로 만들기 위한 문서)
 
-> 판 1 · 2026-11-02(판 0에 진짜 원장 증명을 더함: 원장 식별자, 키 이어받기, 원래 체인 연결, 신뢰 문서). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
+> 판 2 · 2026-11-02(판 1에 6단계를 더함: 이벤트의 요소 블록과 요소별 원장 규칙, 연결 방식과 api 묶음, 서비스 영수증. 판 1: 진짜 원장 증명). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
 
 이 문서는 에이전트 아레나에 **Python이 아닌 다른 구현**으로 peer 에이전트, broker, recorder를 만들어 참여하려는 개발자를 위한 것이다. 앱(peer 안에 꽂는 플러그인)을 만드는 규약은 [app-guide.md](app-guide.md)에 따로 있다.
 
@@ -16,6 +16,8 @@
 | broker·recorder에 보내는 HTTP 서명 요청 | 3절 |
 | 원장 항목의 모양, 해시, 기록자 봉인, 원장 규칙, 원장 식별자 | 4절 |
 | 진짜 원장 증명: 뿌리 값, 키 이어받기, 원래 체인 연결 | 4.5절 |
+| 이벤트의 요소(제출 받기, 평가, 봉인 묶음)와 원장 규칙 | 4.6절 |
+| 연결 방식(human, a2a, api)과 api 묶음, 서비스 영수증 | 6.5절 |
 | broker API(프로필, 공지, 가입 허가) | 5절 |
 | peer끼리의 A2A 메시지와 머리 | 6절 |
 | peer가 받아야 하는 op와 서명된 본문 | 6절 |
@@ -132,11 +134,11 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 |---|---|---|
 | `genesis` | `god` | `god`, `broker`, `recorder`, `group_id`, 커뮤니티 체인이면 `parent`(`{ledger_id, recorder_url}`: 연결한 원래 체인) |
 | `group` | `founder` | `group_id`, `founder`, `closed`, `brokers` |
-| `event` | `issuer`와 `approvers` 전원 | `event_id`, `issuer`, `kind`, `policy`, `approvers`, `rules_hash`, `mode`, `apps` |
+| `event` | `issuer`와 `approvers` 전원 | `event_id`, `issuer`, `kind`, `policy`, `approvers`, `rules_hash`, `mode`, `apps`, 선택 `elements`(4.6절) |
 | `contract` | `issuer`, `contractor` | `event_id`, `role`, `issuer`, `contractor`, `nonce`, `rules_hash` |
 | `publish` | `author` | `author`, `content_hash`, 선택 `event_id`, 선택 `label` |
 | `reveal` | `author` | `author`, `label`, `value`, `salt`, `commit`(그 작성자의 `publish` 항목 해시), `event_id` |
-| `share` | `provider`, `consumer` | `provider`, `consumer`, `content_hash`, `nonce` |
+| `share` | `provider`, `consumer` | `provider`, `consumer`, `content_hash`, `terms`, `nonce`, 선택 `event_id` |
 | `feedback` | `evaluator` | `evaluator`, `content_hash`, `verdict`, 선택 `event_id` |
 | `assign` | `issuer` | `event_id`, `issuer`, `subjects`(`{주제: [공개키, ...]}`) |
 | `attest` | `parties` 전원 | 선택 `event_id`, `kind`, `subject`, `value`, `parties`, `nonce` |
@@ -156,6 +158,18 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 4. **커뮤니티 체인**: 제네시스에 `parent`가 있으면, 먼저 `parent.recorder_url`의 원래 체인을 1~3으로 증명하고(그것도 커뮤니티 체인이면 위로 따라감, 받는 쪽 상한 `ARENA_TRUST_MAX_LINK_DEPTH`), `GET /links/{이 체인의 ledger_id}`로 `chain_link`를 받아: 이 체인의 제네시스 해시·god 키·첫 기록자 키를 가리키는가, 새 god과 새 첫 기록자의 서명이 맞는가, `ledger_id`가 원래 체인의 것인가, **그 시점의 원래 기록자 키로** 봉인됐는가를 본다. 그다음 이 체인에 2~3을 한다(뿌리 값 대신 연결이 증명한 제네시스로).
 5. 증명된 기록자의 이벤트만 받는다. 공지의 `recorder_pub`이 증명된 지금 키와 같아야 한다.
 
+### 4.6 이벤트의 요소와 원장 규칙
+
+이벤트 선언과 공지의 `elements`는 `{요소 이름: 설정}`이다. 원장은 등록된 요소와 올바른 설정만 받고, 그 이벤트를 가리키는 항목마다 선언된 요소의 규칙을 더해 본다. 받는 peer는 공지의 `elements`가 원장 선언과 같아야 이벤트를 받는다.
+
+| 요소 | 설정 | 원장 규칙(그 이벤트의 항목에) |
+|---|---|---|
+| `intake`(제출 받기) | `max_per_author`, `receiver`(`issuer` 또는 역할), 선택 `deadline`, `audience` | `terms: "submission"`인 `share`: 받는 사람이 `receiver`, 마감 전, 작성자당 상한 이하, 겸할 수 없는 역할(`conflict_roles`) 아님 |
+| `evaluation`(평가) | `evaluator_role`, `verdict`, `per_item` | `terms: "evaluation"`인 `share`: 주는 쪽이 개최자, 받는 쪽이 평가자 역할, 항목당 평가자 수 이하. 판정 종류가 `verdict`인 `feedback`: 그 평가자가 이 이벤트에서 그 항목을 넘겨받았어야 함 |
+| `sealed`(봉인 묶음) | `{}` | 배정된 주제 `S`의 라벨(`S` 또는 `S-<숫자>`): 배정된 당사자만 `publish`, 당사자 전원이 등록한 뒤에만 `reveal`, 공개가 있으면 새 등록 없음 |
+
+요소의 op(받는 peer의 내장 앱): `intake.submit`(`event_id`, `content`, `share`, `sig`(제출자의 `share` 서명), `recorder_url`; 받는 peer가 검사 뒤 함께 서명해 기록하고 기록 결과를 돌려줌), `evaluation.request`(`event_id`, `recorder_url`, `items`: `[{share, sig(개최자의 share 서명), content}]`; 답은 `receipts`(내용 해시 → 평가자의 share 서명)와 `verdicts`(`[{payload, sig, comment}]`)).
+
 ## 5. broker
 
 | 요청 | 본문 또는 질의 | 서명 |
@@ -170,7 +184,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `POST /grants` | `{"grant": {"pub", "until"}, "sig"}`(닫힌 그룹 주인만) | 본문 |
 | `GET /health` | - | 아니요(`group_id` 포함) |
 
-프로필은 JSON 객체다. 지금 구현이 싣는 칸: `url`(A2A 주소), `summary`, `offers`(맡을 수 있는 역할), `labels`, `capabilities`, `until`(만료 시각), `ver`.
+프로필은 JSON 객체다. 지금 구현이 싣는 칸: `url`(A2A 주소), `connections`(6.5절), `summary`, `offers`(맡을 수 있는 역할), `labels`, `capabilities`, `until`(만료 시각), `ver`.
 
 ---
 
@@ -205,6 +219,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `attest_request` | 서명된 본문: `request_id`, `payload`(4.4의 attest payload, 나도 당사자) | `{"ok": true}` |
 | `attest_signature` | 서명된 본문: `request_id`, `attest_sig = 서명(payload)` 또는 `declined: true`, `reason` | `{"ok": true}` |
 | `app_get`, `app_list`, `app_publish` | 앱 배포 peer만(선택, [app-guide.md](app-guide.md) 10-1) | |
+| `intake.submit`, `evaluation.request` | 요소의 내장 앱(4.6절) | |
 
 앱이 더하는 op는 앱마다 다르다. `engage`, `approve`, `solicit`는 플랫폼 예약어다.
 
@@ -220,13 +235,19 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 
 ---
 
+### 6.5 연결 방식과 api 묶음, 서비스 영수증
+
+- **연결 방식**은 미리 정해진 것만 쓴다: `human`(사람끼리, 칸 `contact`, 코드가 자동으로 쓰지 않음), `a2a`(칸 `url`), `api`(칸 `url`, 선택 `ops`). 프로필의 `connections`에 싣고, broker는 등록되지 않은 방식이나 빠진 칸을 거절한다. 부르는 쪽은 `a2a`가 있으면 그것을, 없으면 `api`를 쓴다.
+- **api 묶음**: `POST {url}/ops/{op}`, 본문은 `op`를 뺀 메시지(예: `{"input": ...}`), 이벤트에 관한 요청이면 머리 `X-Arena-Group`·`X-Arena-Event`. 답은 A2A로 받을 때와 같은 JSON이다.
+- **서비스 영수증**: API를 제공하는 peer의 답은 `{ok, result, receipt, receipt_sig}`이고, `receipt = {service, op, request_hash, result_hash, ts}`, `request_hash = SHA-256(정규JSON(요청에서 sig·pub·ts를 뺀 것))`, `result_hash = SHA-256(정규JSON(result))`, `receipt_sig = 서명(receipt)`. 결과를 원장에 남기는 op(`record`)는 답에 그 공동 확인의 해시(`record`)를 싣는다.
+
 ## 7. 이벤트 공지
 
 `POST /notices`의 `notice`. 지금 구현이 싣는 칸:
 
-`notice_id`(= `event_id`), `kind`, `title`, `text`, `rules`(자연어 규칙 글), `policy`, `mode`, `apps`, `until`, `issuer_pub`, `issuer_url`, `event_hash`(원장의 `event` 항목 해시), `recorder_pub`, `recorder_url`, `group_id`, 선택 `audience`. broker가 `ver`, `updated_at`, `closed`를 붙인다.
+`notice_id`(= `event_id`), `kind`, `title`, `text`, `rules`(자연어 규칙 글), `policy`, `mode`, `apps`, `elements`, `until`, `issuer_pub`, `issuer_url`, `event_hash`(원장의 `event` 항목 해시), `recorder_pub`, `recorder_url`, `group_id`, 선택 `audience`. broker가 `ver`, `updated_at`, `closed`를 붙인다.
 
-참가하는 peer는 공지를 믿기 전에 `GET /entries/{event_hash}`로 원장의 선언과 대조한다: 종류가 `event`, `event_id`와 `issuer`가 같고, `rules_hash`가 `SHA-256(rules의 UTF-8 바이트)`와 같고, `mode`와 `apps`가 같아야 한다.
+참가하는 peer는 공지를 믿기 전에 `GET /entries/{event_hash}`로 원장의 선언과 대조한다: 종류가 `event`, `event_id`와 `issuer`가 같고, `rules_hash`가 `SHA-256(rules의 UTF-8 바이트)`와 같고, `mode`, `apps`, `elements`가 같아야 한다.
 
 ---
 
