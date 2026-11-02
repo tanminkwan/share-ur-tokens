@@ -192,7 +192,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `POST /grants` | `{"grant": {"pub", "until"}, "sig"}`(닫힌 그룹 주인만) | 본문 |
 | `GET /health` | - | 아니요(`group_id` 포함) |
 
-프로필은 JSON 객체다. 지금 구현이 싣는 칸: `url`(A2A 주소), `connections`(6.5절), `summary`, `offers`(맡을 수 있는 역할), `labels`, `capabilities`, `until`(만료 시각), `ver`.
+프로필은 JSON 객체다. 지금 구현이 싣는 칸: `url`(A2A 주소), `connections`(6.5절), `operator`(`service`·`agent`·`human`: 누가 판단하고 답하나, broker가 확인, [peer-spec.md](peer-spec.md) 1절), `summary`, `offers`(맡을 수 있는 역할), `labels`, `capabilities`, `until`(만료 시각), `ver`, 선택 `codebook`(따르는 코드표 판).
 
 ---
 
