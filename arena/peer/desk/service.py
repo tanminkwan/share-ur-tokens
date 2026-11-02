@@ -21,7 +21,12 @@ class OwnerService:
         return self.peer.ctx(EventAssistant)
 
     def config(self) -> dict:
-        return {"poll_ms": self.peer.settings.desk_poll_ms}
+        """what the screen needs to know in advance (no constants in the screen's code)"""
+        from ...ledger.schedule import TIME_CODES
+        from .model import ITEM_KINDS
+        return {"poll_ms": self.peer.settings.desk_poll_ms, "drives": list(EventAssistant.DRIVES),
+                "time_codes": {c: t.description for c, t in TIME_CODES.items()},
+                "item_kinds": {k: v.label for k, v in ITEM_KINDS.items()}}
 
     def state(self) -> dict:
         p = self.peer
