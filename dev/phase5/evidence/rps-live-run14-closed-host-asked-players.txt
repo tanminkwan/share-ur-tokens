@@ -1,0 +1,337 @@
+[assistant] 필명-3b408e: 이벤트 개최 ev-524557746b 'peer 가위바위보 대회' (규칙 해시 88a5ec89a8, 방식 assistant)
+[assistant] 필명-3b408e: 참여 중인 이벤트 1건을 로컬에서 불러와 이어 감
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: 현재 원장에 하나의 이벤트 생성 항목만 있으며, 아직 경기 결과가 없고 이벤트도 닫히지 않았습니다. 규칙에 따라 모든 경기 결과가 기록되고 순위가算出된 뒤에만 이벤트를 닫을 수 있
+[decide   ] 필명-d8da8f: 소유자에게 물음 '필명-3b408e가 주관하는 'peer 가위바위보 대회'에 참가해도 될까' → 예: 친선 대회라 참가한다
+[assistant] 필명-d8da8f: [ev-524557746b] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-4f91fc: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 아니오: 이번에는 쉬겠다
+[assistant] 필명-4f91fc: [ev-524557746b] ask_owner → {"yes": false, "why": "이번에는 쉬겠다"}
+[decide   ] 필명-52b7dc: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-52b7dc: [ev-524557746b] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-0b40bf: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-0b40bf: [ev-524557746b] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-d8da8f: [ev-524557746b] join_event → {"ok": true}
+[decide   ] 필명-3b408e: 소유자에게 물음 '소유자님, 이 가위바위보 대회에 참가 신청이 들어오면 규칙에 따라 참가를' → 예: 친선 대회라 참가한다
+[assistant] 필명-3b408e: [ev-524557746b] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-4f91fc: [ev-524557746b] 기다림: Owner declined participation, so we cannot join the event or take any further action per the rules.
+[assistant] 필명-0b40bf: [ev-524557746b] join_event → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] join_event → {"ok": true}
+[assistant] 필명-d8da8f: [ev-524557746b] event_progress → {"ok": true, "note": "원장에 있는 항목은 필요한 서명이 모두 모여 확정된 것이다(코드 확인). 원장에 있는 공동 확인에 더 받을 서명은 없다.", "progress": ["1 event {\"mod
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: We have successfully applied to join the event. The next step is to wait for the organizer to assign
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: 이미 행사에 참가 신청을 마쳤고, 현재는 주최자로부터 대진표 배정(assign)과 경기 알림(solicit)을 기다려야 합니다. 따라서 이번 단계에서는 별다른 행동을 할 필요가 없
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: 소유자에게 참가 허락을 받았으니 이제 참가 신청이 들어오기를 기다려야 합니다. 현재 참가 신청이 없으니 추가 작업이 없습니다.
+[contract ] 필명-d8da8f: 'player' 역할 계약 수락: 참가 신청한 이벤트, 같은 규칙
+[assistant] 필명-3b408e: [ev-524557746b] contract → {"ok": true, "hash": "7e4606f63cc86fdea9ca7d511320aa64ea9f8c47067ae994b77d48eb0ee0224a", "error": null, "contracts_so_fa
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: 이미 참가 신청을 했고, 현재 진행 상황에 계약이나 대진표가 보이지 않는다. 다음 단계는 개최자로부터 대진표(assign)와 solicit을 기다리는 것임. 아직 할 일은 없으므로
+[contract ] 필명-0b40bf: 'player' 역할 계약 수락: 참가 신청한 이벤트, 같은 규칙
+[assistant] 필명-3b408e: [ev-524557746b] contract → {"ok": true, "hash": "9dc478543602ca1ab8b8589a0211671c98d85ac692d6af9a5f2e96e51346da6b", "error": null, "contracts_so_fa
+[contract ] 필명-52b7dc: 'player' 역할 계약 수락: 참가 신청한 이벤트, 같은 규칙
+[assistant] 필명-3b408e: [ev-524557746b] contract → {"ok": true, "hash": "163bc451e6ac7fe23c3c290e10fe4c94d4f98d6b0a394f4c0d7be104bbf5e350", "error": null, "contracts_so_fa
+[assistant] 필명-4f91fc: [ev-524557746b] 기다림: Owner declined participation, so we cannot join or take further actions. No further steps needed.
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: 현재 대진표(assign)와 경기 알림(solicit)을 기다리는 단계이며, 추가로 할 일은 없습니다.
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: We have been accepted as a player and are waiting for the organizer to assign the match schedule. No
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: 현재 우리(필명-d8da8f)는 아직 계약도 없고 대진표(assign)도 받지 않았다. 규칙에 따라 계약이 체결되고 대진표가 할당될 때까지 기다려야 한다. 따라서 할 일을 다 했으
+[assistant] 필명-3b408e: [ev-524557746b] assign → {"error": "필명-d8다8f를 찾지 못했다"}
+[assistant] 필명-3b408e: [ev-524557746b] assign → {"ok": true, "hash": "a13e42d8a7e832b9f499bc7063217c16fdd2618172467f1ac6f09c32d31f597d", "error": null}
+[assistant] 필명-4f91fc: [ev-524557746b] 기다림: Owner declined participation, so we must not take any further actions in this event.
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have received the assign record with our matches (m1 and m2). According to the rules, after the a
+[assistant] 필명-3b408e: [ev-524557746b] solicit → {"request_id": "ev-524557746b-cad5f09a", "acks": {"http://127.0.0.1:56507": true, "http://127.0.0.1:56221": true, "http:
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: 나는 현재 매치 m1과 m3에 배정되었으며, 해당 매치에서 a는 필명-d8da8f, b는 나(필명-0b40bf)이다. 아직 a가 첫 번째 라운드(라벨 m1-1)에서 가위·바위·보 
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: All required setup steps (contracts, assign, solicit) are completed. No pending actions for the orga
+[assistant] 필명-52b7dc: [ev-524557746b] solicit → {"request_id": "ev-524557746b-201a5602", "acks": {"http://127.0.0.1:45513": true}}
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: All required setup steps (contracts, assign, solicit) are completed and there are no pending actions
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: We've requested the match details from the organizer. The next step is to wait for the organizer's r
+[assistant] 필명-d8da8f: [ev-524557746b] commit → {"ok": true, "label": "m1-1", "commit": "85b94070a4896843a0bc42ca236283a4cba3597d6fc0b55f5f4c419796643b54", "publish_has
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: All setup is done and the organizer has no pending actions until match results are submitted. Theref
+[assistant] 필명-0b40bf: [ev-524557746b] commit → {"ok": true, "label": "m3-1", "commit": "693b03ba22c46453185ed2a1c9545d2652cad4c2d6c66231a0f38ab43127eed4", "publish_has
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: I have received the match schedule. In both of my matches (m2 and m3) I am player b, so I must wait 
+[assistant] 필명-d8da8f: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: We have no pending action for our matches yet; we need to wait for the opponents (필명-d8da8f) to comm
+[assistant] 필명-3b408e: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have committed our move for match m1 round 1 and sent the commit hash to the opponent. According 
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: All setup steps are complete and there are no pending organizer actions until match results are subm
+[assistant] 필명-0b40bf: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: 현재 필명-52b7dc는 경기 m2와 m3의 b 입장이고, a(필명-d8da8f, 필명-0b40bf)가 먼저 자신의 선택을 commit 할 때까지 기다려야 합니다. 아직 a의 co
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: I have committed my move for match m3 round 1 and informed opponent 필명-52b7dc. I now need to wait fo
+[assistant] 필명-52b7dc: [ev-524557746b] commit → {"ok": true, "label": "m3-1", "commit": "5c737527834597e4ef3cc49ed034f5d46f34bfce63386f4b14697fef616a74c8", "publish_has
+[assistant] 필명-0b40bf: [ev-524557746b] commit → {"error": "인자가 맞지 않음: label, value 없음"}
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have committed our move for m1 round 1 and sent the commit hash to opponent 필명-0b40bf. The oppone
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: 현재 나는 m1 경기의 a(필명-d8da8f)에게서 커밋이 올라온 것을 확인했지만, 규칙에 따라 a가 먼저 선택을 커밋하고, 그 이후에 b(나는)가 같은 라벨로 커밋해야 한다. 따
+[assistant] 필명-52b7dc: [ev-524557746b] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-524557746b", "group_id": "public", "aut
+[assistant] 필명-0b40bf: [ev-524557746b] commit → {"error": "인자가 맞지 않음: label, value 없음"}
+[assistant] 필명-52b7dc: [ev-524557746b] commit → {"error": "라벨 m3-1은 이미 먼저 등록했다", "commit": "5c737527834597e4ef3cc49ed034f5d46f34bfce63386f4b14697fef616a74c8", "publish_
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have already committed our move for m1 round 1 and sent the commit hash to opponent 필명-0b40bf. Th
+[assistant] 필명-0b40bf: [ev-524557746b] commit → {"error": "인자가 맞지 않음: label, value 없음"}
+[assistant] 필명-52b7dc: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: I've committed my move for m3-1 and informed 필명-0b40bf. The next step is to wait for them to commit 
+[assistant] 필명-0b40bf: [ev-524557746b] commit → {"ok": true, "label": "m1-1", "commit": "92cae985183bde55df2711c5cabbe3c8a3fcd723d3415079f58db21d49cc2b9d", "publish_has
+[assistant] 필명-52b7dc: [ev-524557746b] commit → {"error": "라벨 m3-1은 이미 먼저 등록했다", "commit": "5c737527834597e4ef3cc49ed034f5d46f34bfce63386f4b14697fef616a74c8", "publish_
+[assistant] 필명-d8da8f: [ev-524557746b] verify → {"ok": true, "exists": false, "type": null, "seal_ok": false, "event_id": null, "group_id": null, "content_of": {"hash":
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: We have already committed our move for m3-1 as player b and notified the opponent. According to the 
+[assistant] 필명-0b40bf: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: We have already sent our commit for m3-1, but according to the rules, the opponent (a = 필명-0b40bf) s
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: LLM 응답 없음
+[assistant] 필명-d8da8f: [ev-524557746b] reveal → {"ok": true, "label": "m1-1", "value": "가위", "hash": "530913628d2add0699863e9b3bbdb997f8f0271788522c1e05b0a294b5b5d23c",
+[assistant] 필명-4f91fc: [ev-524557746b] 기다림: Owner declined participation, so per rules I must not take any further actions in this event.
+[assistant] 필명-d8da8f: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: 현재 m3 경기에서는 양측 모두 커밋을 마쳤고, a(필명-0b40bf)가 먼저 공개(reveal)해야 할 단계입니다. 우리는 아직 a의 공개를 기다리고 있습니다. m2 경기에서도 
+[assistant] 필명-0b40bf: [ev-524557746b] reveal → {"ok": true, "label": "m3-1", "value": "가위", "hash": "a86f852fa1e544a205319591721e69af635a88c5d6928548f04aec1739acea3f",
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have committed, sent commit, opponent committed, we revealed our move and sent reveal. Now we mus
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: 원장에 설정 단계는 모두 완료됐고, 현재는 경기 진행 중인 상태이다. 개최자로서는 경기 결과가 모두 보고되고 순위가 계산될 때까지 추가적인 행동이 없으며, 다른 참가자들의 커밋·리
+[assistant] 필명-52b7dc: [ev-524557746b] reveal → {"ok": true, "label": "m3-1", "value": "가위", "hash": "fa7d811bc1f64e172916a046076621d9135874012e68ad6c9154d1cac2f4041d",
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: I have already committed my move for m1‑1, revealed it, and sent the reveal to 필명-0b40bf. The oppone
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: 상대인 필명-0b40bf가 아직 m3-1에 대해 공개를 하지 않았습니다. 규칙에 따라 a가 먼저 공개하고, 그 뒤에 b가 공개해야 합니다. 현재 우리는 b 입장이고, a의 공개를 
+[assistant] 필명-0b40bf: [ev-524557746b] my_reveal → {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m3-1", "value": "가위", "salt": "
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have completed our side of match m1 round 1 (commit, reveal, and sent reveal). The opponent (필명-0
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: I have revealed my move for match m3 round 1 and confirmed my own reveal. Now I must wait for oppone
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: Both players have revealed their moves for round 1 of match m3, and it was a tie. According to the r
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: We have already committed and revealed our move for match m3 round 1 as a. The opponent (필명-52b7dc) 
+[assistant] 필명-0b40bf: [ev-524557746b] reveal → {"ok": true, "label": "m1-1", "value": "보", "hash": "d768d6609f540bec04d56503b38fd2d3369b57a760954e34001533f8a5f599f0", 
+[assistant] 필명-0b40bf: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: I've committed and revealed my move for m3 round 1, and also revealed my move for m1 round 1 and inf
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: 현재 m3 경기 1라운드가 비겼고, 라운드 2를 진행하려면 a(필명-0b40bf)가 먼저 라벨 m3-2 로 commit 해야 합니다. 아직 a가 commit하지 않았으므로 우리는 
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: 현재 상황을 정리하면:
+[assistant] 필명-d8da8f: [ev-524557746b] propose_attest → {"error": "이런 공개값이 없다(내가 등록했거나 받아서 코드가 확인한 것만 쓸 수 있다): 공개:필명-d8다8f:m1-1"}
+[assistant] 필명-0b40bf: [ev-524557746b] commit → {"error": "인자가 맞지 않음: label, value 없음"}
+[assistant] 필명-d8da8f: [ev-524557746b] propose_attest → {"request_id": "ev-524557746b-da5e0217", "sent": {"0b40bf30": true}}
+[assistant] 필명-0b40bf: [ev-524557746b] commit → {"ok": true, "label": "m3-2", "commit": "113be7617cc5b5beccf8af69995491c9c93ab4c0f758dd122eb1d5874ab6e5bc", "publish_has
+[assistant] 필명-d8da8f: [ev-524557746b] cosign → {"error": "서명 요청 ev-524557746b-da5e0217이 없다"}
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: I have proposed the match attestation for m1 and the opponent has not yet cosigned. According to the
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have already proposed the match attestation for m1 and sent it to the opponent. The opponent has 
+[assistant] 필명-0b40bf: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] commit → {"ok": true, "label": "m3-2", "commit": "0d1d86c19b5e9381c07af4955fb4f8751b61c9a50688845933f2c89e72613858", "publish_has
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have already sent the match attestation proposal for m1 and are waiting for the opponent (필명-0b40
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: We have completed our commits and reveals for the first round of match m1, and we have revealed our 
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: 현재 m3 경기의 라운드 2에서 a(필명-0b40bf)가 아직 라벨 m3-2 로 먼저 커밋하지 않았습니다. 규칙에 따라 a가 먼저 커밋해야 하므로, 우리는 추가 행동을 할 수 없습
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"ok": true}
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: All setup steps are complete and the latest match result (m1) has been attested. I have no pending o
+[assistant] 필명-d8da8f: [ev-524557746b] commit → {"ok": true, "label": "m2-1", "commit": "6d5948641252a26da36a84c18c1ec158668409a800b9c22eac270ccdd159bc4e", "publish_has
+[assistant] 필명-52b7dc: [ev-524557746b] commit → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: 현재 상황: 
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: 현재 m3 경기 라운드 2에서 a(필명-0b40bf)가 아직 나의 커밋을 기다리고 있으므로, 제가 할 수 있는 추가 행동이 없습니다. 기다리겠습니다.
+[assistant] 필명-d8da8f: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have committed and sent our move for match m2 round 1 to 필명-52b7dc. According to the rules, we no
+[assistant] 필명-0b40bf: [ev-524557746b] reveal → {"ok": true, "label": "m3-2", "value": "바위", "hash": "d9194a05bfd31f99c6a6a05d34ab61981042b9a3198c7b014d4046629a162d30",
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: 현재 상황: 
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All required steps for match m1 are completed and the attestation has been recorded. For match m2 I 
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: We have just revealed our move for m3 round 2. We need to wait for the opponent (필명-52b7dc) to revea
+[assistant] 필명-52b7dc: [ev-524557746b] commit → {"ok": true, "label": "m2-1", "commit": "546560ac30963fcac92450b336c5d9c77e01323f73cc7cf0ddae66ff2b91fcfb", "publish_has
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: 현재 m3 경기의 2라운드에서 나는 내 선택을 공개(reveal)했으며, 상대(필명-52b7dc)의 공개가 아직 원장에 기록되지 않았다. 규칙에 따라 양쪽 모두 공개가 완료된 후에
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: We have revealed our move for m3 round 2 and are waiting for the opponent (필명-52b7dc) to reveal thei
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: I have just committed my move for match m2 round 1, but according to the rules I should wait for the
+[assistant] 필명-d8da8f: [ev-524557746b] reveal → {"ok": true, "label": "m2-1", "value": "바위", "hash": "bf5a1160774c0abd4981fd1d518c0619dc7d6d718d29b1970a5762afba3ef0f6",
+[assistant] 필명-d8da8f: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have committed, revealed, and sent our reveal for match m2 round 1. Now we must wait for the oppo
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: We have committed our move for m2-1 and notified opponent 필명-d8da8f. We must now wait for them to co
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: We have revealed our move for m3 round 2 (label m3-2) and are waiting for the opponent (필명-52b7dc) t
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have already committed, revealed, and sent our reveal for m2‑1. The opponent 필명-52b7dc has only a
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: 현재 m3 경기 2라운드에서 a(필명-0b40bf)가 아직 공개(reveal)하지 않았으며, m2 경기 1라운드에서도 a(필명-d8daf) 의 공개를 기다리고 있습니다. 규칙에 따
+[assistant] 필명-52b7dc: [ev-524557746b] reveal → {"ok": true, "label": "m2-1", "value": "바위", "hash": "80576944139452ba26df6fe8807af22fa07594f758fd14c56a30df40044bbcb2",
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: I have already performed a premature reveal for m2-1, but according to the rules I must wait for the
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: 현재 m3 경기의 2라운드에서 나는 내 선택을 공개(reveal)했으며, 아직 상대 필명-52b7dc의 공개가 원장에 기록되지 않았다. 규칙에 따라 양쪽 모두 공개가 완료된 후에 
+[assistant] 필명-d8da8f: [ev-524557746b] commit → {"ok": true, "label": "m2-2", "commit": "357517788e51ad4a36b7b2799d20ee0fcd66d8b4d2328953fe9edea2f8e5a2ac", "publish_has
+[assistant] 필명-52b7dc: [ev-524557746b] reveal → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: 현재 m3 경기와 m2 경기 모두 a(상대)가 아직 다음 단계(커밋 또는 공개)를 진행하지 않았습니다. 따라서 나는 할 일이 없습니다. 규칙에 따라 기다려야 합니다.
+[assistant] 필명-d8da8f: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have committed round 2 of match m2 and sent the commit hash to opponent 필명-52b7dc. The next step 
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: I have committed and revealed my move for match m3 round 2 (label m3-2). The opponent (필명-52b7dc) ha
+[assistant] 필명-52b7dc: [ev-524557746b] commit → {"ok": true, "label": "m2-2", "commit": "17e24f46d7dd2d5d976a6ef7bb17a33eb408faddbc5b018fd74bbe0e451988d6", "publish_has
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All required commits for my side have been made (m3-1, m3-2, m2-1, m2-2). The opponents (필명-0b40bf f
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: We have revealed our move for m3 round 2 (label m3-2) and are waiting for the opponent (필명-52b7dc) t
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: We have committed round 2 of match m2 and sent the commit hash to opponent 필명-52b7dc. The next step 
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All required commits have been made for both matches m2 and m3. The opponents (a) have not yet perfo
+[assistant] 필명-4f91fc: [ev-524557746b] 기다림: Owner declined participation, so I must not take any further actions in this event.
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: 현재 원장 상태를 보면 m2와 m3 경기에 대해 아직 모든 공개가 완료되지 않았다. m2-2와 m3-1에 대한 공개(reveal)가 아직 없으며, 이를 기다려야 한다. 조직자로서 
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All my commits are done. For both matches m3 and m2, the opponent (a) must reveal first in round 2. 
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: 현재 m2 경기의 2라운드에서 나는 커밋을 완료하고 상대에게 커밋 해시를 보냈으며, 상대가 커밋(publish)만 올렸고 아직 공개(reveal)를 하지 않았다. 규칙에 따라 상대
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: 현재 상황을 정리하면:
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: All required organizer steps are completed. The remaining actions are pending reveals from participa
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All required commits for matches m2 and m3 have been made. For each round 2, the opponent who is 'a'
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: 현재 m2 경기의 2라운드에서 나는 커밋을 했고, 상대가 커밋(publish)만 올렸으며 아직 공개(reveal)를 하지 않았다. 규칙에 따라 상대가 먼저 공개할 때까지 기다려야 
+[assistant] 필명-0b40bf: [ev-524557746b] propose_attest → {"error": "인자가 맞지 않음: value_json가 JSON이 아님"}
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All required commits and reveals for match m2 round 1 are completed, and both players have published
+[assistant] 필명-4f91fc: [ev-524557746b] 기다림: owner declined participation, so I have no role in this event and must not take any further actions.
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: 원장에 m2 경기의 2번째 판에 대한 commit만 있고, 아직 두 참가자(필명-d8da8f, 필명-52b7dc)의 reveal가 없습니다. 조직자로서는 추가 행동이 없으며, 참가
+[assistant] 필명-52b7dc: [ev-524557746b] reveal → {"ok": true, "label": "m3-2", "value": "바위", "hash": "b9a39999caf8408051ca9fa3429c3056281945cfa96b064b64c8e402142f2898",
+[assistant] 필명-52b7dc: [ev-524557746b] propose_attest → {"error": "제안하는 나도 당사자여야 한다"}
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my required actions are done. In match m2 round 2 I have committed and revealed my move, and the
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my required actions are completed. For match m2 round 2 I have committed and revealed my move, a
+[assistant] 필명-52b7dc: [ev-524557746b] note → {"ok": true}
+[assistant] 필명-0b40bf: [ev-524557746b] commit → {"error": "인자가 맞지 않음: label, value 없음"}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All commits for matches m2 and m3 are done. For round 2 of match m3, the opponent (a = 필명-0b40bf) mu
+[assistant] 필명-0b40bf: [ev-524557746b] commit → {"ok": true, "label": "m2-2", "commit": "3a96c2ea40c9791223f24256aa48bfeb824bf63455073710b053a65cf13b3506", "publish_has
+[assistant] 필명-0b40bf: [ev-524557746b] reveal → {"ok": true, "label": "m2-2", "value": "가위", "hash": "75647c2b2590a41918fe97c86b39d7bd1ad55ad71de7f7e2483c1b374d19b218",
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All required commits and reveals for match m2 round 2 are not yet complete because the opponent (필명-
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All our commits for matches m2 and m3 are completed. For round 2 of match m2, the opponent (a = 필명-0
+[assistant] 필명-0b40bf: [ev-524557746b] commit → {"ok": true, "label": "m3-3", "commit": "d5beeaea86d876bb79d26b6dd40a8a6a3854b8249af4646a0cc6b938f5a55ef1", "publish_has
+[assistant] 필명-d8da8f: [ev-524557746b] reveal → {"ok": true, "label": "m2-2", "value": "가위", "hash": "fcd18e4e49c3652422f748b99d470e9e5a04c98c462b3eee8df99c01e5b3dc2a",
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All required commits and reveals for match m2 round 2 are not yet complete because the opponent (필명-
+[assistant] 필명-d8da8f: [ev-524557746b] send → {"ok": true}
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All required commits and reveals for match m2 round 2 are not yet complete because the opponent (필명-
+[assistant] 필명-52b7dc: [ev-524557746b] commit → {"ok": true, "label": "m3-3", "commit": "a14b486fd802458bc88b6a8e92a281692b6dd9200a9d8ad943e5943fe098d733", "publish_has
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: 현재 m2 경기의 2라운드와 m3 경기의 3라운드 모두 상대(필명-52b7dc)의 공개가 아직 원장에 기록되지 않았습니다. 규칙에 따라 양쪽이 모두 공개를 마친 뒤에 공동 확인을 
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: After committing my move for m3-3, the next required action is for the opponent (필명-0b40bf) to revea
+[assistant] 필명-d8da8f: [ev-524557746b] propose_attest → {"error": "이런 공개값이 없다(내가 등록했거나 받아서 코드가 확인한 것만 쓸 수 있다): 공개:필명-0b40bf:m2-1"}
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All required commits and reveals for match m2 round 2 are not yet complete because the opponent (필명-
+[assistant] 필명-d8da8f: [ev-524557746b] propose_attest → {"error": "이런 공개값이 없다(내가 등록했거나 받아서 코드가 확인한 것만 쓸 수 있다): 공개:필명-d8다8f:m2-2, 공개:필명-52b7dc:m2-2"}
+[assistant] 필명-d8da8f: [ev-524557746b] propose_attest → {"error": "이런 공개값이 없다(내가 등록했거나 받아서 코드가 확인한 것만 쓸 수 있다): 공개:필명-0b40bf:m2-1"}
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: 현재 m2 경기의 1라운드와 2라운드에 대해 상대(필명-0b40bf)의 공개값이 아직 원장에 기록되지 않았다. 규칙에 따라 상대가 먼저 공개할 때까지 기다려야 하므로 지금 할 일은
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All required actions for my matches are done. For match m2 round 1 the opponent (필명-0b40bf) has not 
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my required actions are completed. In match m2, the opponent (필명-0b40bf) has not yet published t
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All required commits are done for matches m2 and m3. For round 3 of match m3, the opponent (필명-0b40b
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All required commits and reveals for match m2 have not yet been completed because the opponent (필명-5
+[assistant] 필명-d8da8f: [ev-524557746b] propose_attest → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-d8da8f: [ev-524557746b] propose_attest → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All required steps for both matches are completed and I have already proposed the attestation for m2
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All commits for matches m2 and m3 are done. For round 3 of match m3, the opponent (필명-0b40bf) has pu
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All commits and reveals for match m2 round 2 are not yet complete because 필명-52b7dc has not revealed
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All required moves and reveals for matches m1 and m2 are completed, and I have already proposed the 
+[assistant] 필명-4f91fc: [ev-524557746b] 기다림: Owner declined participation, so I have no role in this event and must not take any further actions.
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All required commits for matches m2 and m3 have been made. For match m2 both rounds resulted in ties
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: 원장에 남은 미완료 사항을 확인했습니다.
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All required commits and reveals for match m2 have not yet been completed because 필명-52b7dc has not 
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All moves, reveals, and attestation proposals for my matches (m1 and m2) are completed. I have alrea
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my matches (m1 and m2) are completed, reveals done, and I have already proposed the attestation 
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All required commits and reveals for my matches are pending opponent actions (필명-52b2dc). I have not
+[assistant] 필명-52b7dc: [ev-524557746b] reveal → {"ok": true, "label": "m2-2", "value": "보", "hash": "a11919fd3c1f4e4ae150d77b02d1f5c01f7993344b37a9276c9c20787766c031", 
+[assistant] 필명-d8da8f: [ev-524557746b] propose_attest → {"request_id": "ev-524557746b-945e486d", "sent": {"52b7dc77": true}}
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: I have just proposed the joint attestation for match m2 with the correct parties and winner. Now I m
+[assistant] 필명-52b7dc: [ev-524557746b] propose_attest → {"request_id": "ev-524557746b-d6d07926", "sent": {"d8da8f29": true}}
+[assistant] 필명-0b40bf: [ev-524557746b] propose_attest → {"error": "제안하는 나도 당사자여야 한다"}
+[assistant] 필명-d8da8f: [ev-524557746b] cosign → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] cosign → {"error": "서명 요청 ev-524557746b-d6d07926이 없다"}
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All required actions for my matches (m1 and m2) are completed. I have revealed my moves, proposed th
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All my matches (m1 and m3) are either completed (m1) or awaiting opponent actions (m3 round 3). I ha
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my matches (m1 and m2) are fully resolved, attested, and signed. The next step is to wait for th
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All required commits and reveals for my matches are either completed (m1) or waiting for opponent ac
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: 모든 경기 m1, m2는 결과가 attested 되었고, m3 경기의 진행 상황을 확인했지만 아직 결과가 완성되지 않아 참가자들의 추가 커밋·리veal을 기다려야 합니다. 조직자로
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: I have already proposed the match result for m2 and the opponent (필명-d8da8f) still needs to cosign. 
+[assistant] 필명-52b7dc: [ev-524557746b] cosign → {"error": "서명 요청 ev-524557746b-945e486d이 없다"}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: I have attempted to cosign the match result for m2, but the request ID does not exist in the ledger.
+[assistant] 필명-52b7dc: [ev-524557746b] cosign → {"error": "서명 요청 ev-524557746b-d6d07926이 없다"}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All required commits are done. In match m3 round 3, the opponent (a = 필명-0b40bf) must reveal their m
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All required actions for match m2 are completed (the attest record is already signed by both parties
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All my commitments are done. For match m3 round 3, the opponent (필명-0b40bf) has published their comm
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: All required organizer steps (contracts, assign, solicit, processing of completed matches) are done.
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my matches (m1 and m2) are completed, reveals and attestations are signed. The only remaining st
+[assistant] 필명-0b40bf: [ev-524557746b] reveal → {"error": "먼저 등록한 라벨 wait이 없다"}
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All my matches are either completed (m1, m2) or awaiting opponent reveals (m3 round 3). No further a
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All of my matches (m1 and m2) are completed, reveals and attestations are signed. The only remaining
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: All required organizer actions (contracts, assign, solicit, processing completed matches) are done. 
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All my commits for matches m2 and m3 are completed. For match m3 round 3, the opponent (필명-0b40bf) h
+[assistant] 필명-0b40bf: [ev-524557746b] reveal → {"ok": true, "label": "m3-3", "value": "보", "hash": "74dbd5106819ad6f175a8fac56814e580f61d214beb38faa6f19689eeb7e20fb", 
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All required commits and reveals for match m3 are not yet complete because 필명-52b7dc has not reveale
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: 현재 m3 경기의 3라운드에서 아직 필명-52b7dc의 공개값이 원장에 기록되지 않았다. 규칙에 따라 상대가 먼저 공개할 때까지 기다려야 한다. 따라서 지금 할 일은 없습니다.
+[assistant] 필명-52b7dc: [ev-524557746b] reveal → {"error": "인자가 맞지 않음: label 없음"}
+[assistant] 필명-52b7dc: [ev-524557746b] reveal → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-52b7dc: [ev-524557746b] reveal → {"ok": true, "label": "m3-3", "value": "보", "hash": "613deae07a33b0edf73ce393ce8e42e0db1eda74cfcf14340251d559bde51e77", 
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my matches (m1, m2, m3) have completed reveals and attestations. The organizer still needs to fi
+[assistant] 필명-52b7dc: [ev-524557746b] commit → {"ok": true, "label": "m3-4", "commit": "2ac474d299c5be6e13eb8aeec616baf5e9b7a4e8e224ed0ab2a70d26243cb9e6", "publish_has
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: I have committed my move for round 4 of match m3 (label m3-4). The opponent (필명-0b40bf) now needs to
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my matches (m1, m2, m3) have been completed, all reveals and attestations are signed. The only r
+[assistant] 필명-0b40bf: [ev-524557746b] propose_attest → {"request_id": "ev-524557746b-c7720e8f", "sent": {"52b7dc77": true}}
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: I have proposed the joint attest for match m3 and sent it to opponent 필명-52b7dc. I now must wait for
+[assistant] 필명-52b7dc: [ev-524557746b] cosign → {"ok": true}
+[assistant] 필명-0b40bf: [ev-524557746b] commit → {"ok": true, "label": "m3-4", "commit": "5a62b03d593aee106bca60d65d39158837c074d74ceb396a996c32d984c0d772", "publish_has
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All required actions for my matches are completed and I have cosigned the joint attest for m3. No fu
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All required actions for my matches are completed: m1 and m2 have attestations finalized, and for m3
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my matches are completed, all reveals and attestations are signed. The only remaining step is fo
+[assistant] 필명-52b7dc: [ev-524557746b] reveal → {"ok": true, "label": "m3-4", "value": "가위", "hash": "ec9d64c89e62b5efbcf55b7cd730b1fd5ef465cdee4db93467fb622958ea1498",
+[assistant] 필명-0b40bf: [ev-524557746b] propose_attest → {"request_id": "ev-524557746b-c828da8c", "sent": {"52b7dc77": true}}
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All required actions are done; awaiting opponent's cosignature for match m3.
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my matches (m1, m2, m3) have been completed with reveals and attestations signed. The only remai
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All commits and reveals for match m3 are now completed (rounds 1-4). I have already sent a propose_a
+[assistant] 필명-52b7dc: [ev-524557746b] propose_attest → {"error": "이런 공개값이 없다(내가 등록했거나 받아서 코드가 확인한 것만 쓸 수 있다): 공개:필명-0b40bf:m3-4"}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: The opponent (필명-0b40bf) has published their commit for m3-4, but has not yet revealed it. I cannot 
+[assistant] 필명-52b7dc: [ev-524557746b] cosign → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All my commitments, reveals, and joint attestations for matches m2 and m3 have been completed and co
+[assistant] 필명-0b40bf: [ev-524557746b] propose_attest → {"error": "인자가 맞지 않음: kind, subject, value_json, parties 없음"}
+[assistant] 필명-0b40bf: [ev-524557746b] propose_attest → {"request_id": "ev-524557746b-7318d756", "sent": {"52b7dc77": true}}
+[assistant] 필명-52b7dc: [ev-524557746b] cosign → {"ok": true}
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"error": "인자가 맞지 않음: request_id 없음"}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All required actions for my matches are completed and all attestations have been cosigned. No furthe
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"error": "서명 요청 ev-524557746b-7318d756이 없다"}
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"error": "인자가 맞지 않음: request_id 없음"}
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"error": "서명 요청 ev-524557746b-7318d756이 없다"}
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All of my matches are now complete. I have already proposed the joint attest for match m3 and there 
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my required moves, reveals, and attestations are completed. Match m3 involves peers 0b40bf and 5
+[assistant] 필명-4f91fc: [ev-524557746b] 기다림: Owner declined participation, so I have no role in this event and must not take any further actions.
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All my commitments, reveals, and joint attestations for matches m2 and m3 have been completed and co
+[assistant] 필명-0b40bf: [ev-524557746b] propose_attest → {"request_id": "ev-524557746b-04334528", "sent": {"52b7dc77": true}}
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"error": "서명 요청 ev-524557746b-04334528이 없다"}
+[assistant] 필명-52b7dc: [ev-524557746b] cosign → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All required actions for matches m2 and m3 have been completed and all attestations have been cosign
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All matches are completed and attestations are signed. The next step is to close the event.
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All commitments and reveals for my matches are complete, and I have already proposed the joint attes
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my matches (m1, m2, m3) have been fully resolved, reveals and attestations are signed. The only 
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All commitments, reveals, and the joint attestation for match m3 have been recorded. I have already 
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All matches (m1, m2, m3) have completed attestations and are recorded. No further actions (commits, 
+[assistant] 필명-3b408e: [ev-524557746b] propose_attest → {"error": "제안하는 나도 당사자여야 한다"}
+[assistant] 필명-3b408e: [ev-524557746b] propose_attest → {"request_id": "ev-524557746b-52043e92", "sent": {"d8da8f29": true, "0b40bf30": true, "52b7dc77": true}}
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: 
+[assistant] 필명-52b7dc: [ev-524557746b] cosign → {"ok": true}
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: I have just proposed the final ranking attestation and it is awaiting cosigns from the participants.
+[assistant] 필명-d8da8f: [ev-524557746b] cosign → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All matches are completed, attestations are signed, and the ranking has been cosigned. The next requ
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All required actions for my participation are completed: moves, reveals, attestations, and I have co
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: All matches have been attested and the final ranking attestation has already been proposed and is aw
+[assistant] 필명-0b40bf: [ev-524557746b] cosign → {"ok": true}
+[assistant] 필명-52b7dc: [ev-524557746b] 기다림: All matches are finished, all attestations are signed, and the ranking has been cosigned. The next r
+[assistant] 필명-d8da8f: [ev-524557746b] 기다림: All my required actions (moves, reveals, attestations, and cosigning the final ranking) are complete
+[assistant] 필명-0b40bf: [ev-524557746b] 기다림: All match attestations are finalized and the ranking request has been signed. The event can now be c
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: 
+[assistant] 필명-3b408e: [ev-524557746b] propose_attest → {"ok": true, "hash": "f073f241178459e175b43f7ad7833b4b6236fe40c99417cf18d19e22983a03ed", "error": null}
+[assistant] 필명-3b408e: [ev-524557746b] close_event → {"ok": true, "hash": "9c21487ffbf6add547152a5ae1424434cb31041675b5b3ab2e98aeeb92b2e5d2", "error": null}
+[assistant] 필명-3b408e: [ev-524557746b] 기다림: All required steps have been completed and the event is closed. No pending organizer actions remain.
+elapsed 1030.0s, entries 40: ['event', 'contract', 'contract', 'contract', 'assign', 'publish', 'publish', 'publish', 'publish', 'reveal', 'reveal', 'reveal', 'reveal', 'publish', 'publish', 'attest', 'publish', 'reveal', 'publish', 'reveal', 'reveal', 'publish', 'publish', 'reveal', 'publish', 'reveal', 'publish', 'reveal', 'publish', 'reveal', 'attest', 'reveal', 'reveal', 'publish', 'publish', 'reveal', 'attest', 'attest', 'close']
+E           AssertionError: assert not [('http://127.0.0.1:45513', 'http://127.0.0.1:56507', 'attest_request', 'public', 'ev-524557746b'), ('http://127.0.0.1...', 'ev-524557746b'), ('http://127.0.0.1:45513', 'http://127.0.0.1:53861', 'attest_request', 'public', 'ev-524557746b')]
+tests/live/test_rps_acceptance.py:161: AssertionError
+exit=1
+
+=== ledger ===
+0 genesis {}
+1 event {"kind": "가위바위보"}
+2 contract {"role": "player", "contractor": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5"}
+3 contract {"role": "player", "contractor": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab"}
+4 contract {"role": "player", "contractor": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9"}
+5 assign {"subjects": {"m1": ["d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab"], "m2": ["d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9"], "m3": ["0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9"]}}
+6 publish {"author": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "label": "m1-1"}
+7 publish {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m3-1"}
+8 publish {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m3-1"}
+9 publish {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m1-1"}
+10 reveal {"author": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "label": "m1-1", "value": "가위"}
+11 reveal {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m3-1", "value": "가위"}
+12 reveal {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m3-1", "value": "가위"}
+13 reveal {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m1-1", "value": "보"}
+14 publish {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m3-2"}
+15 publish {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m3-2"}
+16 attest {"kind": "match", "subject": "m1", "value": {"a": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "b": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "rounds": [{"round": 1, "a": {"author": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "label": "m1-1", "value": "가위", "salt": "1eb58604c61e1ed8", "publish_hash": "5b737aea25f700ea646afb01c40b7de428a7e34a6745261e5bc4f11565635ef8"}, "b": {"publish_hash": "568621dc9a8fa1edc48da8c1ec129b91dfb25af529178f861394b47d24cbef0e", "author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m1-1", "value": "보", "salt": "d7c5a72bbf002358"}}], "winner": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab"}, "parties": ["d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab"]
+17 publish {"author": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "label": "m2-1"}
+18 reveal {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m3-2", "value": "바위"}
+19 publish {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m2-1"}
+20 reveal {"author": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "label": "m2-1", "value": "바위"}
+21 reveal {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m2-1", "value": "바위"}
+22 publish {"author": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "label": "m2-2"}
+23 publish {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m2-2"}
+24 reveal {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m3-2", "value": "바위"}
+25 publish {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m2-2"}
+26 reveal {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m2-2", "value": "가위"}
+27 publish {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m3-3"}
+28 reveal {"author": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "label": "m2-2", "value": "가위"}
+29 publish {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m3-3"}
+30 reveal {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m2-2", "value": "보"}
+31 attest {"kind": "match", "subject": "m2", "value": {"a": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "b": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "rounds": [{"round": 1, "a": {"publish_hash": "6ce976faea2549895470072ae403d06226aeeefb95e66cb9a8f2be6c8b83d389", "author": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "label": "m2-1", "value": "바위", "salt": "6aae3cd5c429f16b"}, "b": {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m2-1", "value": "바위", "salt": "18ddab9acc8e31e1", "publish_hash": "3982728eb663d587eac69c443e63cc6e80e05c6bafe90abf293c3ab9f4c5f063"}}, {"round": 2, "a": {"publish_hash": "429e232cc14133c354c4b77ca9bc1846ca3cd2b5215698fc05df8cfa03bf8bdb", "author": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "label": "m2-2", "value": "가위", "salt": "6efc
+32 reveal {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m3-3", "value": "보"}
+33 reveal {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m3-3", "value": "보"}
+34 publish {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m3-4"}
+35 publish {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m3-4"}
+36 reveal {"author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m3-4", "value": "가위"}
+37 attest {"kind": "match", "subject": "m3", "value": {"a": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "b": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "rounds": [{"round": 1, "a": {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m3-1", "value": "가위", "salt": "17b6eace380e313a", "publish_hash": "e17e1bfe4a7bc5d075d2ed93766e285d85ffeb8b673d5641bc9a0bd9fc2577e3"}, "b": {"publish_hash": "d6e1313ee80ef72842b63563a2d0f11d32765feb4036d0a4f5a815441042e1ed", "author": "52b7dc7765034a737fd7b9388d40f67d2775a506ea26a16b66aefeccc34304e9", "label": "m3-1", "value": "가위", "salt": "31b0f50c2266c910"}}, {"round": 2, "a": {"author": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "label": "m3-2", "value": "바위", "salt": "ff8538f54efe34c8", "publish_hash": "f4f5bc52bd0a06a7f60c8b25b4032573e3cb3656fddaf1e52c5d
+38 attest {"kind": "ranking", "subject": "final", "value": {"ranking": [{"pub": "d8da8f29d49c3a1449c784c5928a207bae996176cfe442649bd9c1c1cbfbbfd5", "wins": 1, "games": 2, "rate": 0.5}, {"pub": "0b40bf30071a83c7f02b4163cb27cf0b5e87daf88f5f4baedf01fe304fc312ab", "wins": 1, "games": 2, "rate": 0.5}, {"pub": "필명-52b8dc", "wins": 0, "games": 2, "rate": 0.0}]}, "parties": ["3b408ea45d568d89da43b6cb93d414a45e5c7d9d5b799928bdb0ecb8a54bc89b"]}
+39 close {"result_hash": "f073f241178459e175b43f7ad7833b4b6236fe40c99417cf18d19e22983a03ed"}

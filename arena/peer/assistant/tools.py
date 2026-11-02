@@ -192,6 +192,9 @@ async def propose_attest(A, ctx, st, kind, subject, value, parties):
     if bad:  # enforced by code: never propose a result whose reveals do not match the ledger
         return {"error": f"value 안의 공개값이 원장과 맞지 않는다(코드 확인): {'; '.join(bad)}"}
     pubs = [x["pub"] for x in parties]
+    refused = await A.attest_precheck(ctx, st, kind, subject, pubs)
+    if refused:  # what the ledger would refuse is refused here, before anyone is asked to sign
+        return {"error": refused}
     p = {"event_id": st.event_id, "kind": kind, "subject": subject, "value": value, "parties": pubs, "nonce": nonce(kind, subject),
          "group_id": st.group_id}
     if pubs == [ctx.pub]:

@@ -174,6 +174,51 @@ class EventAssistant:
         mark = " · 서명 완료(당사자 전원, 원장 확정)" if e["type"] in self.SIGNED_BY_ALL else ""
         return self.shorten(ctx, st, f"{e['seq']} {e['type']} {json.dumps(rest, ensure_ascii=False)}{mark} (항목 {e['hash']})")
 
+    async def attest_precheck(self, ctx, st, kind, subject, pubs) -> str | None:
+        """the event policy's rules for a joint confirmation, checked by code before any signature request goes out"""
+        pol = st.policy
+        if pol.get("attest_kinds") and kind not in pol["attest_kinds"]:
+            return f"이 이벤트가 허용하는 공동 확인 종류(kind)가 아니다: {kind} (허용: {', '.join(pol['attest_kinds'])})"
+        need = pol.get("attest_roles", {}).get(kind)
+        if need == "issuer" and pubs != [st.issuer_pub]:
+            return f"'{kind}'는 개최자(issuer)가 혼자 기록하는 종류다. parties에는 개최자 한 명만 넣는다"
+        entries = await self.progress_entries(ctx, st)  # contracts and assignments, as the ledger has them
+        if need and need != "issuer":
+            roles = {}
+            for e in entries:
+                if e["type"] == "contract" and e.get("contractor"):
+                    roles.setdefault(e["contractor"], set()).add(e.get("role"))
+            lacking = [self.handle(ctx, st, p) for p in pubs if need not in roles.get(p, set())]
+            if lacking:
+                return f"'{kind}'의 당사자는 모두 '{need}' 역할 계약이 있어야 한다(role): {', '.join(lacking)}"
+        if kind in pol.get("assigned_kinds", []):
+            assigned = st.assignments.get(subject)
+            if assigned is None:
+                return f"'{subject}'는 배정(assign)되지 않은 주제다. 배정된 주제: {', '.join(st.assignments) or '없음'}"
+            if sorted(pubs) != sorted(assigned):
+                return (f"당사자가 '{subject}'에 배정(assign)된 사람과 다르다. 배정: "
+                        f"{'·'.join(self.handle(ctx, st, p) for p in assigned)}")
+        return None
+
+    async def check_handles(self, ctx, st, obj):
+        """a whole string that looks like a handle but names nobody known (event, broker) is refused; known ones become keys"""
+        pre, n = ctx.settings.pen_name_prefix, ctx.settings.pen_name_len
+        bad = []
+
+        async def one(x):
+            if isinstance(x, dict):
+                return {k: await one(v) for k, v in x.items()}
+            if isinstance(x, list):
+                return [await one(v) for v in x]
+            if isinstance(x, str) and x.strip().startswith(pre) and len(x.strip()) == len(pre) + n:
+                pub, _ = await self.resolve_peer(ctx, st, x.strip(), need_url=False)
+                if not pub:
+                    bad.append(x.strip())
+                    return x
+                return pub
+            return x
+        return await one(obj), bad
+
     # ---------------- identification and checks enforced by code ----------------
     REVEAL_KEYS = {"author", "label", "value", "salt", "publish_hash"}
 
@@ -469,6 +514,9 @@ class EventAssistant:
                 except ValueError:
                     return {"error": f"인자가 맞지 않음: {k}가 JSON이 아님"}
         args = self.expand(st, args)  # handles and short refs back to real keys and hashes
+        args, unknown = await self.check_handles(ctx, st, args)
+        if unknown:  # identification enforced by code: a mistyped or garbled handle never reaches the ledger
+            return {"error": f"아무도 가리키지 않는 필명: {', '.join(unknown)}. 진행 현황이나 지금 상태에 나온 필명을 그대로 쓴다"}
         try:
             return await tool.run(self, ctx, st, **args)
         except TypeError as e:
