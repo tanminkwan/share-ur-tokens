@@ -53,3 +53,13 @@ def pick(conns: list, usable=("a2a", "api")) -> dict | None:
             if c.get("kind") == kind and CONNECTION_KINDS[kind].automatic:
                 return c
     return None
+
+
+# who decides and answers for a peer (dev/peer-spec.md 1절): profiles carry one of these as `operator`
+OPERATORS = {"service": "코드가 답함(사람도 LLM도 판단하지 않음)", "agent": "LLM 비서가 판단, 중요한 일은 사람에게", "human": "사람이 직접 판단·행동"}
+
+
+def check_operator(op) -> str | None:
+    if op not in OPERATORS:
+        return f"operator must be one of {', '.join(OPERATORS)}"
+    return None

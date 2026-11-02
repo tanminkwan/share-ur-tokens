@@ -189,7 +189,63 @@ sequenceDiagram
 
 `dev/protocol.md`에 더한다: 이벤트 선언·공지의 `elements` 블록, `share`의 `event_id`, `feedback` 공개 정보, 요소별 원장 규칙(제출, 판정, 봉인), 서비스 결과 영수증 모양, 내장 op `intake.submit`·`evaluation.request`.
 
-## 9. 설정 (모두 `.env`)
+## 9. 6-P 견본 개인 peer: 소유자 창구, 운전석, 소유자 API, 화면
+
+### 9.1 층 나눔
+
+```mermaid
+flowchart TB
+    UI["화면 (브라우저, 바닐라 JS 모듈)<br/>ApiClient · Store · 조각들 · 조립"] -->|"HTTP + 토큰"| API["소유자 API (Starlette)<br/>HTTP만 맡음"]
+    API --> SVC["OwnerService<br/>(무엇을 할 수 있나: 상태, 답하기, 도구 실행, 이벤트 열기)"]
+    SVC --> DESK["OwnerDesk<br/>(알림 거리와 답)"]
+    SVC --> ASST["EventAssistant<br/>(운전석: 자동·제안·수동)"]
+    ASST -->|"Owner + Notifier"| DO["DeskOwner<br/>(물음·글·제안·알림을 창구로)"]
+    DO --> DESK
+    ASST --> TOOLS["같은 도구<br/>(원장 규칙·서명은 코드)"]
+```
+
+| 부분 | 맡는 일(하나씩) | 위치 |
+|---|---|---|
+| `DeskItem` | 알림 거리 하나: `id, kind, event_id, title, body, fields?, status(open·done), answer, created` | `arena/peer/desk/model.py` |
+| `OwnerDesk` | 알림 거리를 쌓고, 답을 받고, 답을 기다리는 쪽에 돌려준다. 재시작해도 남게 저장(`OwnerDeskApp`의 앱 상태) | `arena/peer/desk/desk.py` |
+| `DeskOwner` | 플랫폼의 `Owner`(묻기·글 받기)와 `Notifier`(알리기·제안 승인받기)를 창구로 잇는 어댑터. 답이 정해진 시간 안에 없으면 "아니오" | `arena/peer/desk/owner.py` |
+| 운전석 | 기본 비서의 이벤트 상태 `drive`: `auto`·`suggest`·`manual`. 제안이면 실행 전에 `Notifier.suggest`, 수동이면 LLM을 부르지 않고 입력을 알림으로 넘긴다 | `arena/peer/assistant/core.py` |
+| `OwnerService` | 화면이 쓰는 일의 목록(응용 층). HTTP를 모른다 | `arena/peer/desk/service.py` |
+| 소유자 API | HTTP 경로와 토큰 확인만. `OwnerService`에 기댄다 | `arena/peer/desk/api.py` |
+| 화면 | 정적 파일. `ApiClient`(통신만), `Store`(상태와 구독), 조각(`ItemsView`, `EventsView`, `EventView`, `ToolForm`, `HostForm`), 알림 종류별 카드 등록표, `app.js`(조립) | `arena/peer/desk/static/` |
+
+SOLID: 조각은 `Store`와 `ApiClient`를 생성자로 받는다(의존 뒤집기). 알림 종류를 더할 때는 카드 등록표에 하나를 더한다(열고 닫기). `ToolForm`은 도구의 인자 스키마로 입력칸을 만들어, 도구가 늘어도 화면 코드를 고치지 않는다.
+
+### 9.2 운전석
+
+| 입력이 오면 | 자동 | 제안 | 수동 |
+|---|---|---|---|
+| 새 공지, 일정 시각, 내 예약 | 창구에 알림 + LLM 차례 | 같음 | 창구에 알림만 |
+| 메시지, 원장 새 기록, 서명 요청 | LLM 차례 | LLM 차례 | 창구에 알림만 |
+| LLM이 도구를 고르면 | 실행 | 창구에 제안 → 승인하면 실행, 거절하면 이번 차례를 멈춤(읽기만 하는 도구는 바로 실행) | (LLM 없음) |
+| 사람이 화면에서 도구를 고르면 | 실행 | 실행 | 실행 |
+
+LLM이 없는 peer(`NoLLM`)는 언제나 수동이다. 사람이 화면에서 실행한 도구도 LLM이 고른 도구와 같은 코드(`_run_tool`)를 지나므로, 필명 되돌리기, 공개값 코드 운반, 원장이 거절할 일 미리 거절이 똑같이 선다.
+
+### 9.3 소유자 API (판 0)
+
+모든 경로는 `Authorization: Bearer <토큰>`이 있어야 한다(없거나 틀리면 401). 토큰은 설정(`ARENA_PERSONAL_DESK_TOKEN`)이나, 비면 홈 폴더에 만든 무작위 값이다. 기본으로 127.0.0.1에만 연다.
+
+| 경로 | 하는 일 |
+|---|---|
+| `GET /api/state` | 나(필명, 공개키, `operator`, LLM 유무), 이벤트 목록(제목, 역할, 운전석, 닫힘), 열린 알림 수 |
+| `GET /api/items?status=open\|all` | 알림 거리 목록 |
+| `POST /api/items/{id}/answer` | 답하기: 물음 `{yes, why}`, 글 `{fields}`, 제안 `{approve}`, 그 밖 `{}`(읽음) |
+| `GET /api/events/{id}` | 이벤트 하나: 규칙, 지금 상태 줄(코드가 만든 것), 최근 기록, 쓸 수 있는 도구와 인자 스키마, 일정과 예약 |
+| `POST /api/events/{id}/drive` | `{drive}`: 운전석 바꾸기(LLM이 없으면 `manual`만) |
+| `POST /api/events/{id}/tools/{name}` | `{args}`: 사람이 도구 실행. 답은 도구의 결과 그대로 |
+| `POST /api/events` | 이벤트 열기 `{title, kind, rules, policy, instruction?, schedule?, elements?}` |
+
+### 9.4 화면 테스트
+
+`tests/ui/`: 메모리 안의 broker·recorder·peer 세계에 견본 peer의 소유자 API를 실제 포트로 띄우고, Playwright(비동기, headless Chromium)로 화면을 연다. LLM은 정해진 답을 내는 테스트용 대역이다. 브라우저가 설치되어 있지 않으면 건너뛴다.
+
+## 10. 설정 (모두 `.env`)
 
 | 키 | 뜻 |
 |---|---|

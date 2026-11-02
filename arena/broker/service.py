@@ -6,7 +6,7 @@ import logging
 import time
 from typing import Callable, Iterable
 
-from ..connections import check_connections
+from ..connections import check_connections, check_operator
 from ..config import ConfigError, Settings
 from ..crypto import Identity, pen_name, verify
 from ..search import BM25Searcher, Searcher
@@ -78,6 +78,9 @@ class BrokerService:
         bad = check_connections(prof["connections"]) if "connections" in prof else None
         if bad:
             return {"ok": False, "error": f"bad connection information: {bad}"}
+        bad = check_operator(prof["operator"]) if "operator" in prof else None
+        if bad:
+            return {"ok": False, "error": bad}
         cb = prof.get("codebook")
         if cb is not None and (not isinstance(cb, dict) or set(cb) != {"entry", "publisher", "version"}):
             return {"ok": False, "error": "codebook must be {entry, publisher, version}"}

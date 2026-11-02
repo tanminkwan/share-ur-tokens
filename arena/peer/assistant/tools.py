@@ -45,7 +45,8 @@ async def _record(A, ctx, st, kind, payload):
 
 
 async def ask_owner(A, ctx, st, question):
-    a = await ctx.owner.ask(question, st.rules)
+    from ..owner import Notifier
+    a = await (ctx.owner.ask(question, st.rules, event_id=st.event_id) if isinstance(ctx.owner, Notifier) else ctx.owner.ask(question, st.rules))
     ctx.log.emit("decide", ctx.pen, f"소유자에게 물음 '{question[:40]}' → {'예' if a.yes else '아니오'}: {a.why}")
     return {"yes": a.yes, "why": a.why}
 

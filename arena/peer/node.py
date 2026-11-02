@@ -22,7 +22,7 @@ from .app_install import AppInstaller
 from .elements import PEER_ELEMENTS
 from .events import EventRouter
 from .context import AppContext, PlatformContext
-from .owner import Owner
+from .owner import NoOwner, Owner
 from .plugin import SDK_VERSION, App, EventHandler, Lifecycle, is_uuid, MessageHead, OfferProvider, OpProvider, capabilities_of
 from .profile import ProfileBuilder
 from .receipts import Receipts
@@ -36,6 +36,7 @@ class PeerConfig:
     offers: list[str] = field(default_factory=list)
     labels: list[str] = field(default_factory=list)
     connections: list = field(default_factory=list)  # how to reach this peer (arena/connections.py); empty = a2a at url
+    operator: str | None = None  # service | agent | human (dev/peer-spec.md); None = agent unless the peer has no LLM (human)
     codebook: dict | None = None  # the code table edition this peer follows {entry, publisher, version} (optional)
     element_apps: bool | None = None  # built-in elements' apps (desks): None = only if an app handles events, True/False = always/never
 
@@ -125,6 +126,15 @@ class Peer:
 
     def sign(self, payload) -> str:
         return self.identity.sign(payload)
+
+    def operator(self) -> str:
+        """who decides and answers for this peer (dev/peer-spec.md 1절)"""
+        if self.config.operator:
+            return self.config.operator
+        from ..llm import NoLLM
+        if isinstance(self.owner, NoOwner):
+            return "service"  # nobody behind it: code answers
+        return "human" if isinstance(self.llm, NoLLM) else "agent"
 
     def connections(self) -> list:
         """the connections this peer's profile lists (P6-A7): the person's choice, or a2a at its url; a human contact only if set"""

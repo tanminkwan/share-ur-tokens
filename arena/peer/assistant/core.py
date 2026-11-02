@@ -9,10 +9,11 @@ import os
 import re
 
 from ...crypto import h, pen_name, verify
-from ...llm import ask_json
+from ...llm import NoLLM, ask_json
 from ..event_store import EventStore, FolderEventStore
 from ..elements import element_tools
 from ..events import announce_event, event_times, schedule_event_times
+from ..owner import Notifier
 from ..plugin import ASSISTANT_APP_ID, Decision, MessageHead
 from ..scheduler import fmt_time
 from .state import EventState, commit_hash, nonce
@@ -398,11 +399,12 @@ class EventAssistant:
         st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url,
                                           policy=dict(policy), elements=dict(elements or {}))
         st.instruction = instruction
+        st.drive = self.initial_drive(ctx)
         st.schedule = event_times(out["notice"])
         schedule_event_times(ctx, out["notice"])  # the host wakes at its own event's times too
         self.save(ctx, st)
         ctx.log.emit("assistant", ctx.pen, f"이벤트 개최 {ev} '{title}' (규칙 해시 {out['rules_hash'][:10]}, 방식 assistant)")
-        await self.feed(ctx, ev, f"[소유자의 지시] {instruction}")
+        await self.feed(ctx, ev, f"[소유자의 지시] {instruction}", kind="owner")
         return ev
 
     # ---------------- events handed over by the platform's event router ----------------
@@ -413,17 +415,17 @@ class EventAssistant:
             st = self.events[ev] = EventState(ev, "participant", notice.get("title", ""), notice["rules"], h(notice["rules"].encode()),
                                               notice["group_id"], notice["recorder_url"], notice["recorder_pub"], notice["issuer_pub"],
                                               notice["issuer_url"], offer_roles=list(notice.get("policy", {}).get("roles", [])), policy=dict(notice.get("policy", {})),
-                                              elements=dict(notice.get("elements") or {}), schedule=event_times(notice),
+                                              elements=dict(notice.get("elements") or {}), schedule=event_times(notice), drive=self.initial_drive(ctx),
                                               notice_ver=notice.get("ver", 1))
             st.peers[notice["issuer_pub"]] = notice["issuer_url"]
             self.save(ctx, st)
-            await self.feed(ctx, ev, f"[새 공지] '{notice.get('title', '')}' (개최자 pub={notice['issuer_pub']}). 규칙과 실행 방식이 원장에 공증된 것과 같음을 확인했다.")
+            await self.feed(ctx, ev, f"[새 공지] '{notice.get('title', '')}' (개최자 pub={notice['issuer_pub']}). 규칙과 실행 방식이 원장에 공증된 것과 같음을 확인했다.", kind="notice")
         elif st is not None and change == "updated":
             st.notice_ver = notice.get("ver", st.notice_ver)
-            await self.feed(ctx, ev, f"[공지 수정] 버전 {st.notice_ver}: {notice.get('text', '')}")
+            await self.feed(ctx, ev, f"[공지 수정] 버전 {st.notice_ver}: {notice.get('text', '')}", kind="notice")
         elif st is not None and change == "closed" and not st.notice_closed:
             st.notice_closed = True
-            await self.feed(ctx, ev, "[공지 마감] 개최자가 이 이벤트의 공지를 마감했다.")
+            await self.feed(ctx, ev, "[공지 마감] 개최자가 이 이벤트의 공지를 마감했다.", kind="notice")
 
     async def on_timer(self, ctx, timer):
         """the scheduler woke me at a time (P6-S3): the event's notarized schedule, or a reminder I set myself"""
@@ -437,7 +439,7 @@ class EventAssistant:
             what = " ".join(x for x in (d.get("code", ""), d.get("subject", "")) if x)
             text = (f"[일정 시각] {when} {what}{': ' + d['note'] if d.get('note') else ''}. 원장에 공증된 이 이벤트의 일정 시각이 되었다(코드가 깨움). "
                     "규칙에 따라 지금 할 일을 하라")
-        await self.feed(ctx, st.event_id, text)
+        await self.feed(ctx, st.event_id, text, kind="timer")
 
     MINE = ("author", "issuer")
 
@@ -455,7 +457,7 @@ class EventAssistant:
             self.save(ctx, st)
             if new and not first:
                 lines = [self.progress_line(ctx, st, e) for e in new]
-                await self.feed(ctx, st.event_id, f"[원장 새 기록] 이 이벤트의 원장에 다른 사람의 기록이 올랐다(코드가 읽음). {self.SETTLED_NOTE}\n" + "\n".join(lines))
+                await self.feed(ctx, st.event_id, f"[원장 새 기록] 이 이벤트의 원장에 다른 사람의 기록이 올랐다(코드가 읽음). {self.SETTLED_NOTE}\n" + "\n".join(lines), kind="ledger")
 
     WAKE_HOST = ("attest",)  # results are what a host collects; its own moves come by message or tool result
 
@@ -504,8 +506,26 @@ class EventAssistant:
                 st.roster.append(p["pub"])
                 st.peers.setdefault(p["pub"], p.get("url"))
 
-    async def feed(self, ctx, event_id: str, text: str, idle: bool = False):
+    NOTIFY_IN_AUTO = ("notice", "timer")  # the owner hears of these even while the LLM drives
+
+    def _notifier(self, ctx):
+        return ctx.owner if isinstance(ctx.owner, Notifier) else None
+
+    async def feed(self, ctx, event_id: str, text: str, idle: bool = False, kind: str = "message"):
+        """a new input for an event. Who handles it depends on the event's drive (P6-P4): in manual the owner gets it on the
+        desk and no LLM runs; otherwise the LLM takes a turn (and the owner still hears of notices and scheduled times)"""
         st = self.events[event_id]
+        note = self._notifier(ctx)
+        if st.drive == "manual":
+            if idle:
+                return  # nobody to wake: the owner sees the event on the desk
+            st.transcript.append(self.shorten(ctx, st, f"[입력] {text}"))
+            self.save(ctx, st)
+            if note and kind != "owner":
+                note.notify(kind, self.shorten(ctx, st, text.split("\n", 1)[0])[:120], self.shorten(ctx, st, text), event_id)
+            return
+        if note and kind in self.NOTIFY_IN_AUTO:
+            note.notify(kind, self.shorten(ctx, st, text.split("\n", 1)[0])[:120], self.shorten(ctx, st, text), event_id)
         await self.learn_keys(ctx, st, text)
         st.inbox.append(text)
         st.last_input_at = ctx.clock()
@@ -522,9 +542,9 @@ class EventAssistant:
         return [n for n, t in self.tools.items() if (st.role == "host" or not t.host_only) and (st.role != "host" or not t.participant_only)
                 and (not st.closed or t.after_close) and (t.element is None or t.element in st.elements)]
 
-    def _system(self, ctx, st) -> str:
+    def state_line(self, ctx, st) -> str:
+        """the code-made line on where this event stands (shown to the LLM, and to the owner on the desk)"""
         h = lambda pub: self.handle(ctx, st, pub)
-        tools = "\n".join(f"- {n} {self.tools[n].description}" for n in self._tools_for(st))
         revealed = [k for k, v in st.secrets.items() if v.get("reveal_hash")]
         sent = [f"{k}→{'·'.join(h(p) for p in v)}" for k, v in st.sent_reveals.items()]
         mine = [k for k, v in st.assignments.items() if ctx.pub in v]
@@ -546,6 +566,12 @@ class EventAssistant:
                      + (" / 아직 계약 없는 역할: " + "; ".join(f"{r}(프로필에 내건 peer: {', '.join(h(p) for p in v) or '없음'})"
                                                          for r, v in st.role_offers.items()) if st.role_offers else "")
                      + " / 나는 개최자다(참가 신청은 참가자가 하는 일이고, 개최자는 신청자와 계약한다)") if st.role == "host" else ""))
+        return state
+
+    def _system(self, ctx, st) -> str:
+        h = lambda pub: self.handle(ctx, st, pub)
+        tools = "\n".join(f"- {n} {self.tools[n].description}" for n in self._tools_for(st))
+        state = self.state_line(ctx, st)
         return (f"당신은 peer '{ctx.pen}'의 비서 에이전트입니다. 이벤트 '{st.title}'(event_id {st.event_id}, broker 그룹 {st.group_id})에 "
                 f"{'개최자' if st.role == 'host' else '참가자'}로 참여합니다. 아래 이벤트 규칙을 정확히 따르세요. 규칙에 없는 일은 하지 말고, "
                 "확실하지 않으면 note로 적은 뒤 wait 하세요. 소유자(사람)에게 묻는 말은 한국어로 씁니다. "
@@ -582,6 +608,11 @@ class EventAssistant:
             if isinstance(inner, dict) and set(args) <= {"tool", "name", "arguments", "args"}:  # {"tool": .., "arguments": {..}} -> {..}
                 args = inner
             key = [name, json.dumps(args, ensure_ascii=False, sort_keys=True)]
+            if st.drive == "suggest" and name not in self.READ_ONLY and not await self._approved(ctx, st, name, args, d.get("thought", "")):
+                st.transcript.append(self.shorten(ctx, st, f"[소유자 거절] {name} {json.dumps(args, ensure_ascii=False)[:300]}: 소유자가 이 행동을 승인하지 않았다"))
+                ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] {name} 제안 → 소유자 거절")
+                self.save(ctx, st)
+                break
             if key == st.last_action:  # the same successful call twice in a row: do not run it again
                 result = {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
             else:
@@ -595,6 +626,54 @@ class EventAssistant:
             ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] {name} → {json.dumps(result, ensure_ascii=False)[:120]}")
             self.save(ctx, st)
         self.save(ctx, st)
+
+    # ---------------- drives (P6-P4) ----------------
+    READ_ONLY = ("note", "event_progress", "verify", "my_reveal", "check_reveal", "contact", "submissions", "verdicts", "ask_owner")
+    DRIVES = ("auto", "suggest", "manual")
+
+    def initial_drive(self, ctx) -> str:
+        if isinstance(ctx.llm, NoLLM):
+            return "manual"  # no LLM: the owner drives
+        return self.s.peer_default_drive if self.s.peer_default_drive in self.DRIVES else "auto"
+
+    def set_drive(self, ctx, event_id: str, drive: str) -> dict:
+        st = self.events.get(event_id)
+        if st is None:
+            return {"ok": False, "error": "모르는 이벤트"}
+        if drive not in self.DRIVES:
+            return {"ok": False, "error": f"운전석은 {', '.join(self.DRIVES)} 가운데 하나"}
+        if drive != "manual" and isinstance(ctx.llm, NoLLM):
+            return {"ok": False, "error": "LLM이 없는 peer는 수동(manual)만 된다"}
+        st.drive = drive
+        self.save(ctx, st)
+        return {"ok": True, "drive": drive}
+
+    async def _approved(self, ctx, st, name, args, thought) -> bool:
+        note = self._notifier(ctx)
+        if note is None:
+            return True  # nobody to ask: suggest falls back to auto
+        return await note.suggest(f"비서가 '{name}'을(를) 하려 합니다", self.shorten(ctx, st, f"{thought}\n인자: {json.dumps(args, ensure_ascii=False)}"),
+                                  name, args, st.event_id)
+
+    def tools_view(self, st) -> list[dict]:
+        """the tools the owner may run on this event, with their argument schemas (the screen draws forms from them)"""
+        return [{"name": n, "description": self.tools[n].description, "args": self.tools[n].args or {"type": "object", "properties": {}}}
+                for n in self._tools_for(st) if n != "wait"]
+
+    async def owner_run(self, ctx, event_id: str, name: str, args: dict) -> dict:
+        """the owner runs a tool by hand (any drive): the same code path as the LLM's, so the same checks hold"""
+        st = self.events.get(event_id)
+        if st is None:
+            return {"ok": False, "error": "모르는 이벤트"}
+        if name not in self._tools_for(st) or name == "wait":
+            return {"ok": False, "error": f"이 이벤트에서 쓸 수 없는 도구: {name}"}
+        args = {k: self.expand(st, v) if isinstance(v, str) else v for k, v in (args or {}).items()}
+        result = await self._run_tool(ctx, st, name, dict(args))
+        st.transcript.append(self.shorten(ctx, st, f"[소유자 행동] {name} {json.dumps(args, ensure_ascii=False)[:400]}"))
+        st.transcript.append(self.shorten(ctx, st, f"{name} 결과: {json.dumps(result, ensure_ascii=False)[:1500]}"))
+        ctx.log.emit("assistant", ctx.pen, f"[{event_id}] 소유자가 {name} → {json.dumps(result, ensure_ascii=False)[:120]}")
+        self.save(ctx, st)
+        return result
 
     async def _run_tool(self, ctx, st, name, args):
         tool = self.tools.get(name)
