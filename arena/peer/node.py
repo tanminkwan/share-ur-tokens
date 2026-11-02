@@ -15,6 +15,7 @@ from ..llm import LLM
 from ..recorder.client import RecorderAPI, RecorderClient
 from .area import PublicArea
 from .builtin import RESERVED_OPS, DirectRequests, EventApprovals, RoleContracts
+from .app_install import AppInstaller
 from .events import EventRouter
 from .context import AppContext, PlatformContext
 from .owner import Owner
@@ -51,7 +52,7 @@ class Peer:
         self.last_profile: dict | None = None
         self._group_ids: dict[str, str] = {}
         self._requests = DirectRequests(settings)
-        self.events = EventRouter(settings)
+        self.events = EventRouter(settings, installer=AppInstaller(settings) if settings.app_store_urls else None)
         self.builtins = [RoleContracts(), EventApprovals(), self._requests, self.events]
         self.apps = list(apps)
         self._contexts: dict[int, AppContext] = {}

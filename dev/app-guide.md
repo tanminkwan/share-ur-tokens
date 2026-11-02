@@ -157,6 +157,24 @@ await announce_event(ctx, group="public", title="...", kind="...", rules=자연�
 greeter = "my_pkg.greeter:make_app"
 ```
 
+### 10-1. 앱 배포 peer로 나눠 주기 (선택)
+
+앱을 다른 peer들이 쓰게 하려면 꾸러미로 만들어 앱 배포 peer에 올린다. 앱 배포 peer는 **필수가 아니다**. 누구나 띄울 수 있고(`python -m arena.peers.app_store`), 여럿일 수 있으며, 어느 것을 쓸지는 각 peer가 정한다.
+
+```python
+from arena.crypto import Identity
+from arena.sdk import package_app
+
+pkg = package_app(Identity.load_or_create("publisher.key"), app_id="<고정 UUID>", name="my-app", version="1.0",
+                  module="my_app", factory="make_app", source=open("my_app.py", encoding="utf-8").read())
+# 원본 대신 내려받기 주소만 실으려면 url="https://..."를 주고 source를 None으로 둔다
+await peer.call(store_url, {"op": "app_publish", "package": pkg})
+```
+
+- 꾸러미는 **모듈 원본 한 파일**과 배포자가 서명한 목록표다. 그 파일 안에서 앱을 만드는 함수(`factory(settings)`)를 내놓는다. 다른 파일에 기대는 앱은 아직 꾸러미로 나눌 수 없다.
+- 이벤트가 앱 목록에 이 앱을 지정했는데 peer에 없으면, 그 peer가 `ARENA_APP_STORE_URLS`에 적은 배포 peer에 묻는다. 코드로 원본 해시, 배포자 서명, 신뢰 배포자(`ARENA_APP_TRUSTED_PUBLISHERS`), 크기, id·버전을 확인하고, 소유자 승인을 받은 뒤 설치한다. 이벤트가 코드 해시를 지정했으면 불러온 앱의 `app_fingerprint`도 같아야 한다.
+- **주의**: 설치한 코드는 받는 peer의 프로세스 안에서 격리 없이 실행된다. 그래서 서명과 소유자 승인을 거친다.
+
 ## 11. 어댑터: 앱 인터페이스를 모르는 것을 앱으로
 
 | 어댑터 | 바꾸는 대상 | 예 |

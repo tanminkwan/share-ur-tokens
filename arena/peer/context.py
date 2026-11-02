@@ -124,6 +124,10 @@ class PlatformContext(AppContext):
     def ctx_of(self, app) -> AppContext:
         return self._peer.ctx(app)
 
+    async def install_app(self, app) -> None:
+        """plug an app fetched by the app installer into this running peer (same checks as at assembly)"""
+        await self._peer.install(app)
+
     @property
     def inbox(self):
         return self._peer.inbox

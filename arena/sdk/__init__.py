@@ -23,3 +23,4 @@ from ..peer.events import announce_event  # noqa: F401
 from .adapters import A2AAgentAdapter, HttpServiceAdapter, function_app  # noqa: F401
 from .context import Context, State  # noqa: F401
 from .discovery import ENTRY_POINT_GROUP, discover_apps  # noqa: F401
+from .packaging import check_package, load_app_file, package_app, source_hash  # noqa: F401  (ship apps through an app distribution peer)

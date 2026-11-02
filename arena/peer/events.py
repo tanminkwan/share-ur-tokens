@@ -46,14 +46,19 @@ class EventRouter(BaseApp):
     the app the event names (by app_id, version and optional code hash) according to its mode"""
     name, version, app_id = "platform.events", "1.0", "342bb084-0d25-4d70-b2b3-10f3e77dacb5"
 
-    def __init__(self, settings):
+    def __init__(self, settings, installer=None):
         self.s = settings
+        self.installer = installer  # optional: fetches apps an event names but this peer lacks (app_install.AppInstaller)
         self.since: dict[str, float] = {}
         self.seen: set[str] = set()
         self.routes: dict[str, dict] = {}  # event_id -> {"app_id", "ver", "closed"}
 
     async def start(self, ctx):
         self.load(ctx)
+        if self.installer is not None:
+            n = await self.installer.reload(ctx)
+            if n:
+                ctx.log.emit("apps", ctx.pen, f"설치해 둔 앱 {n}개를 다시 확인하고 불러옴")
 
         async def loop():
             while True:
@@ -137,6 +142,10 @@ class EventRouter(BaseApp):
             ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 공지의 규칙·실행 방식·앱 목록이 원장에 공증된 것과 다름 → 무시")
             return
         handlers, why = self.choose(ctx, mode, apps)
+        missing = [r for r in apps if r.get("required", True) and ctx.app_by_id(r["id"]) is None]
+        if not handlers and missing and self.installer is not None and mode != "assistant":
+            if await self.installer.ensure(ctx, missing, n):
+                handlers, why = self.choose(ctx, mode, apps)
         if not handlers:
             ctx.log.emit("events", ctx.pen, f"이벤트 {ev} '{n.get('title', '')}' 처리 불가: {why}")
             return
