@@ -98,7 +98,8 @@ class RecorderService:
             return {"ok": True, "exists": False, "type": None, "seal_ok": False, "event_id": None, "group_id": None}
         p = e["payload"]
         out = {"ok": True, "exists": True, "type": e["type"], "seal_ok": verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"]),
-               "event_id": p.get("event_id"), "group_id": p.get("group_id")}
+               "event_id": p.get("event_id"), "group_id": p.get("group_id"),
+               "seq": e["seq"], "ts": e["ts"], "ledger_id": self.ledger.chain[0]["hash"]}  # where and when: a book citing this entry proves it existed by then
         out.update(public_view(e, self.ledger.chain))  # each entry type decides what may be shown
         return out
 
