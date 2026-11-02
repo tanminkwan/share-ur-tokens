@@ -18,8 +18,8 @@ from arena.recorder.client import InMemoryRecorderClient
 from arena.recorder.service import RecorderService
 from arena.search import BM25Searcher
 from tests.fakes import FakeOwner, RoutedLLM
-from tests.motif.doubles import APPROVER_LABEL, OPEN, REVIEW, AcceptRole, ApproveByOwner, Inbox, Judge
-from tests.motif.flow import apply, check_notice, found_group, open_event, review_and_adopt
+from tests.motif.doubles import APPROVER_LABEL, OPEN, REVIEW, AcceptRole, ApproveByOwner, Judge
+from tests.motif.flow import apply, check_notice, found_group, open_event, review_and_adopt, submissions
 
 SDS = "소속:삼성SDS"
 
@@ -35,8 +35,7 @@ class MemoryWorld:
                         REVIEW: BrokerService(settings, Identity.generate(), BM25Searcher(), gw, name="D", neighbors=[], owner_pub=self.org_id.pub,
                                               group_id="g-review")}
         self.recorders = {}
-        self.inbox = Inbox()
-        self.org = self.peer("org", [self.inbox], ["사내 행사 진행"], groups=[OPEN, REVIEW], identity=self.org_id)
+        self.org = self.peer("org", [], ["사내 행사 진행"], groups=[OPEN, REVIEW], identity=self.org_id)  # IntakeDesk: built in
         self.rec = self.peer("rec", [], ["감사 기록 보관과 열람 통제 담당"], record=True)
         self.ceo = self.peer("ceo", [ApproveByOwner()], ["대표이사"], labels=[SDS, APPROVER_LABEL],
                              owner=FakeOwner(yes=ceo_yes, why="회사 전략에 맞다" if ceo_yes else "보류"))
@@ -55,7 +54,7 @@ class MemoryWorld:
             svc = RecorderService.build(self.settings, ident, MemoryStore(), readers=[self.god.pub])
             self.recorders[f"mem://{name}/recorder"] = svc
             apps.append(RecordRole(svc, f"mem://{name}/recorder"))
-        p = Peer(ident, self.settings, PeerConfig(url=f"mem://{name}", labels=list(labels)), LocalFolderArea(str(root), self.settings),
+        p = Peer(ident, self.settings, PeerConfig(url=f"mem://{name}", labels=list(labels), element_apps=True), LocalFolderArea(str(root), self.settings),
                  owner or FakeOwner(), RoutedLLM(summary={"summary": " ".join(notes)}), self.t, self.log,
                  brokers={g: InMemoryBrokerClient(self.brokers[g]) for g in groups}, apps=apps)
         p.recorder_factory = lambda u: InMemoryRecorderClient(self.recorders[u])
@@ -126,7 +125,7 @@ async def test_pc4_applicants_verify_then_apply_and_contest_completes(world):
     assert c[world.ceo.identity.pub]["approvals"] == 1 and c[world.org.identity.pub]["events"] == 1
     assert c[world.rev.identity.pub]["roles"] == {"review": 1} and c[world.rev.identity.pub]["verdicts_given"] == {"review": 3}
     assert c[world.rec.identity.pub]["roles"] == {"record": 1}
-    winner = world.inbox.items[o["event_id"]][res["adopted"][0]]["author"]
+    winner = submissions(world, o["event_id"])[res["adopted"][0]]["author"]
     assert c[winner]["verdicts_received"] == {"review": 1, "adopt": 1} and c[winner]["received_by"] == 2
     assert audit_chain(world.ledger.chain) == "ok"
 
@@ -136,7 +135,7 @@ async def test_pc5_policy_is_enforced(world):
     n, R = o["notice"], o["R"]
     a = world.applicants[0]
     await apply(a, n, {"title": "t", "idea": "i"})
-    ch = next(iter(world.inbox.items[o["event_id"]]))
+    ch = next(iter(submissions(world, o["event_id"])))
     # a review by someone without the review contract
     p = {"evaluator": a.identity.pub, "event_id": o["event_id"], "content_hash": ch, "verdict": "review", "score": 10.0, "comment_hash": "0" * 64,
          "group_id": "public", "ledger_id": world.ledger.chain[0]["hash"]}
@@ -144,13 +143,13 @@ async def test_pc5_policy_is_enforced(world):
     # an adoption by someone other than the issuer
     q = {"evaluator": a.identity.pub, "event_id": o["event_id"], "content_hash": ch, "verdict": "adopt", "group_id": "public", "ledger_id": world.ledger.chain[0]["hash"]}
     assert (await R.record("feedback", q, {a.identity.pub: a.sign(q)}))["error"] == "verdict 'adopt' requires the event issuer"
-    # the contracted recorder cannot publish into the event; the organizer's inbox also refuses it
+    # the contracted recorder cannot publish into the event; submitting is refused too (ledger: conflicting role)
     rp = {"author": world.rec.identity.pub, "content_hash": h(canon({"x": 1})), "event_id": o["event_id"], "group_id": "public",
           "ledger_id": world.ledger.chain[0]["hash"]}
     assert (await R.record("publish", rp, {world.rec.identity.pub: world.rec.sign(rp)}))["error"].startswith("a contractor in a conflicting role")
     assert (await apply(world.rec, n, {"title": "x", "idea": "y"}))["ok"] is False
     # one submission per peer
-    assert (await apply(a, n, {"title": "t2", "idea": "i2"}))["error"] == "one submission per peer per event"
+    assert (await apply(a, n, {"title": "t2", "idea": "i2"}))["error"] == "intake: at most 1 submissions per author"  # now enforced by the ledger (intake element)
 
 
 async def test_pc6_audit_tamper_and_read_control(world):

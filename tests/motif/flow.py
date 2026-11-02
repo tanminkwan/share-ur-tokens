@@ -1,9 +1,17 @@
 """The idea-contest motif, end to end, using only platform APIs plus the test doubles. Shared by the in-memory world
-and the real-process world. `w` provides: org, rec, ceo, rev, applicants (peers) and inbox (the org's Inbox double)."""
+and the real-process world. `w` provides: org, rec, ceo, rev, applicants (peers). Submissions and handing them to the
+reviewer use the built-in elements (P6-V2): the org's IntakeDesk and the reviewer's EvaluationDesk."""
 import time
 
 from arena.crypto import canon, h
 from tests.motif.doubles import APPROVER_LABEL, AUDIENCE, KIND, OPEN, POLICY, REVIEW
+
+
+def ELEMENTS() -> dict:
+    """the built-in elements the contest switches on (P6-V2)"""
+    return {"intake": {"deadline": time.time() + 3600, "max_per_author": 1, "receiver": "issuer",
+                       "audience": [f"{k}:{v}" for k, v in AUDIENCE.items()]},
+            "evaluation": {"evaluator_role": "review", "verdict": "review", "per_item": 1}}
 
 
 async def lid(recorder) -> dict:
@@ -39,7 +47,8 @@ async def open_event(w, text=CALL, reviewer=None, post=True):
     eng = await org.call(rec_hit["url"], {"op": "engage", "role": "record", "contract": c_rec, "request": {"text": text}})
     assert eng["ok"], eng
     ceo_hit = (await org.brokers[OPEN].find("대표이사 결재", labels=[APPROVER_LABEL], identity=org.identity))["peers"][0]
-    event = {"event_id": ev_id, "issuer": org.identity.pub, "kind": KIND, "policy": POLICY, "approvers": [ceo_hit["pub"]], "group_id": g_open, **L}
+    event = {"event_id": ev_id, "issuer": org.identity.pub, "kind": KIND, "policy": POLICY, "approvers": [ceo_hit["pub"]], "group_id": g_open,
+             "elements": ELEMENTS(), **L}
     apr = await org.call(ceo_hit["url"], {"op": "approve", "event": event, "request": {"title": text[:30], "text": text}})
     out.update(event_id=ev_id, approval=apr, recorder=rec_hit, ceo=ceo_hit, R=R)
     if not apr.get("ok"):
@@ -52,12 +61,12 @@ async def open_event(w, text=CALL, reviewer=None, post=True):
     assert eng2["ok"], eng2
     cv = await R.record("contract", c_rev, {org.identity.pub: org.sign(c_rev), rev_hit["pub"]: eng2["sig"]})
     assert ev_rec["ok"] and cr["ok"] and cv["ok"], (ev_rec, cr, cv)
-    w.inbox.blocked[ev_id] = {rec_hit["pub"], rev_hit["pub"]}
     notice = {"notice_id": ev_id, "kind": KIND, "title": text[:30], "text": text, "audience": AUDIENCE,
               "until": time.time() + 600, "issuer_pub": org.identity.pub, "issuer_url": org.config.url,
               "event_hash": ev_rec["hash"], "approver_pub": ceo_hit["pub"],
               "recorder_pub": rec_hit["pub"], "recorder_url": rec_hit["recorder_url"],
-              "contracts": [{"role": "record", "hash": cr["hash"]}, {"role": "review", "hash": cv["hash"]}], "group_id": g_open}
+              "contracts": [{"role": "record", "hash": cr["hash"]}, {"role": "review", "hash": cv["hash"]}], "group_id": g_open,
+              "elements": event["elements"]}
     posted = await org.brokers[OPEN].post_notice(org.identity, notice) if post else None
     out.update(approved=True, event_hash=ev_rec["hash"], reviewer=rev_hit, notice=notice, posted=posted, groups=(g_open, g_rev))
     return out
@@ -76,43 +85,54 @@ async def check_notice(p, n):
             "contracts": contracts}
 
 
+def text_of(content: dict) -> str:
+    return f"[{content['title']}] {content['idea']}"
+
+
 async def apply(p, n, content):
-    """applicant: publish first, submit p2p, record the share; keep recorder-signed receipts"""
+    """applicant: publish first, then submit to the organizer's IntakeDesk, which checks, co-signs and records the share"""
     R = p.recorder(n["recorder_url"])
     L = await lid(R)
-    ch = h(canon(content))
+    text = text_of(content)
+    ch = h(text.encode("utf-8"))
     pub_p = {"author": p.identity.pub, "content_hash": ch, "event_id": n["notice_id"], "group_id": n["group_id"], **L}
     r1 = await R.record("publish", pub_p, {p.identity.pub: p.sign(pub_p)})
     if not p.receipts.keep(r1, "publish", pub_p, expected_recorder=n["recorder_pub"]):
         return {"ok": False, "error": r1.get("error", "recorder seal mismatch")}
     share_p = {"provider": p.identity.pub, "consumer": n["issuer_pub"], "content_hash": ch, "terms": "submission", "nonce": nonce(ch),
-               "group_id": n["group_id"], **L}
-    sub = await p.call(n["issuer_url"], {"op": "submit", "event_id": n["notice_id"], "content": content, "publish_payload": pub_p,
-                                         "publish_sig": p.sign(pub_p), "share_payload": share_p})
+               "event_id": n["notice_id"], "group_id": n["group_id"], **L}
+    sub = await p.call(n["issuer_url"], {"op": "intake.submit", "event_id": n["notice_id"], "content": text, "share": share_p,
+                                         "sig": p.sign(share_p), "recorder_url": n["recorder_url"]})
     if not sub.get("ok"):
         return sub
-    r2 = await R.record("share", share_p, {p.identity.pub: p.sign(share_p), n["issuer_pub"]: sub["receipt_sig"]})
-    assert p.receipts.keep(r2, "share", share_p, expected_recorder=n["recorder_pub"]), r2
+    assert p.receipts.keep(sub, "share", share_p, expected_recorder=n["recorder_pub"]), sub
     return {"ok": True, "content_hash": ch}
 
 
+def submissions(w, ev) -> dict:
+    """what the organizer's IntakeDesk received: content hash -> {author, content, ...}"""
+    from arena.peer.elements.intake import IntakeDesk
+    return {x["content_hash"]: x for x in w.org.app_by_id(IntakeDesk.app_id).list(ev)}
+
+
 async def review_and_adopt(w, opened, top=1):
-    """organizer: hand everything to the contracted reviewer, record its signed reviews, adopt the best by score"""
+    """organizer: hand every submission to the contracted reviewer's EvaluationDesk, record the handovers and the signed
+    verdicts, then adopt the best by score (adopting is the contest's own judgement, done here in the motif, not the platform)"""
     org, R, rv, ev = w.org, opened["R"], opened["reviewer"], opened["event_id"]
     g_open, g_rev = opened["groups"]
     L = await lid(R)
-    items = w.inbox.items.get(ev, {})
-    shares = {k: {"provider": org.identity.pub, "consumer": rv["pub"], "content_hash": k, "terms": "review", "nonce": nonce(k, rv["pub"]),
-                  "group_id": g_rev, **L}
-              for k in items}
-    res = await org.call(rv["url"], {"op": "judge", "event_id": ev, "share_payloads": shares, "group_id": g_rev, **L,
-                                     "items": [dict(id=k[:8], **v["content"]) for k, v in items.items()]})
+    items = []
+    for k, v in submissions(w, ev).items():
+        sh = {"provider": org.identity.pub, "consumer": rv["pub"], "content_hash": k, "terms": "evaluation", "nonce": nonce(k, rv["pub"]),
+              "event_id": ev, "group_id": g_rev, **L}
+        items.append({"share": sh, "sig": org.sign(sh), "content": v["content"]})
+    res = await org.call(rv["url"], {"op": "evaluation.request", "event_id": ev, "recorder_url": opened["recorder"]["recorder_url"], "items": items})
     assert res["ok"], res
-    for k, p in shares.items():
-        r = await R.record("share", p, {org.identity.pub: org.sign(p), rv["pub"]: res["receipts"][k]})
+    for it in items:
+        r = await R.record("share", it["share"], {org.identity.pub: it["sig"], rv["pub"]: res["receipts"][it["share"]["content_hash"]]})
         assert r["ok"], r
     scores = {}
-    for x in res["reviews"]:
+    for x in res["verdicts"]:
         assert h(x["comment"].encode()) == x["payload"]["comment_hash"]
         r = await R.record("feedback", x["payload"], {rv["pub"]: x["sig"]})
         assert r["ok"], r

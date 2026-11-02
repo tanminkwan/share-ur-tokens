@@ -80,13 +80,15 @@ async def contract(A, ctx, st, role, peer):
     return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error"), "contracts_so_far": len(st.contracts)}
 
 
-async def call_service(A, ctx, st, peer, op, input=None):
-    """call an API-providing peer; the code checks the signed receipt and keeps it (P6-A5)"""
+async def call_service(A, ctx, st, peer, op, input=None, subject=None):
+    """call an API-providing peer; the code checks the signed receipt and keeps it (P6-A5). With a subject, the service
+    may record its result on this event's ledger (an op marked record, e.g. a judging peer)"""
     from ...sdk.service import verify_service_receipt
     pub, _ = await A.resolve_peer(ctx, st, peer, need_url=False)
     if not pub:
         return {"ok": False, "error": f"{peer}를 찾지 못했다"}
-    req = {"op": op, "input": input if isinstance(input, dict) else {}}
+    req = {"op": op, "input": input if isinstance(input, dict) else {},
+           **({"event_id": st.event_id, "subject": subject, "recorder_url": st.recorder_url, "group_id": st.group_id} if subject else {})}
     r = await ctx.call_peer(pub, req, group=st.group_id, event=st.event_id)  # a2a or api, by the peer's profile
     if not r.get("ok"):
         return {"ok": False, "error": r.get("error")}
@@ -94,7 +96,7 @@ async def call_service(A, ctx, st, peer, op, input=None):
     if bad:
         return {"ok": False, "error": f"서비스 영수증이 맞지 않는다(코드 확인): {bad}"}
     st.service_receipts.append({"peer": pub, "op": op, "receipt": r["receipt"], "receipt_sig": r["receipt_sig"]})
-    return {"ok": True, "result": r["result"]}
+    return {"ok": True, "result": r["result"], **({"record": r["record"]} if r.get("record") else {})}
 
 
 async def contact(A, ctx, st, peer):
@@ -313,8 +315,9 @@ def default_tools() -> list[Tool]:
              "내 공개값을 보낼 때는 손으로 옮기지 말고 attach_reveals에 라벨을 넣는다. 코드가 공개값 묶음을 data.reveals에 그대로 붙인다",
              dict(_obj(to=S, text=S, data_json=S), properties={"to": S, "text": S, "data_json": S, "attach_reveals": {"type": "array", "items": S}}),
              send),
-        Tool("call_service", "{peer, op, input_json}: API를 제공하는 peer(필명)의 op를 부른다(input_json은 JSON 객체 문자열). "
-             "결과와 함께 온 서명 영수증은 코드가 확인하고 보관한다", _obj(peer=S, op=S, input_json=S), call_service),
+        Tool("call_service", "{peer, op, input_json, subject?}: API를 제공하는 peer(필명)의 op를 부른다(input_json은 JSON 객체 문자열). "
+             "subject를 주면 그 peer가 결과를 이 이벤트의 원장에 그 주제로 기록할 수 있다(record). 서명 영수증은 코드가 확인하고 보관한다",
+             dict(_obj(peer=S, op=S, input_json=S), properties={"peer": S, "op": S, "input_json": S, "subject": S}), call_service),
         Tool("contact", "{peer}: 상대 peer(필명)의 사람 연락처(human 연결)를 찾아 알려 준다. 자동으로 보내지 않는다", _obj(peer=S), contact),
         Tool("solicit", "{targets: [필명...], text, data_json}: 고른 peer들에게 직접 요청을 한 번에 보낸다(data_json은 JSON 객체 문자열)",
              _obj(targets={"type": "array", "items": S}, text=S, data_json=S), solicit),

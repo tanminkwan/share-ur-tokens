@@ -47,54 +47,16 @@ class AcceptRole(PeerApp):
         return Decision(a.yes, a.why)
 
 
-class Inbox(PeerApp):
-    """op submit: verify a submission (content hash, author signature, receiver, one per author, blocked roles) and sign receipt"""
-    name = "inbox"
-
-    def __init__(self):
-        self.items, self.blocked = {}, {}
-
-    def ops(self):
-        return {"submit": self._submit}
-
-    async def _submit(self, ctx, msg, head):
-        ev, pub_p, share_p = msg["event_id"], msg["publish_payload"], msg["share_payload"]
-        if ev not in self.blocked:
-            return {"ok": False, "error": "unknown event"}
-        if pub_p["author"] in self.blocked[ev]:
-            return {"ok": False, "error": "a contracted role cannot submit"}
-        if h(canon(msg["content"])) != pub_p["content_hash"] or not verify(pub_p["author"], pub_p, msg["publish_sig"]):
-            return {"ok": False, "error": "content hash / author signature mismatch"}
-        if share_p["consumer"] != ctx.identity.pub or share_p["content_hash"] != pub_p["content_hash"]:
-            return {"ok": False, "error": "share payload does not match"}
-        mine = self.items.setdefault(ev, {})
-        if any(x["author"] == pub_p["author"] for x in mine.values()):
-            return {"ok": False, "error": "one submission per peer per event"}
-        mine[pub_p["content_hash"]] = {"author": pub_p["author"], "content": msg["content"]}
-        return {"ok": True, "receipt_sig": ctx.sign(share_p)}
-
-
 class Judge(PeerApp):
-    """op judge: sign receipts for what was handed over, get scores from the owner, sign review payloads (comment off-ledger)"""
+    """the reviewer's judging app (the evaluation element's EvaluationProvider): scores from the owner; the platform's
+    EvaluationDesk checks the handovers and signs the verdicts"""
     name = "judge"
 
-    def ops(self):
-        return {"judge": self._judge}
-
-    async def _judge(self, ctx, msg, head):
-        if any(p["consumer"] != ctx.identity.pub for p in msg["share_payloads"].values()):
-            return {"ok": False, "error": "share payload mismatch"}
-        listing = "\n".join(f"- {i['id']}: [{i['title']}] {i['idea']}" for i in msg["items"])
+    async def evaluate(self, ctx, items, request):
+        listing = "\n".join(f"- {i['content_hash'][:8]}: {i['content']}" for i in items)
         d = await ctx.owner.write("각 항목에 1~10점과 한 문장 의견을 주세요. id는 목록의 값을 그대로 쓰세요.", listing, SCORES_SCHEMA)
-        full = {k[:8]: k for k in msg["share_payloads"]}
-        out = []
-        for r in d["reviews"]:
-            if r["id"] in full:
-                p = {"evaluator": ctx.identity.pub, "event_id": msg["event_id"], "content_hash": full[r["id"]], "verdict": "review",
-                     "score": float(r["score"]), "comment_hash": h(r["comment"].encode()), "group_id": msg["group_id"],
-                     **({"ledger_id": msg["ledger_id"]} if msg.get("ledger_id") else {})}
-                out.append({"payload": p, "sig": ctx.sign(p), "comment": r["comment"]})
-        return {"ok": True, "receipts": {k: ctx.sign(p) for k, p in msg["share_payloads"].items()}, "reviews": out}
+        full = {i["content_hash"][:8]: i["content_hash"] for i in items}
+        return [{"content_hash": full[r["id"]], "score": float(r["score"]), "comment": r["comment"]} for r in d["reviews"] if r["id"] in full]
 
 
 class LLMOwner:

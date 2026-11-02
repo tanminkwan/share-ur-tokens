@@ -85,6 +85,8 @@ async def start_world(live, tmp, n_players=None):
     g.wait_up(f"http://127.0.0.1:{ports['god']}", path="/.well-known/agent-card.json")
     burl = f"http://127.0.0.1:{ports['broker']}"
     log, llm, base = EventLog(echo=True), build_llm(live), A2ATransport(live)
+    from arena.llm import UsageMeter
+    llm.meter = UsageMeter()  # P6-V1: LLM calls and tokens per peer, printed at the end of a run
     peers = {}
     for name, yes in [("host", True)] + [(f"p{i}", i < n_players) for i in range(n_players + 1)]:
         port = free_port()

@@ -35,6 +35,7 @@ class PeerConfig:
     offers: list[str] = field(default_factory=list)
     labels: list[str] = field(default_factory=list)
     connections: list = field(default_factory=list)  # how to reach this peer (arena/connections.py); empty = a2a at url
+    element_apps: bool | None = None  # built-in elements' apps (desks): None = only if an app handles events, True/False = always/never
 
 
 class Peer:
@@ -61,7 +62,8 @@ class Peer:
         self._requests = DirectRequests(settings)
         self.events = EventRouter(settings, installer=AppInstaller(settings) if (settings.app_store_urls or settings.app_store_discover) else None)
         self.builtins = [RoleContracts(), EventApprovals(), self._requests, self.events]
-        if any(isinstance(a, EventHandler) for a in apps):  # peers that take part in events get the built-in elements' apps
+        wants = config.element_apps if config.element_apps is not None else any(isinstance(a, EventHandler) for a in apps)
+        if wants:  # peers that take part in events (or ask for them) get the built-in elements' apps
             self.builtins += [el.app(settings) for el in PEER_ELEMENTS.values() if el.app]
         self.apps = list(apps)
         self._contexts: dict[int, AppContext] = {}

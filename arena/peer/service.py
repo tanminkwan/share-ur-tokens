@@ -1,10 +1,11 @@
 """The API-providing peer template (P6-A1 ~ A4). A JSON spec file alone makes a service peer: each op is a python
-function `async fn(input, ctx) -> dict` or an HTTP route of an existing system. The peer checks who asks (groups,
+function `async fn(input, ctx[, request]) -> dict` or an HTTP route of an existing system. The peer checks who asks (groups,
 signed callers), signs a receipt on every answer, takes on event roles it offers, and, for ops marked `record`, writes
 its computed result on the ledger as a joint confirmation of that kind (e.g. a judging peer)."""
 from __future__ import annotations
 
 import importlib
+import inspect
 import json
 import os
 
@@ -86,7 +87,10 @@ class ServiceApp:
                     return {"ok": False, "error": f"signed message required: {e}"}
             data = msg.get("input", {}) or {}
             if op in self._fns:
-                result, ok = await self._fns[op](data, ctx), True
+                fn = self._fns[op]
+                takes_request = len(inspect.signature(fn).parameters) >= 3  # async fn(input, ctx[, request])
+                result = await (fn(data, ctx, msg) if takes_request else fn(data, ctx))
+                ok = not (isinstance(result, dict) and result.get("error"))
             else:
                 relayed = await self._http.ops()[op](ctx, {"path": data.get("path", {}), "query": data.get("query"), "body": data.get("body")}, head)
                 ok, result = relayed.get("ok", False), {k: v for k, v in relayed.items() if k != "ok"}

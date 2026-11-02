@@ -5,6 +5,7 @@ the two players, no replay on a draw. Like the full test, the test never steps i
 win/loss call is reported as an LLM judgement error, not a platform failure (user 2026-10-31)."""
 import asyncio
 import dataclasses
+import json
 import pathlib
 import time
 
@@ -66,6 +67,7 @@ async def test_rps_mini_two_peers_one_round(live, tmp_path):
         print(f"moves: a={v['rounds'][-1]['a']['value']} b={v['rounds'][-1]['b']['value']}; winner recorded "
               f"{v['winner'][:6] or '(draw)'}, by the rules {right[:6] or '(draw)'}; "
               f"LLM judgement error: {'yes' if v['winner'] != right else 'no'}; messages: {len(msgs)}")
+        print("usage:", json.dumps(host.llm.meter.total()))
     finally:
         for s in servers:
             s.should_exit = True
