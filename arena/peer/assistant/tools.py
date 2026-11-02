@@ -26,6 +26,7 @@ class Tool:
     host_only: bool = False
     participant_only: bool = False
     after_close: bool = False               # still usable once the event is closed
+    element: str | None = None              # a built-in element's tool: offered only where the event switched it on
 
 
 # ---------------- implementations ----------------

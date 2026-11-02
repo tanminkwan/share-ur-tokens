@@ -11,6 +11,7 @@ import re
 from ...crypto import h, pen_name, verify
 from ...llm import ask_json
 from ..event_store import EventStore, FolderEventStore
+from ..elements import element_tools
 from ..events import announce_event
 from ..plugin import ASSISTANT_APP_ID, Decision, MessageHead
 from .state import EventState, commit_hash, nonce
@@ -28,7 +29,7 @@ class EventAssistant:
         self.events: dict[str, EventState] = {}
         self._stores: dict[str, EventStore] = {}
         self.tools: dict[str, Tool] = {}
-        for t in tools if tools is not None else default_tools():
+        for t in tools if tools is not None else default_tools() + element_tools():
             self.add_tool(t)
 
     def add_tool(self, tool: Tool) -> None:
@@ -320,13 +321,13 @@ class EventAssistant:
         return n
 
     # ---------------- holding an event ----------------
-    async def host_event(self, ctx, *, title, kind, rules, policy, instruction, audience=None, recorder=None):
+    async def host_event(self, ctx, *, title, kind, rules, policy, instruction, audience=None, recorder=None, elements=None):
         """open an event run in the primordial way: natural-language rules, app = the basic assistant"""
         out = await announce_event(ctx, group=self.group, title=title, kind=kind, rules=rules, policy=policy,
-                                   mode="assistant", apps=[], audience=audience, recorder=recorder)
+                                   mode="assistant", apps=[], audience=audience, recorder=recorder, elements=elements)
         ev, rec = out["event_id"], out["recorder"]
         st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url,
-                                          policy=dict(policy))
+                                          policy=dict(policy), elements=dict(elements or {}))
         self.save(ctx, st)
         ctx.log.emit("assistant", ctx.pen, f"이벤트 개최 {ev} '{title}' (규칙 해시 {out['rules_hash'][:10]}, 방식 assistant)")
         await self.feed(ctx, ev, f"[소유자의 지시] {instruction}")
@@ -340,6 +341,7 @@ class EventAssistant:
             st = self.events[ev] = EventState(ev, "participant", notice.get("title", ""), notice["rules"], h(notice["rules"].encode()),
                                               notice["group_id"], notice["recorder_url"], notice["recorder_pub"], notice["issuer_pub"],
                                               notice["issuer_url"], offer_roles=list(notice.get("policy", {}).get("roles", [])), policy=dict(notice.get("policy", {})),
+                                              elements=dict(notice.get("elements") or {}),
                                               notice_ver=notice.get("ver", 1))
             st.peers[notice["issuer_pub"]] = notice["issuer_url"]
             self.save(ctx, st)
@@ -432,7 +434,7 @@ class EventAssistant:
 
     def _tools_for(self, st) -> list[str]:
         return [n for n, t in self.tools.items() if (st.role == "host" or not t.host_only) and (st.role != "host" or not t.participant_only)
-                and (not st.closed or t.after_close)]
+                and (not st.closed or t.after_close) and (t.element is None or t.element in st.elements)]
 
     def _system(self, ctx, st) -> str:
         h = lambda pub: self.handle(ctx, st, pub)

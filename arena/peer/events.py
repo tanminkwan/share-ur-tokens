@@ -15,7 +15,8 @@ def _nonce(*parts) -> str:
 
 
 async def announce_event(ctx, *, group: str, title: str, kind: str, rules: str, policy: dict, mode: str, apps: list | None = None,
-                         audience: dict | None = None, recorder: dict | None = None, text: str | None = None) -> dict:
+                         audience: dict | None = None, recorder: dict | None = None, text: str | None = None,
+                         elements: dict | None = None) -> dict:
     """declare the event on the ledger and post its notice. Separate blocks: rules (natural language), policy (roles),
     mode (how it runs) and apps (the app list block); the rules hash, mode and app list are notarized"""
     apps = list(apps or [])
@@ -28,12 +29,12 @@ async def announce_event(ctx, *, group: str, title: str, kind: str, rules: str, 
     rules_hash = h(rules.encode())
     lid = await ctx.ledger_id(rec["recorder_url"])
     decl = {"event_id": ev, "issuer": ctx.pub, "kind": kind, "policy": policy, "approvers": [], "group_id": gid, "rules_hash": rules_hash,
-            "mode": mode, "apps": apps, **({"ledger_id": lid} if lid else {})}
+            "mode": mode, "apps": apps, **({"elements": elements} if elements else {}), **({"ledger_id": lid} if lid else {})}
     r = await ctx.recorder(rec["recorder_url"]).record("event", decl, {ctx.pub: ctx.sign(decl)})
     if not r.get("ok"):
         raise RuntimeError(f"event declaration refused: {r.get('error')}")
     notice = {"notice_id": ev, "kind": kind, "title": title, "text": text or f"{title}: 규칙은 rules, 실행 방식은 mode, 쓰는 앱은 apps에 있다",
-              "rules": rules, "policy": policy, "mode": mode, "apps": apps, "until": ctx.clock() + ctx.settings.event_notice_ttl_sec, "issuer_pub": ctx.pub,
+              "rules": rules, "policy": policy, "mode": mode, "apps": apps, "elements": dict(elements or {}), "until": ctx.clock() + ctx.settings.event_notice_ttl_sec, "issuer_pub": ctx.pub,
               "issuer_url": ctx.url, "event_hash": r["hash"], "recorder_pub": rec["pub"], "recorder_url": rec["recorder_url"], "group_id": gid,
               **({"audience": audience} if audience else {})}
     posted = await broker.post_notice(ctx.identity, notice)
@@ -143,6 +144,7 @@ class EventRouter(BaseApp):
         v = await ctx.recorder(n["recorder_url"]).verify(n["event_hash"])
         rules_ok = "rules" not in n or v.get("rules_hash") == h(n["rules"].encode())
         run_ok = ("mode" not in n) or (v.get("mode") == mode and v.get("apps") == apps)
+        run_ok = run_ok and (v.get("elements") or {}) == (n.get("elements") or {})  # the elements block is notarized too
         if not (v.get("exists") and v.get("type") == "event" and v.get("event_id") == ev and v.get("issuer") == n["issuer_pub"] and rules_ok and run_ok):
             ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 공지의 규칙·실행 방식·앱 목록이 원장에 공증된 것과 다름 → 무시")
             return

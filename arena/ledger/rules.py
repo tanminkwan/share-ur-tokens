@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ..crypto import verify
+from .elements import element_rules
 from .types import ENTRY_TYPES, closed_events, events, groups, published
 
 
@@ -103,4 +104,7 @@ def check(chain: list[dict], e: dict, now: float, settings) -> str | None:
         err = rule(chain, e, now, settings)
         if err:
             return err
+    ev = e["payload"].get("event_id")
+    if ev is not None and e["type"] != "event" and ev in events(chain):
+        return element_rules(chain, e, events(chain)[ev], settings)  # the elements this event switched on
     return None
