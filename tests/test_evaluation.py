@@ -55,7 +55,7 @@ async def test_p6c2_c3_c4_items_go_to_the_contracted_reviewer_and_signed_verdict
     await asst(eco.host).feed(ctx(eco.host), ev, "심사를 맡겨라")
     await settle(eco.host)
     chain = eco.svc.ledger.chain
-    handed = [e for e in chain if e["type"] == "share" and e["payload"]["terms"] == "evaluation"]
+    handed = [e for e in chain if e["type"] == "share" and e["payload"].get("purpose") == "evaluation"]
     verdicts = [e for e in chain if e["type"] == "feedback"]
     assert len(handed) == 2 and all(set(x["sigs"]) == {eco.host.identity.pub, rv.identity.pub} for x in handed)
     assert len(verdicts) == 2 and all(x["payload"]["evaluator"] == rv.identity.pub and x["payload"]["verdict"] == "review" for x in verdicts)
@@ -75,7 +75,7 @@ async def test_p6c2_the_ledger_checks_who_hands_over_who_judges_and_how_many(eco
     ch = h("짝꿍 제도".encode())
 
     async def hand(provider, consumer, nonce):
-        p = {"provider": provider.identity.pub, "consumer": consumer.identity.pub, "content_hash": ch, "terms": "evaluation", "nonce": nonce,
+        p = {"provider": provider.identity.pub, "consumer": consumer.identity.pub, "content_hash": ch, "purpose": "evaluation", "nonce": nonce,
              "event_id": ev, "group_id": "public", "ledger_id": lid}
         return await eco.svc.record("share", p, {provider.identity.pub: provider.identity.sign(p), consumer.identity.pub: consumer.identity.sign(p)})
     assert "issuer" in (await hand(eco.a, rv, "n1"))["error"]          # only the host hands items over

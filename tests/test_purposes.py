@@ -29,3 +29,16 @@ async def test_a_purpose_belongs_to_its_types_and_no_purpose_is_fine(svc):
     p["purpose"] = "authorship"  # the purpose column is checked before signatures
     assert "not for share" in (await svc.record(kind, p, sigs))["error"]
     assert (await svc.record(*cast.publish(content="free", ev=None)))["ok"]  # autonomy: no coded claim, still recorded
+
+
+async def test_the_purpose_of_a_handover_is_a_code(svc):
+    """user 2026-11-02: the purpose of a share is promoted to a code (delivery, submission, evaluation); terms stays free"""
+    cast = Cast()
+    await svc.record(*cast.publish(ev=None))
+    kind, p, _ = cast.share()
+    p.pop("event_id", None)
+    sub = dict(p, purpose="submission", nonce="s1")
+    assert "name the event" in (await svc.record(kind, sub, {k.pub: k.sign(sub) for k in (cast.author, cast.issuer)}))["error"]
+    dl = dict(p, purpose="delivery", nonce="d1", terms="열람만, 재배포 금지")
+    r = await svc.record(kind, dl, {k.pub: k.sign(dl) for k in (cast.author, cast.issuer)})
+    assert r["ok"] and svc.verify(r["hash"])["purpose"] == "delivery" and "terms" not in svc.verify(r["hash"])

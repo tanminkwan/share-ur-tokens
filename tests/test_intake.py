@@ -44,7 +44,7 @@ async def test_p6b2_b3_b4_submit_is_checked_co_signed_recorded_and_kept(eco):
     assert '"ok": true' in await _submit(eco.a, ev, "신입 적응을 돕는 짝꿍 제도")
     shares = [e for e in eco.svc.ledger.chain if e["type"] == "share"]
     assert len(shares) == 1 and set(shares[0]["sigs"]) == {eco.a.identity.pub, eco.host.identity.pub}
-    assert shares[0]["payload"]["terms"] == "submission" and shares[0]["payload"]["event_id"] == ev
+    assert shares[0]["payload"]["purpose"] == "submission" and shares[0]["payload"]["event_id"] == ev
     lst = await ctx(eco.host).submissions(ev)
     assert [(x["author"], x["content"]) for x in lst] == [(eco.a.identity.pub, "신입 적응을 돕는 짝꿍 제도")]
     second = await _submit(eco.a, ev, "두 번째 아이디어")
@@ -69,16 +69,16 @@ async def test_p6b2_the_ledger_checks_recipient_deadline_limit_and_conflicting_r
         pub = {"author": provider.identity.pub, "content_hash": h(text.encode()), "event_id": ev, "group_id": "public", "ledger_id": lid}
         return await eco.svc.record("publish", pub, {provider.identity.pub: provider.identity.sign(pub)})
 
-    async def share(provider, consumer, text, terms="submission"):
+    async def share(provider, consumer, text, purpose="submission"):
         ch = h(text.encode())
         await publish(provider, text)
-        p = {"provider": provider.identity.pub, "consumer": consumer.identity.pub, "content_hash": ch, "terms": terms, "nonce": text,
+        p = {"provider": provider.identity.pub, "consumer": consumer.identity.pub, "content_hash": ch, "purpose": purpose, "nonce": text,
              "event_id": ev, "group_id": "public", "ledger_id": lid}
         return await eco.svc.record("share", p, {provider.identity.pub: provider.identity.sign(p), consumer.identity.pub: consumer.identity.sign(p)})
     assert "receiver" in (await share(a, b, "x1"))["error"]
     assert (await share(a, eco.host, "x2"))["ok"] and (await share(a, eco.host, "x3"))["ok"]
     assert "at most" in (await share(a, eco.host, "x4"))["error"]
-    assert (await share(a, b, "x5", terms="other"))["ok"]  # only submissions are governed by the element
+    assert (await share(a, b, "x5", purpose="delivery"))["ok"]  # only submissions are governed by the element
     # a contracted reviewer may not submit (its content was registered before the contract)
     assert (await publish(b, "x6"))["ok"]
     eco.host.llm.push("contract", role="review", peer=b.pen)

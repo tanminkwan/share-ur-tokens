@@ -111,7 +111,7 @@ flowchart LR
 
 **설정**: `{"deadline": 유닉스 초, "max_per_author": 1, "receiver": "issuer" 또는 역할 이름, "audience": [라벨...]}`.
 
-**원장**: `share` 항목에 선택 칸 `event_id`를 더한다(이벤트 참조 선택). `intake`를 켠 이벤트에서 `terms: "submission"`인 `share`는:
+**원장**: `share` 항목에 선택 칸 `event_id`를 더한다(이벤트 참조 선택). `intake`를 켠 이벤트에서 `purpose: "submission"`인 `share`는:
 - 받는 사람(`consumer`)이 설정의 받는 사람(개최자 또는 그 역할 계약자)이고,
 - 기록 시각이 마감 전이고,
 - 같은 작성자(`provider`)의 제출 수가 상한 안이고,
@@ -139,7 +139,7 @@ sequenceDiagram
 
 **설정**: `{"evaluator_role": "evaluator", "verdict": "review", "per_item": 1}`. 판정 권한은 정책의 `verdict_roles`(지금 있음).
 
-**원장**: `feedback`에 공개 정보(평가자, 내용 해시, 판정, 점수)를 더한다. `evaluation`을 켠 이벤트에서 판정 종류가 설정의 `verdict`인 `feedback`은 평가자가 그 내용을 넘겨받은 기록(`share`, `terms: "evaluation"`)이 있어야 한다(지금의 "받은 적 없는 내용" 규칙을 이벤트 범위로).
+**원장**: `feedback`에 공개 정보(평가자, 내용 해시, 판정, 점수)를 더한다. `evaluation`을 켠 이벤트에서 판정 종류가 설정의 `verdict`인 `feedback`은 평가자가 그 내용을 넘겨받은 기록(`share`, `purpose: "evaluation"`)이 있어야 한다(지금의 "받은 적 없는 내용" 규칙을 이벤트 범위로).
 
 **peer**:
 - 개최자 도구 `request_evaluation {evaluator}`: 넘김 `share` payload를 만들어 평가자의 op `evaluation.request`로 보낸다.

@@ -139,7 +139,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `contract` | `issuer`, `contractor` | `event_id`, `role`, `issuer`, `contractor`, `nonce`, `rules_hash` |
 | `publish` | `author` | `author`, `content_hash`, 선택 `event_id`, 선택 `label`, 선택 `purpose`(`authorship` · `commit`) |
 | `reveal` | `author` | `author`, `label`, `value`, `salt`, `commit`(그 작성자의 `publish` 항목 해시), `event_id` |
-| `share` | `provider`, `consumer` | `provider`, `consumer`, `content_hash`, `terms`, `nonce`, 선택 `event_id` |
+| `share` | `provider`, `consumer` | `provider`, `consumer`, `content_hash`, `nonce`, 선택 `event_id`, 선택 `purpose`(`delivery` · `submission` · `evaluation`), 선택 `terms`(자유 영역: 조건 설명) |
 | `feedback` | `evaluator` | `evaluator`, `content_hash`, `verdict`, 선택 `event_id` |
 | `assign` | `issuer` | `event_id`, `issuer`, `subjects`(`{주제: [공개키, ...]}`) |
 | `attest` | `parties` 전원 | 선택 `event_id`, `kind`, `subject`, `value`, `parties`, `nonce` |
@@ -147,7 +147,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `key_rotate` | `old`, `new`, 기록자면 `god`도 | `role`(`recorder`·`god`), `old`(그 시점의 유효한 키), `new`, 기록자면 `god`(지금의 god 키), `nonce` |
 | `chain_link` | `child_god`, `child_recorder` | `child_ledger_id`(새 체인의 제네시스 해시), `child_god`, `child_recorder`(새 체인의 첫 기록자 키), `name`, `nonce`. 원래 체인에 남긴다. 한 체인은 한 번만 |
 
-**코드 칸과 자유 영역**: 위 표의 칸과 공통 칸(`group_id`, `ledger_id`, `event_id`, `purpose`, `nonce`)이 원장이 확인하는 코드 칸이다. payload의 나머지는 자유 영역으로, 원장이 읽지 않고 공개 확인에도 보이지 않는다(서명 범위 안이라 바꿀 수는 없다). 목적 코드 `purpose`는 등록된 값만 받는다. 처음 둘: `authorship`(`publish`, 저작 내용과 그 시점의 증명, 이름표 없음), `commit`(`publish`, 봉인 등록, 이름표 있음). 칸 정책 전체: [entry-columns.md](entry-columns.md).
+**코드 칸과 자유 영역**: 위 표의 칸과 공통 칸(`group_id`, `ledger_id`, `event_id`, `purpose`, `nonce`)이 원장이 확인하는 코드 칸이다. payload의 나머지는 자유 영역으로, 원장이 읽지 않고 공개 확인에도 보이지 않는다(서명 범위 안이라 바꿀 수는 없다). 목적 코드 `purpose`는 등록된 값만 받는다. 지금 코드: `authorship`(`publish`, 저작 내용과 그 시점의 증명, 이름표 없음), `commit`(`publish`, 봉인 등록, 이름표 있음), `delivery`(`share`, 자료 전달), `submission`(`share`, 이벤트 제출, 이벤트 필수), `evaluation`(`share`, 평가 건넴, 이벤트 필수). 칸 정책 전체: [entry-columns.md](entry-columns.md).
 
 정책(`policy`)의 키와 뜻은 [phase5/requirements.md](phase5/requirements.md)와 백서 9장에 있다. 실행 방식 `mode`는 `assistant` · `app` · `app_or_assistant`, 앱 목록 `apps`의 각 칸은 `{id(UUID), name, version, hash?, required?}`.
 
@@ -169,8 +169,8 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 
 | 요소 | 설정 | 원장 규칙(그 이벤트의 항목에) |
 |---|---|---|
-| `intake`(제출 받기) | `max_per_author`, `receiver`(`issuer` 또는 역할), 선택 `deadline`, `audience` | `terms: "submission"`인 `share`: 받는 사람이 `receiver`, 마감 전, 작성자당 상한 이하, 겸할 수 없는 역할(`conflict_roles`) 아님 |
-| `evaluation`(평가) | `evaluator_role`, `verdict`, `per_item` | `terms: "evaluation"`인 `share`: 주는 쪽이 개최자, 받는 쪽이 평가자 역할, 항목당 평가자 수 이하. 판정 종류가 `verdict`인 `feedback`: 그 평가자가 이 이벤트에서 그 항목을 넘겨받았어야 함 |
+| `intake`(제출 받기) | `max_per_author`, `receiver`(`issuer` 또는 역할), 선택 `deadline`, `audience` | `purpose: "submission"`인 `share`: 받는 사람이 `receiver`, 마감 전, 작성자당 상한 이하, 겸할 수 없는 역할(`conflict_roles`) 아님 |
+| `evaluation`(평가) | `evaluator_role`, `verdict`, `per_item` | `purpose: "evaluation"`인 `share`: 주는 쪽이 개최자, 받는 쪽이 평가자 역할, 항목당 평가자 수 이하. 판정 종류가 `verdict`인 `feedback`: 그 평가자가 이 이벤트에서 그 항목을 넘겨받았어야 함 |
 | `sealed`(봉인 묶음) | `{}` | 배정된 주제 `S`의 라벨(`S` 또는 `S-<숫자>`): 배정된 당사자만 `publish`, 당사자 전원이 등록한 뒤에만 `reveal`, 공개가 있으면 새 등록 없음. 이 요소를 켠 이벤트에서는 배정된 주제에 속하지 않는 라벨의 `reveal`을 받지 않는다 |
 
 요소의 op(받는 peer의 내장 앱): `intake.submit`(`event_id`, `content`, `share`, `sig`(제출자의 `share` 서명), `recorder_url`; 받는 peer가 검사 뒤 함께 서명해 기록하고 기록 결과를 돌려줌), `evaluation.request`(`event_id`, `recorder_url`, `items`: `[{share, sig(개최자의 share 서명), content}]`; 답은 `receipts`(내용 해시 → 평가자의 share 서명)와 `verdicts`(`[{payload, sig, comment}]`)).

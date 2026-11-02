@@ -54,6 +54,18 @@ def _label(chain, e):
         return "commit: a sealed registration needs a label to open it later"
 
 
+def _in_event(code):
+    def check(chain, e):
+        if e["payload"].get("event_id") is None:
+            return f"{code}: an event's procedure; name the event"
+    return check
+
+
 register_purpose(Purpose("authorship", ("publish",), "저작 내용과 그 시점의 증명: 이 사람이 이 내용을 이 시각에 이미 가지고 있었다. "
                          "책에 원장 정보를 찍어 거꾸로 찾게 한다(dev/chain-policy.md 6.1)", _no_label))
 register_purpose(Purpose("commit", ("publish",), "나중에 공개할 값의 봉인 등록(먼저 등록하고 나중에 공개)", _label))
+register_purpose(Purpose("delivery", ("share",), "자료 전달: 주는 쪽이 받는 쪽에게 이 내용을 넘겼다(조건 설명은 자유 영역의 terms)"))
+register_purpose(Purpose("submission", ("share",), "이벤트 제출: 참가자가 이벤트에 낸 것(제출 받기 요소가 받는 사람, 마감, 수를 확인)",
+                         _in_event("submission")))
+register_purpose(Purpose("evaluation", ("share",), "평가 건넴: 개최자가 계약한 평가자에게 평가할 것을 넘겼다(평가 요소가 확인)",
+                         _in_event("evaluation")))

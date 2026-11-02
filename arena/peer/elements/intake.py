@@ -34,7 +34,7 @@ class IntakeDesk(BaseApp):
         ev, content, sp, sig, url = msg.get("event_id"), msg.get("content"), msg.get("share") or {}, msg.get("sig", ""), msg.get("recorder_url")
         if not isinstance(content, str) or len(content.encode("utf-8")) > self.s.intake_max_content_bytes:
             return {"ok": False, "error": f"제출 내용은 {self.s.intake_max_content_bytes}바이트 이하의 글이어야 한다"}
-        if sp.get("consumer") != ctx.pub or sp.get("terms") != "submission" or sp.get("event_id") != ev:
+        if sp.get("consumer") != ctx.pub or sp.get("purpose") != "submission" or sp.get("event_id") != ev:
             return {"ok": False, "error": "이 제출은 이 peer에게 온 이 이벤트의 제출이 아니다"}
         if h(content.encode("utf-8")) != sp.get("content_hash"):
             return {"ok": False, "error": "내용이 먼저 등록한 해시와 맞지 않는다"}
@@ -77,7 +77,7 @@ async def submit(A, ctx, st, text):
     r = await _record(A, ctx, st, "publish", {"author": ctx.pub, "content_hash": ch, "event_id": st.event_id, "group_id": st.group_id})
     if not r.get("ok"):
         return {"ok": False, "error": r.get("error")}
-    sp = {"provider": ctx.pub, "consumer": to, "content_hash": ch, "terms": "submission", "nonce": nonce(ch), "event_id": st.event_id,
+    sp = {"provider": ctx.pub, "consumer": to, "content_hash": ch, "purpose": "submission", "nonce": nonce(ch), "event_id": st.event_id,
           "group_id": st.group_id, **(await ledger_tag(ctx, st))}
     out = await ctx.call_peer(to, {"op": "intake.submit", "event_id": st.event_id, "content": str(text), "share": sp, "sig": ctx.sign(sp),
                                    "recorder_url": st.recorder_url}, group=st.group_id, event=st.event_id)

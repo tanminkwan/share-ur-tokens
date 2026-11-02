@@ -24,7 +24,7 @@ def _intake_cfg(cfg: dict) -> str | None:
 
 def _intake_rule(chain, e, cfg, s) -> str | None:
     p = e["payload"]
-    if e["type"] != "share" or p.get("terms") != "submission":
+    if e["type"] != "share" or p.get("purpose") != "submission":
         return None
     ev = p["event_id"]
     decl = events(chain)[ev]
@@ -35,7 +35,7 @@ def _intake_rule(chain, e, cfg, s) -> str | None:
         return "intake: after the deadline"
     if set(decl.get("policy", {}).get("conflict_roles", [])) & roles_of(chain, ev, p["provider"]):
         return "intake: a contractor in a conflicting role cannot submit"
-    n = sum(1 for x in chain if x["type"] == "share" and x["payload"].get("event_id") == ev and x["payload"].get("terms") == "submission"
+    n = sum(1 for x in chain if x["type"] == "share" and x["payload"].get("event_id") == ev and x["payload"].get("purpose") == "submission"
             and x["payload"]["provider"] == p["provider"])
     if n >= cfg["max_per_author"]:
         return f"intake: at most {cfg['max_per_author']} submissions per author"
@@ -59,14 +59,14 @@ def _evaluation_cfg(cfg: dict) -> str | None:
 
 
 def _handed_over(chain, ev, content_hash, consumer=None) -> list:
-    return [x for x in chain if x["type"] == "share" and x["payload"].get("event_id") == ev and x["payload"].get("terms") == "evaluation"
+    return [x for x in chain if x["type"] == "share" and x["payload"].get("event_id") == ev and x["payload"].get("purpose") == "evaluation"
             and x["payload"]["content_hash"] == content_hash and (consumer is None or x["payload"]["consumer"] == consumer)]
 
 
 def _evaluation_rule(chain, e, cfg, s) -> str | None:
     p = e["payload"]
     ev = p["event_id"]
-    if e["type"] == "share" and p.get("terms") == "evaluation":
+    if e["type"] == "share" and p.get("purpose") == "evaluation":
         if p["provider"] != events(chain)[ev]["issuer"]:
             return "evaluation: only the event issuer hands items over"
         if cfg["evaluator_role"] not in roles_of(chain, ev, p["consumer"]):

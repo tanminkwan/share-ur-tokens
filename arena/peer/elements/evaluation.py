@@ -33,7 +33,7 @@ class EvaluationDesk(BaseApp):
             return {"ok": False, "error": f"한 번에 1~{self.s.evaluation_max_items}개 항목을 넘긴다"}
         for it in items:
             sh = it.get("share") or {}
-            if (sh.get("consumer") != ctx.pub or sh.get("terms") != "evaluation" or sh.get("event_id") != ev or sh.get("provider") != decl["issuer"]
+            if (sh.get("consumer") != ctx.pub or sh.get("purpose") != "evaluation" or sh.get("event_id") != ev or sh.get("provider") != decl["issuer"]
                     or h(str(it.get("content", "")).encode("utf-8")) != sh.get("content_hash") or not verify(decl["issuer"], sh, it.get("sig", ""))):
                 return {"ok": False, "error": "넘김 기록, 내용 해시나 개최자 서명이 맞지 않는 항목이 있다"}
         judges = [(a, c) for a, c in ctx.apps_with(EvaluationProvider) if a.app_id != ASSISTANT_APP_ID]
@@ -69,7 +69,7 @@ async def request_evaluation(A, ctx, st, evaluator):
     tag = await ledger_tag(ctx, st)
     items = []
     for x in todo:
-        sh = {"provider": ctx.pub, "consumer": pub, "content_hash": x["content_hash"], "terms": "evaluation", "nonce": nonce(x["content_hash"], pub),
+        sh = {"provider": ctx.pub, "consumer": pub, "content_hash": x["content_hash"], "purpose": "evaluation", "nonce": nonce(x["content_hash"], pub),
               "event_id": st.event_id, "group_id": st.group_id, **tag}
         items.append({"share": sh, "sig": ctx.sign(sh), "content": x["content"]})
     out = await ctx.call_peer(pub, {"op": "evaluation.request", "event_id": st.event_id, "recorder_url": st.recorder_url, "items": items},

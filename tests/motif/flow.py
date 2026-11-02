@@ -99,7 +99,7 @@ async def apply(p, n, content):
     r1 = await R.record("publish", pub_p, {p.identity.pub: p.sign(pub_p)})
     if not p.receipts.keep(r1, "publish", pub_p, expected_recorder=n["recorder_pub"]):
         return {"ok": False, "error": r1.get("error", "recorder seal mismatch")}
-    share_p = {"provider": p.identity.pub, "consumer": n["issuer_pub"], "content_hash": ch, "terms": "submission", "nonce": nonce(ch),
+    share_p = {"provider": p.identity.pub, "consumer": n["issuer_pub"], "content_hash": ch, "purpose": "submission", "nonce": nonce(ch),
                "event_id": n["notice_id"], "group_id": n["group_id"], **L}
     sub = await p.call(n["issuer_url"], {"op": "intake.submit", "event_id": n["notice_id"], "content": text, "share": share_p,
                                          "sig": p.sign(share_p), "recorder_url": n["recorder_url"]})
@@ -123,7 +123,7 @@ async def review_and_adopt(w, opened, top=1):
     L = await lid(R)
     items = []
     for k, v in submissions(w, ev).items():
-        sh = {"provider": org.identity.pub, "consumer": rv["pub"], "content_hash": k, "terms": "evaluation", "nonce": nonce(k, rv["pub"]),
+        sh = {"provider": org.identity.pub, "consumer": rv["pub"], "content_hash": k, "purpose": "evaluation", "nonce": nonce(k, rv["pub"]),
               "event_id": ev, "group_id": g_rev, **L}
         items.append({"share": sh, "sig": org.sign(sh), "content": v["content"]})
     res = await org.call(rv["url"], {"op": "evaluation.request", "event_id": ev, "recorder_url": opened["recorder"]["recorder_url"], "items": items})
