@@ -294,18 +294,18 @@ async def test_codebook_a_branch_follows_a_trunk_edition_by_copying_it(net, sett
          "group_id": "public", "ledger_id": net.ledger_id}
     trunk_ed = await net.svc.record("codebook", p, {pub.pub: pub.sign(p)})
     whole = next(e for e in net.svc.codebooks()["codebooks"] if e["hash"] == trunk_ed["hash"])
-    adopter = Identity.generate()
+    copier = Identity.generate()
 
     async def copy_into(svc, ledger_id, entry):
-        q = {"adopter": adopter.pub, "adopted": {k: entry[k] for k in ("type", "payload", "sigs", "prev", "ts", "hash", "seal")},
+        q = {"copier": copier.pub, "copied": {k: entry[k] for k in ("type", "payload", "sigs", "prev", "ts", "hash", "seal")},
              "group_id": "public", "ledger_id": ledger_id}
-        return await svc.record("codebook", q, {adopter.pub: adopter.sign(q)})
+        return await svc.record("codebook", q, {copier.pub: copier.sign(q)})
     forged = copy.deepcopy(whole)
     forged["payload"]["version"] = "9.9"
     assert "hash" in (await copy_into(child.svc, child.ledger_id, forged))["error"]
     assert "branch chain" in (await copy_into(net.svc, net.ledger_id, whole))["error"]  # the trunk copies nothing
     got = await copy_into(child.svc, child.ledger_id, whole)
-    assert got["ok"] and child.svc.verify(got["hash"])["adopted_from"] == {"ledger_id": net.ledger_id, "entry": whole["hash"]}
+    assert got["ok"] and child.svc.verify(got["hash"])["copied_from"] == {"ledger_id": net.ledger_id, "entry": whole["hash"]}
     assert "already copied" in (await copy_into(child.svc, child.ledger_id, whole))["error"]
     ref = {"entry": whole["hash"], "publisher": pub.pub, "version": "1.0"}
     assert check_event_codebook(child.svc.ledger.chain, {"codebook": ref}) is None  # the branch follows the trunk edition
@@ -329,5 +329,5 @@ async def test_codebook_any_branch_peer_copies_a_trunk_edition_with_the_helper(t
     peer = w.peer("p", [role])
     clients = {"mem://root": InMemoryRecorderClient(net.svc), "mem://child": InMemoryRecorderClient(child.svc)}
     peer.recorder_factory = lambda url: clients[url]
-    r = await FoundationRole.adopt(peer.ctx(role), "mem://root", ed["hash"], "mem://child")
+    r = await FoundationRole.copy_edition(peer.ctx(role), "mem://root", ed["hash"], "mem://child")
     assert r["ok"] and ed["hash"] in editions(child.svc.ledger.chain)

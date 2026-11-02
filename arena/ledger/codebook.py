@@ -35,31 +35,31 @@ def editions(chain) -> dict:
     out = {}
     for x in chain:
         if x["type"] == "codebook":
-            a = x["payload"].get("adopted")
+            a = x["payload"].get("copied")
             out.update({a["hash"]: a["payload"]} if a else {x["hash"]: x["payload"]})
     return out
 
 
 def _signers(p):
-    return [p.get("adopter")] if "adopted" in p else [p.get("publisher")]
+    return [p.get("copier")] if "copied" in p else [p.get("publisher")]
 
 
 BODY = ("type", "payload", "sigs", "prev", "ts")
 
 
-def _adopted_ok(chain, p) -> str | None:
+def _copied_ok(chain, p) -> str | None:
     """user 2026-11-02: a branch may follow the trunk's editions. The branch copies the trunk's edition entry as it is; its
     ledger checks, without the network, that the copy hashes to its hash, carries the publisher's signature, was sealed,
     and belongs to the trunk named in this branch's genesis. Peers may also look the entry up on the trunk itself."""
-    a = p["adopted"]
+    a = p["copied"]
     if not isinstance(a, dict) or a.get("type") != "codebook" or not isinstance(a.get("payload"), dict) or not all(k in a for k in (*BODY, "hash", "seal")):
-        return "adopted must be a whole codebook entry of the trunk"
+        return "copied must be a whole codebook entry of the trunk"
     if not is_branch(chain):
         return "only a branch chain copies the trunk's editions"
     if a["hash"] != h(canon({k: a[k] for k in BODY})):
         return "the copied edition does not hash to its hash"
     ap = a["payload"]
-    if "adopted" in ap or "local" in ap:
+    if "copied" in ap or "local" in ap:
         return "only the trunk's own editions are copied"
     if ap.get("ledger_id") != chain[0]["payload"]["parent"].get("ledger_id"):
         return "the copied edition is not of the trunk this branch came from"
@@ -74,8 +74,8 @@ def _adopted_ok(chain, p) -> str | None:
 
 def _shape(chain, e, now, s):
     p = e["payload"]
-    if "adopted" in p:
-        return None if p.get("adopter") else "a copied edition needs the adopter who records it"
+    if "copied" in p:
+        return None if p.get("copier") else "a copied edition needs the copier who records it"
     if not p.get("publisher") or not isinstance(p.get("name"), str) or not p["name"] or not isinstance(p.get("version"), str) \
             or not VERSION.match(p["version"]) or not isinstance(p.get("content_hash"), str) or len(p["content_hash"]) != 64:
         return "codebook needs publisher, name, version x.y and the content_hash of the code table document"
@@ -117,8 +117,8 @@ def _check_local(chain, local) -> str | None:
 
 def _rule(chain, e, now, s):
     p = e["payload"]
-    if "adopted" in p:
-        return _adopted_ok(chain, p)
+    if "copied" in p:
+        return _copied_ok(chain, p)
     if "local" in p:
         bad = _check_local(chain, p["local"])
         if bad:
@@ -156,15 +156,15 @@ def check_event_codebook(chain, p) -> str | None:
 
 
 def _public(p, chain):
-    if "adopted" in p:
-        a = p["adopted"]
-        return {"adopter": p["adopter"], "adopted_from": {"ledger_id": a["payload"].get("ledger_id"), "entry": a["hash"]},
+    if "copied" in p:
+        a = p["copied"]
+        return {"copier": p["copier"], "copied_from": {"ledger_id": a["payload"].get("ledger_id"), "entry": a["hash"]},
                 **{k: a["payload"][k] for k in ("publisher", "name", "version", "content_hash", "codes") if k in a["payload"]}}
     return {k: p[k] for k in ("publisher", "name", "version", "content_hash", "codes", "supersedes", "local") if k in p}
 
 
 def _contribute(rec, p, index):
-    if "adopted" not in p:  # a copy is not a new edition
+    if "copied" not in p:  # a copy is not a new edition
         _inc(rec, p["publisher"], "codebooks")
 
 

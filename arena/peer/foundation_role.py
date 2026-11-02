@@ -51,13 +51,13 @@ class FoundationRole(BaseApp):
         return r
 
     @staticmethod
-    async def adopt(ctx, trunk_recorder_url: str, entry_hash: str, branch_recorder_url: str) -> dict:
+    async def copy_edition(ctx, trunk_recorder_url: str, entry_hash: str, branch_recorder_url: str) -> dict:
         """copy a trunk edition into a branch chain so the branch's events may follow it (any peer of the branch may do this)"""
         found = next((e for e in (await ctx.recorder(trunk_recorder_url).codebooks()).get("codebooks", []) if e["hash"] == entry_hash), None)
         if found is None:
             return {"ok": False, "error": "no such edition on the trunk"}
         lid = await ctx.ledger_id(branch_recorder_url)
-        p = {"adopter": ctx.pub, "adopted": {k: found[k] for k in ("type", "payload", "sigs", "prev", "ts", "hash", "seal")},
+        p = {"copier": ctx.pub, "copied": {k: found[k] for k in ("type", "payload", "sigs", "prev", "ts", "hash", "seal")},
              "group_id": ctx.settings.genesis_group_id, **({"ledger_id": lid} if lid else {})}
         return await ctx.recorder(branch_recorder_url).record("codebook", p, {ctx.pub: ctx.sign(p)})
 
