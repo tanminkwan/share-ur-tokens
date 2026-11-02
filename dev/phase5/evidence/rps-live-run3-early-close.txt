@@ -1,0 +1,63 @@
+[assistant] 필명-262559: 이벤트 개최 ev-2fd13a8921 'peer 가위바위보 대회' (규칙 해시 9359390364, 방식 assistant)
+[assistant] 필명-262559: 참여 중인 이벤트 1건을 로컬에서 불러와 이어 감
+[events   ] 필명-e5d455: 이벤트 ev-2fd13a8921 → 앱 assistant (방식 assistant)
+[events   ] 필명-8d2efc: 이벤트 ev-2fd13a8921 → 앱 assistant (방식 assistant)
+[events   ] 필명-028ea4: 이벤트 ev-2fd13a8921 → 앱 assistant (방식 assistant)
+[events   ] 필명-9402f4: 이벤트 ev-2fd13a8921 → 앱 assistant (방식 assistant)
+[decide   ] 필명-e5d455: 소유자에게 물음 '‘peer 가위바위보 대회’에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-e5d455: [ev-2fd13a8921] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-8d2efc: 소유자에게 물음 '‘peer 가위바위보 대회’에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-8d2efc: [ev-2fd13a8921] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-028ea4: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-028ea4: [ev-2fd13a8921] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-9402f4: 소유자에게 물음 'peer 가위바위보 대회에 참가 신청을 해도 될까요?' → 아니오: 이번에는 쉬겠다
+[assistant] 필명-9402f4: [ev-2fd13a8921] ask_owner → {"yes": false, "why": "이번에는 쉬겠다"}
+[decide   ] 필명-262559: 소유자에게 물음 'peer 가위바위보 대회에 참가하려면 허락해 주시겠습니까?' → 예: 친선 대회라 참가한다
+[assistant] 필명-262559: [ev-2fd13a8921] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-8d2efc: [ev-2fd13a8921] join_event → {"ok": true}
+[assistant] 필명-e5d455: [ev-2fd13a8921] join_event → {"ok": true}
+[assistant] 필명-028ea4: [ev-2fd13a8921] join_event → {"ok": true}
+[assistant] 필명-262559: [ev-2fd13a8921] join_event → {"error": "개최자는 참가 신청하지 않는다"}
+[assistant] 필명-262559: [ev-2fd13a8921] ask_owner → {"error": "인자가 맞지 않음: question 없음"}
+[assistant] 필명-9402f4: [ev-2fd13a8921] note → {"ok": true}
+[decide   ] 필명-262559: 소유자에게 물음 '이벤트에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-262559: [ev-2fd13a8921] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-262559: [ev-2fd13a8921] join_event → {"error": "개최자는 참가 신청하지 않는다"}
+[assistant] 필명-262559: [ev-2fd13a8921] contract → {"ok": false, "error": "role player not offered"}
+[assistant] 필명-262559: [ev-2fd13a8921] note → {"ok": true}
+[decide   ] 필명-262559: 소유자에게 물음 '다른 참가자를 초대하려면 그들의 공개키와 URL을 알려주시겠습니까?' → 예: 친선 대회라 참가한다
+[assistant] 필명-262559: [ev-2fd13a8921] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-262559: 소유자에게 물음 '대회에 참여할 다른 두 명의 참가자(공개키와 URL)를 알려 주세요.' → 예: 친선 대회라 참가한다
+[assistant] 필명-262559: [ev-2fd13a8921] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-262559: 소유자에게 물음 '대회에 참여할 다른 두 명의 참가자(공개키와 URL)를 알려 주세요.' → 예: 친선 대회라 참가한다
+[assistant] 필명-262559: [ev-2fd13a8921] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-262559: 소유자에게 물음 '대회에 참여할 다른 두 명의 참가자(공개키와 URL)를 알려 주세요.' → 예: 친선 대회라 참가한다
+[assistant] 필명-262559: [ev-2fd13a8921] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-262559: [ev-2fd13a8921] contract → {"ok": true, "hash": "5c2511fdf1953565b43cbeea2e069debbe1efd1c0f4770969ce03fcca6cdba39", "error": null}
+[decide   ] 필명-262559: 소유자에게 물음 '대회에 참여할 다른 두 명의 참가자 각각의 공개키와 URL를 알려 주세요' → 예: 친선 대회라 참가한다
+[assistant] 필명-262559: [ev-2fd13a8921] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-262559: [ev-2fd13a8921] contract → {"ok": true, "hash": "849cd0eccef7dbadb383c1adf8922f964a4185a66d78dd94b7c09859d2ca0cda", "error": null}
+[assistant] 필명-262559: [ev-2fd13a8921] publish_text → {"ok": true, "content_hash": "f43b0dbf17cce68af53999e1cb00725cf98d69d104f317d8a292cc964f95513c", "publish_hash": "ae1a88
+[solicit  ] 필명-8d2efc: 직접 요청 받음 ev-2fd13a8921-b538f7c8: 
+[solicit  ] 필명-e5d455: 직접 요청 받음 ev-2fd13a8921-b538f7c8: 
+[solicit  ] 필명-262559: 직접 요청 받음 ev-2fd13a8921-b538f7c8: 
+[solicit  ] 필명-262559: 직접 요청 ev-2fd13a8921-b538f7c8 → 3명 중 3명 수신
+[assistant] 필명-262559: [ev-2fd13a8921] solicit → {"request_id": "ev-2fd13a8921-b538f7c8", "acks": {"http://127.0.0.1:56699": true, "http://127.0.0.1:52381": true, "http:
+[assistant] 필명-8d2efc: [ev-2fd13a8921] commit → {"error": "인자가 맞지 않음: label, value 없음"}
+[assistant] 필명-262559: [ev-2fd13a8921] contract → {"ok": true, "hash": "4abb3b41b08d8f8d033f8602f0e804ca9d461e1b1eb8699edcff46925402231f", "error": null}
+[assistant] 필명-8d2efc: [ev-2fd13a8921] commit → {"ok": true, "label": "m3-1", "commit": "5d498fc744adcb36c5f4382d02e01615ed7f0a12dca9e3a44cb658e7c54756eb", "publish_has
+[assistant] 필명-262559: [ev-2fd13a8921] publish_text → {"ok": true, "content_hash": "43f0df3d7579d2a501993260d13db71342b270d93217e58adaeba934187f5874", "publish_hash": "58cb9b
+[assistant] 필명-8d2efc: [ev-2fd13a8921] send → {"ok": true}
+[assistant] 필명-e5d455: [ev-2fd13a8921] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-2fd13a8921", "group_id": "public", "aut
+[assistant] 필명-e5d455: [ev-2fd13a8921] commit → {"ok": true, "label": "m3-1", "commit": "b6489ad20223cd18123b909f3888252ccd6224c39cd8772778718bbc39ad0979", "publish_has
+[assistant] 필명-262559: [ev-2fd13a8921] publish_text → {"ok": true, "content_hash": "65a172522f1046c56dcd2e1c2dc139a9c565fac68e75a261c2e5a19ba06a8513", "publish_hash": "7cbb4d
+[assistant] 필명-e5d455: [ev-2fd13a8921] send → {"ok": true}
+[assistant] 필명-262559: [ev-2fd13a8921] publish_text → {"ok": false, "content_hash": "43f0df3d7579d2a501993260d13db71342b270d93217e58adaeba934187f5874", "publish_hash": null, 
+[assistant] 필명-262559: [ev-2fd13a8921] note → {"ok": true}
+[decide   ] 필명-262559: 소유자에게 물음 '새로운 참가자 028ea498이 기존에 이미 공개된 경기 일정에 포함되지' → 예: 친선 대회라 참가한다
+[assistant] 필명-262559: [ev-2fd13a8921] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-262559: [ev-2fd13a8921] close_event → {"ok": true, "hash": "8003ce976b1419619fe747a049a70d7e9cd34d6d5df014b0c2428b147d73e31c", "error": null}
+[assistant] 필명-262559: [ev-2fd13a8921] note → {"ok": true}
+[assistant] 필명-262559: [ev-2fd13a8921] note → {"ok": true}
+elapsed 39.5s, entries 11: ['event', 'contract', 'contract', 'publish', 'contract', 'publish', 'publish', 'publish', 'publish', 'close']
+tests/live/test_rps_acceptance.py:132: AssertionError

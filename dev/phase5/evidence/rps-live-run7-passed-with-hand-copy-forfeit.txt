@@ -1,0 +1,177 @@
+[assistant] 필명-fa59d8: 이벤트 개최 ev-082539a389 'peer 가위바위보 대회' (규칙 해시 eb6b5b4139, 방식 assistant)
+[assistant] 필명-fa59d8: 참여 중인 이벤트 1건을 로컬에서 불러와 이어 감
+[assistant] 필명-fa59d8: [ev-082539a389] ask_owner → {"error": "인자가 맞지 않음: ask_owner() got an unexpected keyword argument 'tool'"}
+[decide   ] 필명-49b787: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-49b787: [ev-082539a389] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-56a8a2: 소유자에게 물음 'peer 가위바위보 대회에 참가 신청을 해도 될까요?' → 아니오: 이번에는 쉬겠다
+[assistant] 필명-56a8a2: [ev-082539a389] ask_owner → {"yes": false, "why": "이번에는 쉬겠다"}
+[decide   ] 필명-a84638: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-a84638: [ev-082539a389] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-e9c50a: 소유자에게 물음 '이번 'peer 가위바위보 대회'에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-e9c50a: [ev-082539a389] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-49b787: [ev-082539a389] join_event → {"ok": true}
+[decide   ] 필명-fa59d8: 소유자에게 물음 '다른 peer들을 초대하여 가위바위보 대회에 참가자를 모집해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-fa59d8: [ev-082539a389] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-e9c50a: [ev-082539a389] join_event → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] join_event → {"ok": true}
+[decide   ] 필명-fa59d8: 소유자에게 물음 '대회 참가 신청을 받아도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-fa59d8: [ev-082539a389] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-56a8a2: [ev-082539a389] note → {"ok": true}
+[contract ] 필명-49b787: 'player' 역할 계약 수락: 참가 신청한 이벤트, 같은 규칙
+[assistant] 필명-fa59d8: [ev-082539a389] contract → {"ok": true, "hash": "7a041547a60c0cf55e7659a15e4c5922a62d4edc083d3eae2d271f447d6c60a6", "error": null, "contracts_so_fa
+[assistant] 필명-fa59d8: [ev-082539a389] note → {"ok": true}
+[contract ] 필명-e9c50a: 'player' 역할 계약 수락: 참가 신청한 이벤트, 같은 규칙
+[assistant] 필명-fa59d8: [ev-082539a389] contract → {"ok": true, "hash": "304c40c35b3cc6585dabe1ffe7134ade071a9a1ad2a0d2c40a6d9f79e53b330f", "error": null, "contracts_so_fa
+[contract ] 필명-a84638: 'player' 역할 계약 수락: 참가 신청한 이벤트, 같은 규칙
+[assistant] 필명-fa59d8: [ev-082539a389] contract → {"ok": true, "hash": "f7cd6be35a435bf4b9d516d68ac4dc2bfa3e3cabe4e36b5efff193634a9b6ae8", "error": null, "contracts_so_fa
+[assistant] 필명-fa59d8: [ev-082539a389] publish_text → {"ok": true, "content_hash": "9d25b1b54cef75a1d9225cebf3b12383690a7a8e6330cfd51e03c80d698e453e", "publish_hash": "9c6978
+[assistant] 필명-fa59d8: [ev-082539a389] solicit → {"request_id": "ev-082539a389-8b672af9", "acks": {"http://127.0.0.1:51665": true, "http://127.0.0.1:44465": true, "http:
+[assistant] 필명-49b787: [ev-082539a389] commit → {"ok": true, "label": "m1-1", "commit": "2603aa18e6312f241f9d786f41ba9fb4fd286fc1352ff6bb5d88bc6a53b485a2", "publish_has
+[assistant] 필명-a84638: [ev-082539a389] note → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] commit → {"ok": true, "label": "m3-1", "commit": "3ad1be023d14015e0c634a5f70eb1b974d290059d026bb529214c1ff963800fb", "publish_has
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-082539a389", "group_id": "public", "aut
+[assistant] 필명-e9c50a: [ev-082539a389] verify → {"ok": true, "exists": false, "type": null, "seal_ok": false, "event_id": null, "group_id": null, "content_of": {"hash":
+[assistant] 필명-a84638: [ev-082539a389] commit → {"ok": true, "label": "m3-1", "commit": "72919fc5b745e3ef081ed2e316dc70e8e2aabb2de481398c5e17cd65d2610e65", "publish_has
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] commit → {"error": "라벨 m3-1은 이미 먼저 등록했다", "commit": "72919fc5b745e3ef081ed2e316dc70e8e2aabb2de481398c5e17cd65d2610e65", "publish_
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-082539a389", "group_id": "public", "aut
+[assistant] 필명-e9c50a: [ev-082539a389] verify → {"error": "인자가 맞지 않음: hash 없음"}
+[assistant] 필명-e9c50a: [ev-082539a389] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-082539a389", "group_id": "public", "aut
+[assistant] 필명-e9c50a: [ev-082539a389] my_reveal → {"author": "e9c50a239c40c7da59072b447d62c5747684490f668be5ab232279050363a047", "label": "m3-1", "value": "rock", "salt":
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] my_reveal → {"author": "a84638ef604d5198095b90d02d4010a93d3b3307d24e377ba9189b464c00f84b", "label": "m3-1", "value": "rock", "salt":
+[assistant] 필명-a84638: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] commit → {"error": "인자가 맞지 않음: label, value 없음"}
+[assistant] 필명-e9c50a: [ev-082539a389] commit → {"ok": true, "label": "m3-2", "commit": "9061b9bfa3569e25c87756d85f7afdf2377ad77e36efbfdc8d215d3b5e23932b", "publish_has
+[assistant] 필명-a84638: [ev-082539a389] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-082539a389", "group_id": "public", "aut
+[assistant] 필명-a84638: [ev-082539a389] commit → {"ok": true, "label": "m3-2", "commit": "72a7b1c8d1f8a7de450a5ea026efef4ee3216adf021ce059f448f47b73fd2f6d", "publish_has
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-082539a389", "group_id": "public", "aut
+[assistant] 필명-a84638: [ev-082539a389] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-082539a389", "group_id": "public", "aut
+[assistant] 필명-e9c50a: [ev-082539a389] my_reveal → {"author": "e9c50a239c40c7da59072b447d62c5747684490f668be5ab232279050363a047", "label": "m3-2", "value": "paper", "salt"
+[assistant] 필명-a84638: [ev-082539a389] my_reveal → {"author": "a84638ef604d5198095b90d02d4010a93d3b3307d24e377ba9189b464c00f84b", "label": "m3-2", "value": "scissors", "sa
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"request_id": "ev-082539a389-215c4ce2", "sent": {"a84638ef": true}}
+[assistant] 필명-a84638: [ev-082539a389] propose_attest → {"request_id": "ev-082539a389-3b2f3a7c", "sent": {"e9c50a23": true}}
+[assistant] 필명-e9c50a: [ev-082539a389] cosign → {"error": "서명 요청 ev-082539a389-215c4ce2이 없다"}
+[assistant] 필명-a84638: [ev-082539a389] cosign → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] cosign → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-fa59d8: [ev-082539a389] send → {"error": "인자가 맞지 않음: to, text, data_json 없음"}
+[assistant] 필명-fa59d8: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] commit → {"ok": true, "label": "m1-1", "commit": "bfd33968288fb8a958d1037665829cdc9ed15646a281d3d52e26da4ee332ac31", "publish_has
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-fa59d8: [ev-082539a389] send → {"error": "인자가 맞지 않음: to, text, data_json 없음"}
+[assistant] 필명-fa59d8: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] commit → {"ok": true, "label": "m2-1", "commit": "371b3f1af5def12cf870c0f4e6e3f638e38a15878a9eb0adffaad228d0cf3e15", "publish_has
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": false, "error": "#a84638의 주소를 찾지 못했다"}
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-082539a389", "group_id": "public", "aut
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] commit → {"ok": true, "label": "m2-1", "commit": "de58f206f4b9adff03354bbc36fd52986d913f18cfe42d450d82c0805d3e915b", "publish_has
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] commit → {"error": "라벨 m2-1은 이미 먼저 등록했다", "commit": "de58f206f4b9adff03354bbc36fd52986d913f18cfe42d450d82c0805d3e915b", "publish_
+[assistant] 필명-49b787: [ev-082539a389] verify → {"error": "인자가 맞지 않음: hash 없음"}
+[assistant] 필명-a84638: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] verify → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-49b787: [ev-082539a389] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-082539a389", "group_id": "public", "aut
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] send → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] verify → {"error": "인자가 맞지 않음: hash 없음"}
+[assistant] 필명-49b787: [ev-082539a389] my_reveal → {"error": "인자가 맞지 않음: label 없음"}
+[assistant] 필명-49b787: [ev-082539a389] my_reveal → {"author": "49b787c54e707f378552ad9b6d9c488adecc6698e8b6a68b65c5de1e9ea7e6ba", "label": "m1-1", "value": "rock", "salt":
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"error": "인자가 맞지 않음: to, text, data_json 없음"}
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] check_reveal → {"error": "인자가 맞지 않음: publish_hash, author, label, value, salt 없음"}
+[assistant] 필명-49b787: [ev-082539a389] check_reveal → {"error": "인자가 맞지 않음: publish_hash, author, label, value, salt 없음"}
+[assistant] 필명-49b787: [ev-082539a389] check_reveal → {"match": false, "reason": "공개값이 먼저 등록한 해시와 맞지 않음"}
+[assistant] 필명-49b787: [ev-082539a389] propose_attest → {"request_id": "ev-082539a389-e33aeb25", "sent": {"e9c50a23": true}}
+[assistant] 필명-e9c50a: [ev-082539a389] decline → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] commit → {"ok": true, "label": "m1-2", "commit": "ae6ae6aeab3ca9486b58232e7bf707d441ce345610ba999e505f240c3519ef15", "publish_has
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] commit → {"ok": true, "label": "m1-2", "commit": "f4bdbade46c3fa8279174b96870f7187f61d622a7b57a04169051d5369a0bb94", "publish_has
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] verify → {"error": "인자가 맞지 않음: hash 없음"}
+[assistant] 필명-e9c50a: [ev-082539a389] verify → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-e9c50a: [ev-082539a389] my_reveal → {"author": "e9c50a239c40c7da59072b447d62c5747684490f668be5ab232279050363a047", "label": "m1-2", "value": "paper", "salt"
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] check_reveal → {"match": false, "reason": "공개값이 먼저 등록한 해시와 맞지 않음"}
+[assistant] 필명-49b787: [ev-082539a389] my_reveal → {"author": "49b787c54e707f378552ad9b6d9c488adecc6698e8b6a68b65c5de1e9ea7e6ba", "label": "m1-2", "value": "rock", "salt":
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] verify → {"error": "인자가 맞지 않음: hash 없음"}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "인자가 맞지 않음: value_json가 JSON이 아님"}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "value 안의 공개값이 원장과 맞지 않는다(코드 확인): 라벨 m1-1: 공개값이 먼저 등록한 해시와 맞지 않음"}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "value 안의 공개값이 원장과 맞지 않는다(코드 확인): 라벨 m1-1: 공개값이 먼저 등록한 해시와 맞지 않음"}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "value 안의 공개값이 원장과 맞지 않는다(코드 확인): 라벨 m1-1: 공개값이 먼저 등록한 해시와 맞지 않음"}
+[assistant] 필명-49b787: [ev-082539a389] check_reveal → {"match": true}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "value 안의 공개값이 원장과 맞지 않는다(코드 확인): 라벨 m1-1: 공개값이 먼저 등록한 해시와 맞지 않음"}
+[assistant] 필명-49b787: [ev-082539a389] propose_attest → {"error": "value 안의 공개값이 원장과 맞지 않는다(코드 확인): 라벨 m1-1: 공개값이 먼저 등록한 해시와 맞지 않음"}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "value 안의 공개값이 원장과 맞지 않는다(코드 확인): 라벨 m1-1: 공개값이 먼저 등록한 해시와 맞지 않음"}
+[assistant] 필명-49b787: [ev-082539a389] check_reveal → {"match": true}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-49b787: [ev-082539a389] propose_attest → {"error": "value 안의 공개값이 원장과 맞지 않는다(코드 확인): 라벨 m1-1: 공개값이 먼저 등록한 해시와 맞지 않음"}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-e9c50a: [ev-082539a389] my_reveal → {"error": "인자가 맞지 않음: label 없음"}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "value 안의 공개값이 원장과 맞지 않는다(코드 확인): 라벨 m1-1: 공개값이 먼저 등록한 해시와 맞지 않음"}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-e9c50a: [ev-082539a389] propose_attest → {"error": "value 안의 공개값이 원장과 맞지 않는다(코드 확인): 라벨 m1-1: 공개값이 먼저 등록한 해시와 맞지 않음"}
+[assistant] 필명-e9c50a: [ev-082539a389] my_reveal → {"author": "e9c50a239c40c7da59072b447d62c5747684490f668be5ab232279050363a047", "label": "m1-1", "value": "rock", "salt":
+[assistant] 필명-e9c50a: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-fa59d8: [ev-082539a389] propose_attest → {"error": "제안하는 나도 당사자여야 한다"}
+[assistant] 필명-fa59d8: [ev-082539a389] propose_attest → {"error": "제안하는 나도 당사자여야 한다"}
+[assistant] 필명-fa59d8: [ev-082539a389] propose_attest → {"ok": true, "hash": "cbf7caf32ed86a822f095bbd7c57438261aa915f3289d636f2e36f18d4539e34", "error": null}
+[assistant] 필명-fa59d8: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] send → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-fa59d8: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] my_reveal → {"author": "49b787c54e707f378552ad9b6d9c488adecc6698e8b6a68b65c5de1e9ea7e6ba", "label": "m2-1", "value": "rock", "salt":
+[assistant] 필명-fa59d8: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] my_reveal → {"author": "a84638ef604d5198095b90d02d4010a93d3b3307d24e377ba9189b464c00f84b", "label": "m2-1", "value": "paper", "salt"
+[assistant] 필명-a84638: [ev-082539a389] send → {"ok": true}
+[assistant] 필명-49b787: [ev-082539a389] propose_attest → {"request_id": "ev-082539a389-98006d22", "sent": {"a84638ef": true}}
+[assistant] 필명-a84638: [ev-082539a389] propose_attest → {"request_id": "ev-082539a389-8e6e2a0d", "sent": {"49b787c5": true}}
+[assistant] 필명-49b787: [ev-082539a389] cosign → {"error": "서명 요청 ev-082539a389-98006d22이 없다"}
+[assistant] 필명-a84638: [ev-082539a389] cosign → {"error": "서명 요청 ev-082539a389-8e6e2a0d이 없다"}
+[assistant] 필명-49b787: [ev-082539a389] cosign → {"ok": true}
+[assistant] 필명-a84638: [ev-082539a389] cosign → {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
+[assistant] 필명-a84638: [ev-082539a389] cosign → {"ok": true}
+[assistant] 필명-fa59d8: [ev-082539a389] propose_attest → {"error": "제안하는 나도 당사자여야 한다"}
+[assistant] 필명-fa59d8: [ev-082539a389] propose_attest → {"error": "제안하는 나도 당사자여야 한다"}
+[assistant] 필명-fa59d8: [ev-082539a389] propose_attest → {"ok": true, "hash": "3d4dd67851c40868e718c3c99584062060fd673bc7c0915c9c2e862a7addc6b9", "error": null}
+[assistant] 필명-fa59d8: [ev-082539a389] close_event → {"ok": true, "hash": "df8c6c7742af27f233ee12ef845bad4ae00c4d156dbb230c63d9e24f46337250", "error": null}
+[assistant] 필명-e9c50a: [ev-082539a389] event_progress → {"ok": true, "progress": ["1 event {\"mode\": \"assistant\", \"issuer\": \"필명-fa59d8\", \"kind\": \"가위바위보\"} (항목 #fca7a5
+elapsed 760.5s, entries 21: ['event', 'contract', 'contract', 'contract', 'publish', 'publish', 'publish', 'publish', 'publish', 'publish', 'attest', 'publish', 'publish', 'publish', 'publish', 'publish', 'attest', 'attest', 'attest', 'close']
+notarized: [{'pub': 'a84638ef604d5198095b90d02d4010a93d3b3307d24e377ba9189b464c00f84b', 'wins': 2, 'games': 2, 'rate': 1.0}, {'pub': '49b787c54e707f378552ad9b6d9c488adecc6698e8b6a68b65c5de1e9ea7e6ba', 'wins': 1, 'games': 2, 'rate': 0.5}, {'pub': 'e9c50a239c40c7da59072b447d62c5747684490f668be5ab232279050363a047', 'wins': 0, 'games': 2, 'rate': 0.0}]
+recomputed: [{'pub': 'a84638ef604d5198095b90d02d4010a93d3b3307d24e377ba9189b464c00f84b', 'wins': 2, 'games': 2, 'rate': 1.0}, {'pub': '49b787c54e707f378552ad9b6d9c488adecc6698e8b6a68b65c5de1e9ea7e6ba', 'wins': 1, 'games': 2, 'rate': 0.5}, {'pub': 'e9c50a239c40c7da59072b447d62c5747684490f668be5ab232279050363a047', 'wins': 0, 'games': 2, 'rate': 0.0}]
+exit=0
+
+=== ledger (read during the analysis; the pytest temp folder was cleaned up afterwards) ===
+5 publish host (bracket text, no label)
+6 publish 49b787 m1-1 | 7 e9c50a m3-1 | 8 a84638 m3-1 | 9 e9c50a m3-2 | 10 a84638 m3-2
+11 attest match m3 (e9c50a vs a84638, two rounds, co-signed)
+12 publish e9c50a m1-1 | 13 49b787 m2-1 | 14 a84638 m2-1 | 15 e9c50a m1-2 | 16 49b787 m1-2
+17 attest forfeit m1 by the host alone: winner 49b787
+   cause: e9c50a's agent retyped its m1-1 reveal and pasted salt 6f78730d4f67a98d (its m3-1 salt);
+   the real m1-1 salt was e3bc2fc034bf9736. The ledger check refused it correctly; the player then declared its own forfeit.
+18 attest match m2 (49b787 vs a84638, co-signed): winner a84638
+19 attest ranking final by the host: a84638 2/2, 49b787 1/2, e9c50a 0/2
+20 close result_hash = entry 19

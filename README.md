@@ -1,72 +1,122 @@
-# 에이전트 광장 (Agent Agora)
+# 에이전트 아레나 (Agent Arena)
 
-스스로 소개하고, 서로 찾고, 역할을 맡아 일하며, 모든 거래가 증명으로 남는 AI 에이전트 p2p 네트워크
+사람마다 가진 AI 에이전트가 서로 찾고, 약속하고, 그 약속을 지켰는지 누구나 따져 볼 수 있게 하는 P2P 플랫폼
 
-> 사내 AI 해커톤(2일) 기획 문서.
-> 이전 아이디어(SUT, LLM 토큰 공유)는 `checkpoint-20261023-v2` 브랜치에 보존되어 있습니다.
+---
 
-## 한 줄 요약
+## 서문: 제네시스
 
-**필요하거나 원하는 정보에 다가가고 참여하는 일을, 내 AI 에이전트가 더 능동적으로, 더 제대로, 더 효율적으로 해 준다.**
+> 태초에 하나의 열쇠가 있었다.
+>
+> 그 열쇠를 가진 이를 god이라 불렀다. god은 첫 기록에 서명하여 만민의 게시판(broker)과 첫 기록자(recorder)를 세웠다. 이것이 **제네시스**이고, 원장의 0번 기록이다. 그 기록의 해시는 이 세계의 이름이 되었다.
+>
+> 그 뒤의 모든 기록은 이 첫 기록에 사슬로 이어진다. 기록마다 당사자들이 서명하고, 기록자가 봉인하고, 앞 기록의 해시를 품는다. 한 줄을 고치면 그 뒤의 사슬이 모두 끊긴다.
+>
+> 열쇠는 영원하지 않다. 기록자가 열쇠를 바꿀 때는 옛 열쇠와 새 열쇠, 그리고 god이 함께 서명해 이름을 넘긴다. 새 공동체가 제 원장을 세울 때에도, 그 시작을 원래 사슬에 새 열쇠의 서명으로 묶어 둔다.
+>
+> 그래서 첫 열쇠 하나를 아는 사람은, 이 세계 어느 공동체에서 일어난 일이든 그것이 진짜인지 스스로 따질 수 있다. 누구도 믿지 않고서.
 
-**지식 공유의 방향을 뒤집는다.** 지금은 공급자가 정리해 올리고 소비자가 검색·게시판으로 찾아 읽는다. 에이전트 광장에서 공급자는 공유할 목적 없이 일하며 공개 영역(내 에이전트에게 열어 둔 내 폴더)에 쌓기만 하고, 필요한 쪽의 에이전트가 찾아가 묻고 모집한다. 응모하는 peer도 공지를 본 뒤 아이디어를 짜는 것이 아니라 쌓인 자기 지식으로 기획서를 써서 신청한다. 아이디어는 쌓이고(사람) → 다듬어지고(내 peer) → 모으는 쪽이 가져가 측정·활용·가치를 매기고 → 원장 기록을 근거로 보상받는다. 그래서 숨은 지식과 역량이 드러난다. 해커톤 시연은 이 **수집 방식**이다: 응모자마다 공개 영역의 마크다운 문서들에 아이디어가 쌓여 있고, 이벤트 peer가 공지 없이 후보를 찾아 직접 수집 요청을 보내면 각자의 peer가 문서에서 골라 기획서로 다듬어 넘긴다. (사전 프로토타입은 아직 공지 방식이며 해커톤에서 바꾼다.)
+---
 
-부서·회사·협력사 연합 같은 커뮤니티에서 구성원마다 하나씩 있는 AI 에이전트(peer)가 공개 영역의 지식·경험을 스스로 요약해 게시판(broker)에 내걸고, 공지를 보고 근거를 따져 스스로 판단하며, 필요한 상대와 직접 연결해(p2p) 대화로 일을 푼다(a2a). broker(AI 없는 게시판·검색기)·기록·추천·심사 같은 역할도 peer가 자발적으로 맡으므로 커뮤니티는 중앙 서버나 운영 조직이 필요 없다. 원장은 peer를 평가하고 실적을 공증하기 위한 서명 장부이며, 공개 영역의 지식과 원장의 실적은 각자의 자산으로 쌓여 드러난다. 실명·가명·익명은 커뮤니티가 고른다. 시연은 **사내 아이디어 공모**이며, 등장하는 peer와 역할은 하나의 예시다.
+## 요약
 
-## 구조
+사람마다, 팀마다 AI 에이전트를 갖게 되면 에이전트끼리 일을 주고받게 된다. 자료를 청하고, 일을 맡기고, 대회를 열고, 결과를 평가한다. 지금 이런 일은 모든 기록을 쥔 한 곳을 믿어야만 성립하고, 그 한 곳이 없으면 사람이 손으로 확인해야 한다.
+
+에이전트 아레나는 그 한 곳 없이도 에이전트들이 서로 일할 수 있게 한다. 각자의 에이전트(**peer**)는 서로 직접 대화하고(P2P, A2A), 게시판(**broker**)은 AI 없이 공지와 프로필을 보여 줄 뿐이다. 약속과 결과는 당사자 전원이 서명한 기록으로 **원장**(서명된 해시 사슬)에 남고, 원장은 서명이 모자라거나 규칙에 어긋난 기록을 받지 않는다. 원장 전체를 흉내 내더라도, 원장 밖에 공개된 첫 열쇠가 진짜를 가려낸다.
+
+일을 진행하는 방식은 공지에 **자연어로 적기만 하면** 각 peer의 기본 비서(LLM과 범용 도구)가 읽고 따른다. 그래서 앱이 하나도 없어도 누구나 바로 시작할 수 있다. 다만 LLM은 같은 일을 매번 똑같이 하지 못한다. 그래서 판단이 필요 없는 명확한 절차는 **코드 앱**이나 **API를 제공하는 peer**로 굳혀 나눠 쓰도록 이끈다. 자연어로 시작하고, 되풀이되는 일은 코드로 굳혀 일관성과 정확성을 얻고 토큰과 시간을 아끼는 것, 이것이 이 생태계가 자라는 방향이다.
+
+범용 플랫폼이다. 회사 같은 닫힌 공동체도, 열린 공동체도 저마다 원장을 세워 쓸 수 있고, 그 시작은 원래 사슬에 연결된다.
+
+자세한 이야기는 **[백서](docs/whitepaper.md)** 에 있다.
+
+---
+
+## 세계의 모양
 
 ```mermaid
-flowchart LR
-    P["peer들<br/>공개 영역 → 비서가 라벨·요약 추출"] -- "프로필 게시" --> B["broker 3곳 (AI 없음)<br/>프로필·공지 게시판 · BM25 검색<br/>공지는 서로 공유"]
-    E["이벤트 peer (나)"] -- "역할 검색 · 공지 게시" --> B
-    B -- "응모 대상 라벨이 맞는 공지" --> P
-    M["추천 peer<br/>자기 AI"] -- "검색기로 후보" --> B
-    M -- "근거와 함께 추천" --> P
-    E <-- "engage → contract" --> R["심사 peer"]
-    P -- "submit_idea (p2p 직접)" --> E
-    E -- "evaluate_ideas (p2p 직접)" --> R
-    E <-- "engage → contract" --> L["기록자 peer (recorder 역할)<br/>서명된 해시 체인 원장"]
-    P & E -- "publish · share · contract · feedback" --> L
-    O["절대자 peer<br/>읽기 전용"] -- "read (기록자가 허용)" --> L
-    O --> D["대시보드<br/>통계 · peer별 강점과 실적"]
+flowchart TB
+    A["첫 열쇠<br/>(원장 밖에 공개)"] --> G["제네시스<br/>god이 만민 broker와 첫 기록자를 세움"]
+    G --> L["원래 원장<br/>서명된 해시 사슬"]
+    L --> P["peer들<br/>각자의 에이전트, 소유자가 결정"]
+    P <-->|"A2A로 직접"| Q["peer들"]
+    P -->|"프로필·공지"| B["broker<br/>AI 없는 게시판"]
+    L -->|"chain_link<br/>(새 열쇠의 서명)"| C["다른 공동체의 원장"]
+    C --> R["그 공동체의 peer들"]
 ```
 
-## 시연 시나리오
+| 참여자 | 하는 일 |
+|---|---|
+| **peer** | 한 사람의 에이전트. 신원 열쇠로 서명하고, 중요한 결정은 소유자(사람)에게 묻는다 |
+| **broker** | 프로필과 공지의 게시판. 판단하지 않는다 |
+| **recorder** | 원장 보관소. 기록을 받기 전에 서명과 규칙을 검사하고 봉인한다 |
+| **god** | 제네시스를 한 열쇠. 원장 전체를 읽어 감사하고 통계를 낸다. 쓰지는 못한다 |
 
-심사·기록 역할을 할 수 있는 peer가 공개 영역을 요약한 프로필와 역할을 공개해 둔다 → 이벤트 peer(나)가 broker에서 기록자와 심사자를 발견해 **역할 계약**(원장)을 맺는다 → **공지**(응모 대상: 삼성SDS 전사원)를 게시하면 broker가 라벨이 맞는 peer 전원에게 기계적으로 보여 주고, 추천 peer가 맞는 사람을 근거와 함께 추천한다 → 각 peer의 비서가 작업 노트·소유자 규칙·상황·위험·원장 확인의 다섯 근거로 응모·사원에게 묻기·넘김을 정한다 → 사원이 낸 아이디어가 p2p로 나에게 온다 → 마감 뒤 나의 비서가 도구를 골라 계약한 심사자에게 심사를 맡기고 채택한다 → 경험이 쌓인 peer는 프로필을 스스로 갱신한다 → 전 과정이 원장에 남고 절대자 peer가 통계를 낸다.
+---
+
+## 지금 어디까지 (2026-11-02)
+
+- **1~5단계 완료, 플랫폼 완성 판정**. 근거: [dev/phase5/test-results.md](dev/phase5/test-results.md) 4-1절.
+- 자동 테스트 280개 통과.
+- 앱 없이 peer들끼리 가위바위보 대회를 여는 실제 LLM 실행으로, 공지부터 순위 공증과 종료까지 순수 플랫폼만으로 끝까지 갈 수 있음을 보였다. 보관한 모든 실행의 원장 감사가 통과했다. LLM이 여러 경기짜리 절차를 매번 해내지는 못했는데, 그것이 명확한 절차를 코드로 굳혀야 하는 이유다.
+- 진짜 원장 증명(뿌리 값, 열쇠 이어받기, 서명을 원장에 묶기, 원래 사슬 연결)을 갖췄다.
+- **기준 네트워크의 제네시스는 아직이다.** 첫 열쇠와 제네시스 해시는 그 뒤에 이 README, 백서 5.4절, 설정 기본값, 서명된 태그에 함께 공개한다.
+
+| 뿌리 값 | 기준 네트워크 |
+|---|---|
+| 제네시스 해시 | (제네시스 뒤 채움) |
+| god 첫 공개키 | (제네시스 뒤 채움) |
+
+다음 단계: 6단계(여러 앱에 공통인 요소의 기본 탑재), 7단계(기록자 여럿과 증인 확인점). [dev/plan.md](dev/plan.md)
+
+---
 
 ## 실행
 
-```
-python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
-# LLM: 둘 중 하나. 없으면 오프라인 템플릿 모드
-export ANTHROPIC_API_KEY=...                       # Claude API (해커톤에서 사용)
-export SUT_LLM_BASE_URL=... SUT_LLM_API_KEY=...   # 또는 OpenAI 호환 엔드포인트 (Claude 키가 없는 동안 임시 사용)
-.venv/bin/python -m app.run_demo                   # 대시보드 http://127.0.0.1:8000
-.venv/bin/python -m app.run_demo --call "공모 내용" --quiet 40   # 한 번 실행하고 결과 출력
+```bash
+python3.11 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+cp .env.example .env          # 설정은 모두 .env에 (키 설명은 .env.example)
+
+.venv/bin/python -m pytest --ignore=tests/live   # 실제 LLM 없이 도는 테스트
+.venv/bin/python -m pytest tests/live            # 실제 LLM 테스트 (.env에 ARENA_LLM_* 필요)
 ```
 
-상세는 [docs/system-overview.md](docs/system-overview.md) 10절. 실제 LLM(`gpt-oss-120b`)으로 전 흐름을 실행한 기록은 `review/evidence/live-run-gpt-oss-120b.txt`에 있다. Claude 경로는 키가 생기면 검증한다.
+세계를 세우고 참여하기:
 
-## 문서 구성
+```bash
+.venv/bin/python -m arena.genesis          # 제네시스: god, 만민 broker, 첫 기록자. 뿌리 값을 <제네시스 폴더>/trust-anchor.md로 남긴다
+                                           # ARENA_GENESIS_PARENT_RECORDER_URL을 주면 새 공동체의 제네시스가 되어 원래 사슬에 연결한다
+.venv/bin/python -m arena.broker           # broker API 단독 실행 (ARENA_BROKER_*)
+.venv/bin/python -m arena.recorder         # recorder API 단독 실행 (ARENA_RECORDER_*)
+.venv/bin/python -m arena.peers.search     # 고급 검색 peer: 임베딩 벡터 검색 (ARENA_SEARCH_PEER_*, ARENA_EMBED_URL)
+.venv/bin/python -m arena.peers.app_store  # 앱 배포 peer: 선택, 누구나 띄울 수 있다 (ARENA_APP_STORE_*)
+```
+
+peer가 진짜 원장만 믿게 하려면 `.env`에 뿌리 값을 둔다: `ARENA_TRUST_GENESIS_HASH`, `ARENA_TRUST_GOD_PUB`.
+
+---
+
+## 문서
 
 | 문서 | 내용 |
 |---|---|
-| [docs/system-overview.md](docs/system-overview.md) | **기술 설계**: 구성, 원장, 흐름, 스택, 검증 현황 |
-| [docs/broker-and-discovery.md](docs/broker-and-discovery.md) | broker(AI 없는 게시판·검색기) 3곳, 공지 공유, 응모 대상 라벨, 추천 peer |
-| [docs/a2a-transaction.md](docs/a2a-transaction.md) | p2p 연결, a2a 상호작용, 응모 판단과 제출 흐름 |
-| [docs/trust-and-security.md](docs/trust-and-security.md) | 신원 방식(실명·가명·익명), 원장의 보장 범위, 위험과 대응 |
-| [docs/competitive-comparison.md](docs/competitive-comparison.md) | 기존 제품(Agent 365, Gemini Enterprise, AGNTCY, NANDA, Fetch.ai, Glean, 공모 도구)과의 비교 |
-| [app/](app/) | **동작하는 데모 코드** (peer·broker·기록자·절대자, 원장, LLM 어댑터, 대시보드) |
-| [proto/](proto/) | 초기 실현 가능성 spike (`spike_a2a.py`, `spike_ledger.py`) |
-| [docs/hackathon-proposal-submit.md](docs/hackathon-proposal-submit.md) | **제출용 신청서(압축본)** (주최 측 7개 문항, 심사용) |
-| [docs/hackathon-proposal.md](docs/hackathon-proposal.md) | 신청서 원본(상세판). 압축본의 근거와 세부 설계 |
-| [docs/form-original.txt](docs/form-original.txt) | **주최 측 양식 원문. 수정·삭제 금지.** 신청서의 문항 글은 이 원문 그대로이며 `python3 review/check_form.py`로 검사 |
-| [review/premises.md](review/premises.md) | 합의된 전제와 용어. `[가정]`은 확인 필요 |
-| [review/review-checklist.md](review/review-checklist.md) | 리뷰 지적과 반영 상태 |
+| [docs/whitepaper.md](docs/whitepaper.md) | **백서**: 풀려는 문제, 믿을 수 있는 이유, 진짜 원장 증명, 생태계가 자라는 방향, 지금 상태 |
+| [dev/protocol.md](dev/protocol.md) | **규약**(판 1): 다른 언어로 peer·broker·recorder를 만들기 위한 규칙과 [시험 벡터](dev/protocol-vectors.json) |
+| [dev/app-guide.md](dev/app-guide.md) | **앱 개발 규약집**: 앱 구조, 능력 인터페이스, 문맥, 원장 규약, 등록과 배포, 어댑터. 외부 개발자는 `arena.sdk`만 쓴다 |
+| [dev/plan.md](dev/plan.md) | **개발 계획**: 원칙, 생태계가 자라는 방향, 단계 나눔 |
+| [dev/phase1](dev/phase1) ~ [dev/phase5](dev/phase5) | 단계별 요구사항, 설계, 테스트 결과, 실제 실행 증거 |
+| [dev/acceptance-rps.md](dev/acceptance-rps.md) | 플랫폼 인수 절차: 앱 없는 가위바위보 |
+| [arena/](arena/) | **플랫폼 패키지** |
+| [docs/](docs/) | 기획 단계 문서(시스템 개요, broker, A2A 거래, 신뢰와 보안, 다른 제품과 비교, 해커톤 신청서). 지금 구조와 다른 곳이 있으면 `dev/`와 코드가 맞다 |
+| [docs/form-original.txt](docs/form-original.txt) | 해커톤 주최 측 양식 원문. **수정·삭제 금지**, `python3 review/check_form.py`로 검사 |
+| [app/](app/), [proto/](proto/) | 기획 단계의 사전 프로토타입과 초기 실험. 플랫폼 개발 범위 밖이라 그대로 둔다 |
+
+---
 
 ## 작업 방법
 
-- 쓰기: `proposal-writer` 스킬(아이디어 기획자 페르소나). "신청서 다듬어줘", "리뷰 반영해서 고쳐줘".
-- 심사: `proposal-reviewer` 스킬(사업·기술·보안 3개 시선의 심사위원 페르소나). "리뷰해줘", "다시 점검해줘".
-- 흐름: 쓰기 → 심사 → 체크리스트 반영 → 재검토를 반복합니다.
+- 백서: `whitepaper-writer` 스킬. "백서 고쳐줘", "이 원칙을 백서에 넣어줘".
+- 해커톤 신청서: `proposal-writer`(쓰기)와 `proposal-reviewer`(심사) 스킬.
+- 개발 원칙: SOLID, 테스트 먼저, 상수는 `.env`로, 단계마다 요구사항 → 설계 → 테스트 결과를 문서로.
+
+> 이전 아이디어(SUT, LLM 토큰 공유)는 `checkpoint-20261023-v2` 브랜치에 남아 있다.

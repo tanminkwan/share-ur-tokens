@@ -1,0 +1,4 @@
+elapsed 24.3s, entries: ['event', 'contract', 'contract', 'assign', 'publish', 'publish', 'reveal', 'reveal', 'attest', 'close']
+moves: a=가위 b=가위; winner recorded (draw), by the rules (draw); LLM judgement error: no; messages: 7
+exit=0
+audit ok; every entry after the genesis carries ledger_id = genesis hash (checked 2026-11-02)

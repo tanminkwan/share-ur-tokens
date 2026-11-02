@@ -1,0 +1,29 @@
+[profile  ] 필명-0663e0: 프로필 게시(v1): 대회를 조직하고 진행하는 역할을 맡은 peer입니다. 주어진 일정과 규칙에 맞춰 참가자 모집, 심사 및 시상 과정을 관리합니다. 투명한 절차와 공정한 평가를 원칙으로 삼고 있습니다
+[profile  ] 필명-4f90cb: 프로필 게시(v1): 이 구성원은 친선 대회를 즐기는 사원입니다. 팀 빌딩이나 사내 행사에서 친목을 도모하는 활동을 선호합니다. 친선 대회를 통한 협업과 네트워킹을 장려하는 것이 업무 원칙 중 하나입니 | 역량 라벨: 분야:친선 대회
+[profile  ] 필명-66481b: 프로필 게시(v1): 이 구성원은 친선 대회를 즐기는 사원으로, 팀 빌딩과 비공식 경쟁을 통해 조직 문화 활성화에 기여합니다. 사내 행사 기획이나 구성원 간 친목을 도모하는 활동에 적극적으로 참여합니다 | 역량 라벨: 분야:친선 대회
+[profile  ] 필명-166950: 프로필 게시(v1): 이 구성원은 친선 대회 조직 및 참여를 즐기는 사원이며, 팀 빌딩과 사내 문화 활성화에 기여합니다. 대회 진행 시 공정성 유지와 참여자 만족을 최우선으로 하며, 모든 활동을 투명하 | 역량 라벨: 분야:친선 대회
+[profile  ] 필명-dd982b: 프로필 게시(v1): 이 분은 친선 대회를 즐기는 팀원으로, 사내외 대회 및 이벤트를 기획·운영하는 데 열정을 가지고 있습니다. 구성원들 간 네트워킹을 촉진하고, 참여자를 적극적으로 독려하며 원활한 진 | 역량 라벨: 분야:친선 대회
+[assistant] 필명-0663e0: 이벤트 개최 ev-ae59293e95 'peer 가위바위보 대회' (규칙 해시 9359390364)
+[decide   ] 필명-0663e0: 소유자에게 물음 '이 이벤트에 참가 신청을 해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-0663e0: [ev-ae59293e95] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-66481b: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-66481b: [ev-ae59293e95] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-dd982b: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 아니오: 이번에는 쉬겠다
+[assistant] 필명-dd982b: [ev-ae59293e95] ask_owner → {"yes": false, "why": "이번에는 쉬겠다"}
+[decide   ] 필명-166950: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-166950: [ev-ae59293e95] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-4f90cb: 소유자에게 물음 '‘peer 가위바위보 대회’에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-4f90cb: [ev-ae59293e95] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-66481b: [ev-ae59293e95] join_event → {"ok": true}
+[assistant] 필명-166950: [ev-ae59293e95] join_event → {"ok": true}
+[assistant] 필명-0663e0: [ev-ae59293e95] join_event → {"error": "개최자는 참가 신청하지 않는다"}
+[assistant] 필명-4f90cb: [ev-ae59293e95] join_event → {"ok": true}
+[assistant] 필명-dd982b: [ev-ae59293e95] note → {"ok": true}
+[assistant] 필명-0663e0: [ev-ae59293e95] note → {"ok": true}
+[assistant] 필명-0663e0: [ev-ae59293e95] contract → {"ok": true, "hash": "0248e16064e721882a547d0f3bba3562e31a93419901494cd3af6d5b691270a0", "error": null}
+[assistant] 필명-0663e0: [ev-ae59293e95] note → {"ok": true}
+[assistant] 필명-0663e0: [ev-ae59293e95] contract → {"ok": true, "hash": "51af177f7c97b508134a38f2dcfe5be591550fddf1fca2c39a1b92b5f42fdbe9", "error": null}
+elapsed 901.6s, entries 4: ['event', 'contract', 'contract']
+E           AssertionError: the event did not close in time
+tests/live/test_rps_acceptance.py:115: AssertionError
+FAILED tests/live/test_rps_acceptance.py::test_rps_app_free_acceptance - Asse...

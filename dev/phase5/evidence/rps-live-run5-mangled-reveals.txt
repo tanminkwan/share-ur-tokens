@@ -1,0 +1,80 @@
+[assistant] 필명-381583: 이벤트 개최 ev-81722e0751 'peer 가위바위보 대회' (규칙 해시 33cce20050, 방식 assistant)
+[assistant] 필명-381583: 참여 중인 이벤트 1건을 로컬에서 불러와 이어 감
+[events   ] 필명-f5d60f: 이벤트 ev-81722e0751 → 앱 assistant (방식 assistant)
+[events   ] 필명-af4860: 이벤트 ev-81722e0751 → 앱 assistant (방식 assistant)
+[events   ] 필명-e1c144: 이벤트 ev-81722e0751 → 앱 assistant (방식 assistant)
+[events   ] 필명-25f0ff: 이벤트 ev-81722e0751 → 앱 assistant (방식 assistant)
+[decide   ] 필명-f5d60f: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-f5d60f: [ev-81722e0751] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-25f0ff: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 아니오: 이번에는 쉬겠다
+[assistant] 필명-25f0ff: [ev-81722e0751] ask_owner → {"yes": false, "why": "이번에는 쉬겠다"}
+[decide   ] 필명-e1c144: 소유자에게 물음 'peer 가위바위보 대회에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-e1c144: [ev-81722e0751] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-381583: 소유자에게 물음 '이벤트 'peer 가위바위보 대회'에 참가해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-381583: [ev-81722e0751] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[decide   ] 필명-381583: 소유자에게 물음 '이 대회에 참가 신청을 받도록 진행해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-381583: [ev-81722e0751] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-f5d60f: [ev-81722e0751] join_event → {"ok": true}
+[assistant] 필명-e1c144: [ev-81722e0751] join_event → {"ok": true}
+[decide   ] 필명-af4860: 소유자에게 물음 '‘peer 가위바위보 대회’에 참여해도 될까요?' → 예: 친선 대회라 참가한다
+[assistant] 필명-af4860: [ev-81722e0751] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-25f0ff: [ev-81722e0751] note → {"ok": true}
+[assistant] 필명-af4860: [ev-81722e0751] join_event → {"ok": true}
+[assistant] 필명-e1c144: [ev-81722e0751] note → {"ok": true}
+[assistant] 필명-381583: [ev-81722e0751] contract → {"ok": false, "error": "role player not offered"}
+[decide   ] 필명-381583: 소유자에게 물음 '이벤트 'peer 가위바위보 대회'에서 계약 가능한 역할을 알려주실 수 ' → 예: 친선 대회라 참가한다
+[assistant] 필명-381583: [ev-81722e0751] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+[assistant] 필명-381583: [ev-81722e0751] contract → {"ok": true, "hash": "f8169c242ea54b50c87bb97f523ea5d4eefeee7c767c8e6743865851b4e376ea", "error": null, "contracts_so_fa
+[assistant] 필명-381583: [ev-81722e0751] note → {"ok": true}
+[assistant] 필명-381583: [ev-81722e0751] contract → {"ok": true, "hash": "92d1a163d4d512bffb60b3a7dd28ecb928202003c833ca0ef5c8b4962528edd3", "error": null, "contracts_so_fa
+[assistant] 필명-381583: [ev-81722e0751] contract → {"ok": true, "hash": "22abb0db84a6b3f57cca0dd271108e6ef54e8c0d009330d5958e25b0772ab986", "error": null, "contracts_so_fa
+[assistant] 필명-381583: [ev-81722e0751] publish_text → {"ok": true, "content_hash": "2ad926a54fecfd2473406dce95ddb4c13db1e362a704d66880e17e87eb6c3cff", "publish_hash": "72800d
+[solicit  ] 필명-f5d60f: 직접 요청 받음 ev-81722e0751-509791cc: 
+[solicit  ] 필명-e1c144: 직접 요청 받음 ev-81722e0751-509791cc: 
+[solicit  ] 필명-af4860: 직접 요청 받음 ev-81722e0751-509791cc: 
+[solicit  ] 필명-381583: 직접 요청 ev-81722e0751-509791cc → 3명 중 3명 수신
+[assistant] 필명-381583: [ev-81722e0751] solicit → {"request_id": "ev-81722e0751-509791cc", "acks": {"http://127.0.0.1:48113": true, "http://127.0.0.1:33409": true, "http:
+[assistant] 필명-f5d60f: [ev-81722e0751] commit → {"ok": true, "label": "m1-1", "commit": "cb2ce300297fa2d9ee8ab4573557bf58afd79b19a8b2ec6221519d050d9654e7", "publish_has
+[assistant] 필명-e1c144: [ev-81722e0751] commit → {"ok": true, "label": "m3-1", "commit": "b7647a616d97ea6b0ddf7903bda29882fb2d4dd6c1758fb82db4fbd5217fbef4", "publish_has
+[assistant] 필명-f5d60f: [ev-81722e0751] send → {"ok": true}
+[assistant] 필명-e1c144: [ev-81722e0751] send → {"ok": true}
+[assistant] 필명-af4860: [ev-81722e0751] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-81722e0751", "group_id": "public", "aut
+[assistant] 필명-e1c144: [ev-81722e0751] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-81722e0751", "group_id": "public", "aut
+[assistant] 필명-af4860: [ev-81722e0751] commit → {"ok": true, "label": "m3-1", "commit": "849e382c0a669ace59c87a3104d616d75fe6743f880b78df3599b0583ec3e44e", "publish_has
+[assistant] 필명-e1c144: [ev-81722e0751] commit → {"ok": true, "label": "m1-1", "commit": "57ad9c2c0bfa38b92b52cfb42dc1ef7d1aa00ff5652880977d6f603524c942ab", "publish_has
+[assistant] 필명-af4860: [ev-81722e0751] send → {"ok": true}
+[assistant] 필명-e1c144: [ev-81722e0751] send → {"ok": true}
+[assistant] 필명-f5d60f: [ev-81722e0751] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-81722e0751", "group_id": "public", "aut
+[assistant] 필명-e1c144: [ev-81722e0751] verify → {"ok": true, "exists": true, "type": "publish", "seal_ok": true, "event_id": "ev-81722e0751", "group_id": "public", "aut
+[assistant] 필명-e1c144: [ev-81722e0751] my_reveal → {"label": "m3-1", "value": "rock|s4t9x2", "salt": "783b2eb13781dad4", "commit": "b7647a616d97ea6b0ddf7903bda29882fb2d4dd
+[assistant] 필명-e1c144: [ev-81722e0751] send → {"ok": true}
+[assistant] 필명-af4860: [ev-81722e0751] check_reveal → {"match": false, "reason": "그 등록이 원장에 없거나 다른 사람·다른 이벤트의 등록"}
+[assistant] 필명-af4860: [ev-81722e0751] send → {"ok": true}
+[assistant] 필명-381583: [ev-81722e0751] propose_attest → {"error": "제안하는 나도 당사자여야 한다"}
+[assistant] 필명-381583: [ev-81722e0751] propose_attest → {"error": "제안하는 나도 당사자여야 한다"}
+[assistant] 필명-381583: [ev-81722e0751] propose_attest → {"ok": true, "hash": "bc894b37473a29002b790365a5b96b15d9eabfbc188b132869788e5a4f84cbe3", "error": null}
+[assistant] 필명-381583: [ev-81722e0751] send → {"ok": true}
+[assistant] 필명-381583: [ev-81722e0751] note → {"ok": true}
+[assistant] 필명-e1c144: [ev-81722e0751] verify → {"error": "인자가 맞지 않음: hash 없음"}
+[assistant] 필명-e1c144: [ev-81722e0751] verify → {"ok": true, "exists": true, "type": "attest", "seal_ok": true, "event_id": "ev-81722e0751", "group_id": "public", "kind
+[assistant] 필명-af4860: [ev-81722e0751] note → {"ok": true}
+[assistant] 필명-af4860: [ev-81722e0751] send → {"ok": true}
+[assistant] 필명-381583: [ev-81722e0751] note → {"ok": true}
+[assistant] 필명-381583: [ev-81722e0751] propose_attest → {"request_id": "ev-81722e0751-99451bc6", "sent": {"e1c144ae": true, "af4860b5": true}}
+[assistant] 필명-e1c144: [ev-81722e0751] cosign → {"ok": true}
+[assistant] 필명-af4860: [ev-81722e0751] cosign → {"ok": true}
+[assistant] 필명-e1c144: [ev-81722e0751] note → {"ok": true}
+[assistant] 필명-e1c144: [ev-81722e0751] send → {"ok": true}
+[assistant] 필명-f5d60f: [ev-81722e0751] my_reveal → {"label": "m1-1", "value": "rock|s1", "salt": "3cf85b9dd5a42052", "commit": "cb2ce300297fa2d9ee8ab4573557bf58afd79b19a8b
+[assistant] 필명-f5d60f: [ev-81722e0751] send → {"ok": true}
+[assistant] 필명-e1c144: [ev-81722e0751] check_reveal → {"match": false, "reason": "공개값이 먼저 등록한 해시와 맞지 않음"}
+[assistant] 필명-e1c144: [ev-81722e0751] send → {"ok": true}
+[assistant] 필명-381583: [ev-81722e0751] propose_attest → {"request_id": "ev-81722e0751-c9ba5d62", "sent": {"f5d60f37": true, "e1c144ae": true}}
+[assistant] 필명-e1c144: [ev-81722e0751] cosign → {"ok": true}
+[assistant] 필명-f5d60f: [ev-81722e0751] decline → {"ok": true}
+[assistant] 필명-381583: [ev-81722e0751] note → {"ok": true}
+[decide   ] 필명-381583: 소유자에게 물음 '현재 진행 중인 경기(m1, m2)의 커밋·리veal·결과가 아직 없으며' → 예: 친선 대회라 참가한다
+[assistant] 필명-381583: [ev-81722e0751] ask_owner → {"yes": true, "why": "친선 대회라 참가한다"}
+elapsed 902.4s, entries 11: ['event', 'contract', 'contract', 'contract', 'publish', 'publish', 'publish', 'publish', 'publish', 'attest']
+E           AssertionError: the event did not close in time
+tests/live/test_rps_acceptance.py:124: AssertionError
