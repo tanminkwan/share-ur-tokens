@@ -35,6 +35,8 @@ class EventState:
     peers: dict = field(default_factory=dict)        # pub -> url learned from messages and contracts
     contracts: list = field(default_factory=list)    # [role, contractor pub] this host has contracted (kept by code)
     applicants: list = field(default_factory=list)   # pubs whose signed join carried this event's rules hash (checked by code)
+    instruction: str = ""                            # the owner's standing instruction for this event (pinned in the prompt)
+    role_offers: dict = field(default_factory=dict)  # host: policy role not contracted yet -> pubs whose profile offers it
     sealed_view: list = field(default_factory=list)  # code-made lines on the sealed rounds I am in (sealed element)
     evaluations: dict = field(default_factory=dict)  # content hash -> verdicts recorded for it (evaluation element, host side)
     service_receipts: list = field(default_factory=list)  # signed receipts of API-providing peers I called (checked by code)
@@ -57,7 +59,7 @@ class EventState:
     task: asyncio.Task | None = None
 
     KEEP = ("event_id", "role", "title", "rules", "rules_hash", "group_id", "recorder_url", "recorder_pub", "issuer_pub", "issuer_url",
-            "offer_roles", "transcript", "pending", "proposals", "peers", "contracts", "applicants", "sealed_view", "evaluations", "service_receipts", "elements", "policy", "assignments", "ledger_seen", "sent_reveals", "reveals", "roster", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed",
+            "offer_roles", "transcript", "pending", "proposals", "peers", "contracts", "applicants", "instruction", "role_offers", "sealed_view", "evaluations", "service_receipts", "elements", "policy", "assignments", "ledger_seen", "sent_reveals", "reveals", "roster", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed",
             "last_input_at", "idle_checks")
 
     def to_dict(self) -> dict:

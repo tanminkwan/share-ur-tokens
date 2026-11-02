@@ -183,6 +183,8 @@ class EventAssistant:
         entries = r.get("entries", []) if r.get("ok") else []
         if "sealed" in st.elements:
             st.sealed_view = self._sealed_view(ctx, st, entries)
+        if st.role == "host":
+            await self._role_offers(ctx, st)
         for e in entries:
             if e["type"] == "assign":
                 st.assignments.update(e.get("subjects", {}))
@@ -196,6 +198,20 @@ class EventAssistant:
                     if isinstance(pub, str) and HEX64.fullmatch(pub) and pub not in st.roster:
                         st.roster.append(pub)
         return entries
+
+    async def _role_offers(self, ctx, st):
+        """host: the policy roles nobody holds yet, with the peers whose posted profile offers each (a service peer takes a
+        role it advertises without applying; live with-elements run 2: the host never found the referee to contract)"""
+        held = {c[0] for c in st.contracts}
+        open_roles = [r for r in st.policy.get("roles", []) if r not in held]
+        if not open_roles:
+            st.role_offers = {}
+            return
+        try:
+            profiles = (await ctx.brokers[self.group].list_profiles(identity=ctx.identity)).get("profiles", [])
+        except Exception:
+            return
+        st.role_offers = {r: [p["pub"] for p in profiles if r in p.get("offers", []) and p["pub"] != ctx.pub] for r in open_roles}
 
     def _sealed_view(self, ctx, st, entries) -> list[str]:
         """for each sealed label of a subject I am assigned to: how many registered, and whether it may open (P6-D3)"""
@@ -378,6 +394,7 @@ class EventAssistant:
         ev, rec = out["event_id"], out["recorder"]
         st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url,
                                           policy=dict(policy), elements=dict(elements or {}))
+        st.instruction = instruction
         self.save(ctx, st)
         ctx.log.emit("assistant", ctx.pen, f"이벤트 개최 {ev} '{title}' (규칙 해시 {out['rules_hash'][:10]}, 방식 assistant)")
         await self.feed(ctx, ev, f"[소유자의 지시] {instruction}")
@@ -502,11 +519,14 @@ class EventAssistant:
                  f"이 이벤트에서 맺은 역할 계약 {len(st.contracts)}건: {', '.join(f'{c[0]}={h(c[1])}' for c in st.contracts) or '없음'}"
                  + ((f" / 참가 신청자(코드 확인) {len(st.applicants)}명: {', '.join(h(p) for p in st.applicants) or '없음'}"
                      f" / 아직 계약하지 않은 신청자: {', '.join(h(p) for p in st.applicants if p not in {c[1] for c in st.contracts}) or '없음'}"
-                     " / 나는 개최자다(참가 신청은 참가자가 하는 일이고, 개최자는 신청자와 계약한다)") if st.role == "host" else ""))
+                     + (" / 아직 계약 없는 역할: " + "; ".join(f"{r}(프로필에 내건 peer: {', '.join(h(p) for p in v) or '없음'})"
+                                                         for r, v in st.role_offers.items()) if st.role_offers else "")
+                     + " / 나는 개최자다(참가 신청은 참가자가 하는 일이고, 개최자는 신청자와 계약한다)") if st.role == "host" else ""))
         return (f"당신은 peer '{ctx.pen}'의 비서 에이전트입니다. 이벤트 '{st.title}'(event_id {st.event_id}, broker 그룹 {st.group_id})에 "
                 f"{'개최자' if st.role == 'host' else '참가자'}로 참여합니다. 아래 이벤트 규칙을 정확히 따르세요. 규칙에 없는 일은 하지 말고, "
                 "확실하지 않으면 note로 적은 뒤 wait 하세요. 소유자(사람)에게 묻는 말은 한국어로 씁니다. "
                 "peer는 필명(필명-xxxxxx)으로, 해시는 #로 시작하는 짧은 참조로 부르며, 도구에도 그대로 넣으면 됩니다.\n\n[이벤트 규칙]\n" + st.rules
+                + (f"\n\n[소유자의 지시] {self.shorten(ctx, st, st.instruction)}" if st.instruction else "")
                 + (f"\n[등록 값] 이 이벤트에서 등록(commit)하는 값은 다음 중 하나다: {', '.join(st.policy['reveal_values'])}" if st.policy.get("reveal_values") else "") +
                 f"\n\n[나] {h(ctx.pub)}\n[개최자] {h(st.issuer_pub)}\n[지금 상태] {state}\n\n[쓸 수 있는 도구]\n{tools}\n\n"
                 "먼저 도구 하나를 고르면, 그 도구의 인자를 따로 묻습니다. 이번 입력에 대해 규칙이 정한 일을 다 했으면 wait를 고르세요.")

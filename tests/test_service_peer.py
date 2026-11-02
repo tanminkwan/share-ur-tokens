@@ -122,3 +122,26 @@ def test_p6a1_the_service_and_app_store_runners_build_their_peers(tmp_path, sett
     p = service.build(s, str(f))
     assert "add" in p.skills() and "service:calc" in p.offers()
     assert "app_get" in app_store.build(s).skills()
+
+
+async def test_p6a5_the_host_sees_open_roles_with_the_peers_offering_them_and_its_instruction_stays_pinned(eco):
+    """live with-elements run 2: the host's instruction (naming the referee) scrolled away and the host kept asking its owner
+    who the referee was. The owner's instruction is now pinned in the prompt, and the state line lists the policy roles
+    nobody holds yet with the peers whose profile offers them."""
+    from tests.test_assistant import RULES, asst, ctx, settle
+    svc = eco.peer("svc", apps=[ServiceApp(eco.s, spec())])
+    await svc.advertise()
+    host = eco.host
+    ev = await asst(host).host_event(ctx(host), title="판", kind="k", rules=RULES, policy={"roles": ["member", "referee"]},
+                                     instruction="판정 peer와 referee 계약을 맺어라")
+    await settle(host)
+    st = asst(host).events[ev]
+    await asst(host).progress_entries(ctx(host), st)
+    system = asst(host)._system(ctx(host), st)
+    assert "[소유자의 지시] 판정 peer와 referee 계약을 맺어라" in system
+    assert f"referee(프로필에 내건 peer: {svc.pen})" in system and "member(프로필에 내건 peer: 없음)" in system
+    host.llm.push("contract", role="referee", peer=svc.pen)
+    await asst(host).feed(ctx(host), ev, "계약하라")
+    await settle(host, svc)
+    await asst(host).progress_entries(ctx(host), st)
+    assert "referee(" not in asst(host)._system(ctx(host), st)
