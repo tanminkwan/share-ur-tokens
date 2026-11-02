@@ -297,12 +297,29 @@ async def close_event(A, ctx, st, result_hash):
     r = await _record(A, ctx, st, "close", c)
     if r.get("ok"):
         st.closed = True
+        ctx.cancel_timer(event_id=st.event_id)  # a closed event wakes no one
         await ctx.brokers[A.group].close_notice(ctx.identity, st.event_id)
     return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error")}
 
 
 async def note(A, ctx, st, text):
     return {"ok": True}
+
+
+async def remind(A, ctx, st, when, note):
+    """wake me at a time with a note (P6-S4); the peer's scheduler keeps it, no LLM runs until then"""
+    from ..scheduler import fmt_time, parse_when
+    try:
+        at = parse_when(when, ctx.clock())
+    except (ValueError, TypeError):
+        return {"ok": False, "error": "when은 '+초'(지금부터 몇 초 뒤) 또는 ISO 8601 시각(예: 2026-11-02T18:00:00+09:00)이어야 한다"}
+    if at <= ctx.clock():
+        return {"ok": False, "error": f"이미 지난 시각이다(지금 {fmt_time(ctx.clock())})"}
+    mine = [t for t in ctx.timers(st.event_id) if t["kind"] == "remind"]
+    if len(mine) >= ctx.settings.assistant_max_reminders:
+        return {"ok": False, "error": f"이 이벤트에 걸 수 있는 예약은 {ctx.settings.assistant_max_reminders}개까지다"}
+    tid = ctx.schedule(at, "remind", {"note": note}, event_id=st.event_id)
+    return {"ok": True, "id": tid, "at": fmt_time(at), "note": "그 시각에 코드가 깨운다. 그때까지 확인하러 깨어날 필요가 없다"}
 
 
 async def wait(A, ctx, st):
@@ -347,5 +364,6 @@ def default_tools() -> list[Tool]:
              "배정된 종류의 공동 확인은 원장이 배정된 당사자에게서만 받는다", _obj(subjects_json=S), assign, host_only=True),
         Tool("close_event", "{result_hash}: 이 이벤트를 원장에서 닫고 공지를 마감한다", _obj(result_hash=S), close_event, host_only=True),
         Tool("note", "{text}: 나중을 위해 메모를 남긴다", _obj(text=S), note, after_close=True),
+        Tool("remind", "{when, note}: 그 시각에 나를 깨운다(when: '+초' 또는 ISO 8601 시각). 시각이 정해진 일을 기다릴 때 쓴다", _obj(when=S, note=S), remind),
         Tool("wait", "{}: 이번 입력에 대해 할 일을 다 했다. 다음 입력을 기다린다", None, wait, after_close=True),
     ]

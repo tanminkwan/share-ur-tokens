@@ -132,6 +132,20 @@ class AppContext:
     async def add_experience(self, note: str) -> None:
         await self._peer.add_experience(note)
 
+    # ---- the peer's scheduler (P6-S): "이 시각에 이 일" ----
+    def schedule(self, at: float, kind: str, data: dict | None = None, event_id: str | None = None) -> str:
+        """wake this app (TimerHandler.on_timer) at `at`; kept across restarts. Returns the timer id"""
+        app = self._peer.app_by_name(self.app_name)
+        return self._peer.scheduler.add(self._peer.ctx(self._peer.scheduler), app.app_id, at, kind, data, event_id)
+
+    def cancel_timer(self, timer_id: str | None = None, event_id: str | None = None) -> int:
+        """cancel one timer, or every timer of this app for an event"""
+        app = self._peer.app_by_name(self.app_name)
+        return self._peer.scheduler.cancel(self._peer.ctx(self._peer.scheduler), timer_id, app_id=app.app_id, event_id=event_id)
+
+    def timers(self, event_id: str | None = None) -> list[dict]:
+        return self._peer.scheduler.of(self._peer.app_by_name(self.app_name).app_id, event_id)
+
 
 class PlatformContext(AppContext):
     """for the built-in platform apps only: they also see the other apps' capabilities (to route engage, approve, solicit)"""

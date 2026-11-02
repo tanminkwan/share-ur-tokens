@@ -12,8 +12,9 @@ from ...crypto import h, pen_name, verify
 from ...llm import ask_json
 from ..event_store import EventStore, FolderEventStore
 from ..elements import element_tools
-from ..events import announce_event
+from ..events import announce_event, event_times, schedule_event_times
 from ..plugin import ASSISTANT_APP_ID, Decision, MessageHead
+from ..scheduler import fmt_time
 from .state import EventState, commit_hash, nonce
 from .tools import Tool, default_tools
 
@@ -387,14 +388,18 @@ class EventAssistant:
         return n
 
     # ---------------- holding an event ----------------
-    async def host_event(self, ctx, *, title, kind, rules, policy, instruction, audience=None, recorder=None, elements=None, codebook=None):
+    async def host_event(self, ctx, *, title, kind, rules, policy, instruction, audience=None, recorder=None, elements=None, codebook=None,
+                         schedule=None):
         """open an event run in the primordial way: natural-language rules, app = the basic assistant"""
         out = await announce_event(ctx, group=self.group, title=title, kind=kind, rules=rules, policy=policy,
-                                   mode="assistant", apps=[], audience=audience, recorder=recorder, elements=elements, codebook=codebook)
+                                   mode="assistant", apps=[], audience=audience, recorder=recorder, elements=elements, codebook=codebook,
+                                   schedule=schedule)
         ev, rec = out["event_id"], out["recorder"]
         st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url,
                                           policy=dict(policy), elements=dict(elements or {}))
         st.instruction = instruction
+        st.schedule = event_times(out["notice"])
+        schedule_event_times(ctx, out["notice"])  # the host wakes at its own event's times too
         self.save(ctx, st)
         ctx.log.emit("assistant", ctx.pen, f"이벤트 개최 {ev} '{title}' (규칙 해시 {out['rules_hash'][:10]}, 방식 assistant)")
         await self.feed(ctx, ev, f"[소유자의 지시] {instruction}")
@@ -408,7 +413,7 @@ class EventAssistant:
             st = self.events[ev] = EventState(ev, "participant", notice.get("title", ""), notice["rules"], h(notice["rules"].encode()),
                                               notice["group_id"], notice["recorder_url"], notice["recorder_pub"], notice["issuer_pub"],
                                               notice["issuer_url"], offer_roles=list(notice.get("policy", {}).get("roles", [])), policy=dict(notice.get("policy", {})),
-                                              elements=dict(notice.get("elements") or {}),
+                                              elements=dict(notice.get("elements") or {}), schedule=event_times(notice),
                                               notice_ver=notice.get("ver", 1))
             st.peers[notice["issuer_pub"]] = notice["issuer_url"]
             self.save(ctx, st)
@@ -419,6 +424,20 @@ class EventAssistant:
         elif st is not None and change == "closed" and not st.notice_closed:
             st.notice_closed = True
             await self.feed(ctx, ev, "[공지 마감] 개최자가 이 이벤트의 공지를 마감했다.")
+
+    async def on_timer(self, ctx, timer):
+        """the scheduler woke me at a time (P6-S3): the event's notarized schedule, or a reminder I set myself"""
+        st = self.events.get(timer.get("event_id"))
+        if st is None or st.closed:
+            return
+        d, when = timer.get("data", {}), fmt_time(timer["at"])
+        if timer["kind"] == "remind":
+            text = f"[내 예약] {when}: {d.get('note', '')} (내가 remind로 걸어 둔 시각이 되었다)"
+        else:
+            what = " ".join(x for x in (d.get("code", ""), d.get("subject", "")) if x)
+            text = (f"[일정 시각] {when} {what}{': ' + d['note'] if d.get('note') else ''}. 원장에 공증된 이 이벤트의 일정 시각이 되었다(코드가 깨움). "
+                    "규칙에 따라 지금 할 일을 하라")
+        await self.feed(ctx, st.event_id, text)
 
     MINE = ("author", "issuer")
 
@@ -512,7 +531,12 @@ class EventAssistant:
         assigned = (f"배정(원장): {'; '.join(f'{k}=' + '·'.join(h(p) for p in v) for k, v in st.assignments.items())} / "
                     f"내 배정: {', '.join(mine) or '없음'} / ") if st.assignments else ""
         sealed = (" / ".join(st.sealed_view) + " / ") if st.sealed_view else ""
-        state = assigned + sealed + (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 원장에 공개한 내 라벨: {', '.join(revealed) or '없음'} / "
+        now = f"지금 시각: {fmt_time(ctx.clock())} / "
+        plan = ("일정(원장): " + "; ".join(f"{fmt_time(x['at'])} {x['code']}{' ' + x['subject'] if x.get('subject') else ''}" for x in st.schedule) + " / "
+                if st.schedule else "")
+        mine_t = [t for t in ctx.timers(st.event_id) if t["kind"] == "remind"]
+        reminders = ("내 예약: " + "; ".join(f"{fmt_time(t['at'])} {t['data'].get('note', '')}" for t in mine_t) + " / ") if mine_t else ""
+        state = now + plan + reminders + assigned + sealed + (f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 원장에 공개한 내 라벨: {', '.join(revealed) or '없음'} / "
                  f"내가 보낸 공개값: {', '.join(sent) or '없음'} / 내가 받은 서명 요청: {', '.join(st.pending) or '없음'} / "
                  f"내가 제안한 공동 확인: {', '.join(st.proposals) or '없음'} / 참가 신청: {'함' if st.joined else '안 함'} / 닫힘: {st.closed} / "
                  f"아는 peer: {', '.join(h(p) for p in st.peers) or '없음'} / "

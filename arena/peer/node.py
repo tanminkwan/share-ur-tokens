@@ -26,6 +26,7 @@ from .owner import Owner
 from .plugin import SDK_VERSION, App, EventHandler, Lifecycle, is_uuid, MessageHead, OfferProvider, OpProvider, capabilities_of
 from .profile import ProfileBuilder
 from .receipts import Receipts
+from .scheduler import Scheduler
 
 
 @dataclass
@@ -62,7 +63,8 @@ class Peer:
         self.rest = RestTransport(settings)  # the api connection method (P6-A8)  # recorder url -> its trust check against the root of trust (P5-G6)
         self._requests = DirectRequests(settings)
         self.events = EventRouter(settings, installer=AppInstaller(settings) if (settings.app_store_urls or settings.app_store_discover) else None)
-        self.builtins = [RoleContracts(), EventApprovals(), self._requests, self.events]
+        self.scheduler = Scheduler(settings)  # "이 시각에 이 일": timers kept in the home, handed to the app that set them
+        self.builtins = [RoleContracts(), EventApprovals(), self._requests, self.events, self.scheduler]
         wants = config.element_apps if config.element_apps is not None else any(isinstance(a, EventHandler) for a in apps)
         if wants:  # peers that take part in events (or ask for them) get the built-in elements' apps
             self.builtins += [el.app(settings) for el in PEER_ELEMENTS.values() if el.app]
@@ -168,6 +170,9 @@ class Peer:
 
     def app_by_id(self, app_id: str):
         return next((a for a in self.apps + self.builtins if a.app_id == app_id), None)
+
+    def app_by_name(self, name: str):
+        return next((a for a in self.apps + self.builtins if a.name == name), None)
 
     def recorder(self, url: str) -> RecorderAPI:
         if url not in self.known_recorders:

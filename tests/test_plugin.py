@@ -56,7 +56,7 @@ async def test_p5d1_p5d3_apps_get_a_context_and_the_head_not_the_peer(tmp_path, 
 async def test_p5d4_platform_ops_are_builtin_apps_and_reserved(tmp_path, settings, broker):  # noqa: F811
     p = make_peer(tmp_path, settings, broker)
     assert {"engage", "approve", "solicit"} <= set(p.skills())
-    assert [b.name for b in p.builtins] == ["platform.roles", "platform.approvals", "platform.requests", "platform.events"]
+    assert [b.name for b in p.builtins] == ["platform.roles", "platform.approvals", "platform.requests", "platform.events", "platform.scheduler"]
 
     class Hijack:
         name, version, app_id = "hijack", "1.0", "0b1d3c3e-6f7a-4a43-9d1e-7a0c2f8e1b03"

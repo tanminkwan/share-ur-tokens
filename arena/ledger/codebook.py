@@ -13,16 +13,18 @@ import re
 from ..crypto import canon, h, verify
 from .elements import LEDGER_ELEMENTS
 from .purposes import PURPOSES
+from .schedule import TIME_CODES
 from .types import ENTRY_TYPES, EntryType, _inc, register_entry_type
 
 VERSION = re.compile(r"^\d+\.\d+$")
 LOCAL = re.compile(r"^x-[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9_-]*$")  # a branch community's own code: x-<community>.<code>
-CODE_KINDS = ("entry_types", "purposes", "elements", "connections")  # connections are the brokers' codes, listed for peers
+CODE_KINDS = ("entry_types", "purposes", "elements", "time_codes", "connections")  # connections are the brokers' codes, listed for peers
 
 
 def implemented_codes() -> dict:
     """the ledger codes this software checks (the recorder's GET /codes)"""
-    return {"entry_types": sorted(ENTRY_TYPES), "purposes": sorted(PURPOSES), "elements": sorted(LEDGER_ELEMENTS)}
+    return {"entry_types": sorted(ENTRY_TYPES), "purposes": sorted(PURPOSES), "elements": sorted(LEDGER_ELEMENTS),
+            "time_codes": sorted(TIME_CODES)}
 
 
 def _v(version: str) -> tuple:
