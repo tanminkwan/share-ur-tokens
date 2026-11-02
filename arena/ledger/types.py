@@ -366,6 +366,7 @@ for _t in (
     EntryType("share", lambda p: [p.get("provider"), p.get("consumer")], event_ref="optional", needs_content=True, unique_nonce=True,
               counters={"received_by": set()}, contribute=_share_contribute),
     EntryType("feedback", lambda p: [p.get("evaluator")], event_ref="optional", needs_content=True, rules=(_feedback_rule,),
+              public=lambda p, c: {k: p[k] for k in ("evaluator", "content_hash", "verdict", "score") if k in p},
               counters={"verdicts_received": defaultdict(int), "verdicts_given": defaultdict(int)}, contribute=_feedback_contribute),
     EntryType("attest", lambda p: list(p.get("parties", [])) or [None], event_ref="optional", unique_nonce=True, shape=_attest_shape,
               rules=(_attest_rule,), public=lambda p, c: {"kind": p.get("kind"), "subject": p.get("subject"), "parties": list(p["parties"]),

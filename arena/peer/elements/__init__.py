@@ -27,4 +27,4 @@ def element_tools() -> list:
     return [t for el in PEER_ELEMENTS.values() for t in el.tools]
 
 
-from . import intake  # noqa: E402,F401  (the built-in elements register themselves)
+from . import evaluation, intake  # noqa: E402,F401  (the built-in elements register themselves)

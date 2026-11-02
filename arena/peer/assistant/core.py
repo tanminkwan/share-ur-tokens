@@ -147,6 +147,22 @@ class EventAssistant:
                 return p["pub"], st.peers[p["pub"]]
         return pub, None
 
+    # ---------------- evaluating items handed over (EvaluationProvider, the evaluation element's fallback judge) ----------------
+    EVALUATION_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["verdicts"], "properties": {"verdicts": {
+        "type": "array", "items": {"type": "object", "additionalProperties": False, "required": ["id", "score", "comment"],
+                                   "properties": {"id": {"type": "string"}, "score": {"type": "number"}, "comment": {"type": "string"}}}}}}
+
+    async def evaluate(self, ctx, items, request) -> list:
+        """judge items by the event's natural-language rules: a score (1-10) and one sentence each; ids are short refs"""
+        st = self.events.get(request.get("event_id"))
+        ids = {it["content_hash"][:self.s.assistant_ref_len]: it["content_hash"] for it in items}
+        listing = "\n".join(f"- {it['content_hash'][:self.s.assistant_ref_len]}: {it['content']}" for it in items)
+        d = await ask_json(ctx.llm, ctx.log, ctx.pen, fallback=lambda: {"verdicts": []}, schema=self.EVALUATION_SCHEMA, effort=self.s.assistant_effort,
+                           system=("당신은 이 이벤트의 평가자 비서입니다. 아래 이벤트 규칙에 따라 각 항목에 1~10점과 한 문장 의견을 주세요. "
+                                   "id는 목록의 값을 그대로 쓰세요.\n\n[이벤트 규칙]\n" + (st.rules if st else "")),
+                           messages=[{"role": "user", "content": listing}])
+        return [{"content_hash": ids[r["id"]], "score": r["score"], "comment": r["comment"]} for r in d.get("verdicts", []) if r.get("id") in ids]
+
     # ---------------- the event's progress, read from the ledger by code ----------------
     PEOPLE = ("author", "contractor", "issuer", "parties", "approvers")
 

@@ -23,7 +23,8 @@ flowchart TB
 - 요소를 더할 때 원장(`rules.check`), 기록자, 이벤트 배정기, 기본 비서를 고치지 않는다. 등록만 한다(`register_ledger_element`, `register_peer_element`).
 - 요소의 확인은 모두 코드다. 기본 비서는 도구를 고르고 인자를 채울 뿐이다.
 - 요소의 내장 앱은 **이벤트를 다루는 앱(`EventHandler`)이 있는 peer에만** 조립된다. god·기록자·검색 peer처럼 이벤트에 참여하지 않는 peer에는 들어가지 않는다(god은 쓰기·내용 op가 없어야 함).
-- 요소의 op 이름에는 요소 이름을 붙인다(`intake.submit`). 앱의 op와 겹치지 않는다.
+- 요소의 op 이름에는 요소 이름을 붙인다(`intake.submit`, `evaluation.request`). 앱의 op와 겹치지 않는다.
+- 평가 요소의 이름은 `evaluation`이다(원장의 `evaluator` 칸과 맞춤). 플랫폼에는 특정 앱의 말(공모, 심사, 채택 등)을 넣지 않는다는 층 규칙(`tests/test_layering.py`)을 지킨다.
 - 제출 받기에서는 받는 peer의 `IntakeDesk`가 제출자 서명이 든 `share`에 자기 서명을 더해 **직접 원장에 기록**하고, 원장이 받은 뒤에만 보관한다(받았다는 기록과 원장이 어긋나지 않게).
 
 ## 1. 6-0 요소 블록
@@ -134,15 +135,15 @@ sequenceDiagram
 - `IntakeDesk`는 내장 앱(고정 app_id, op `submit`)이다. 보관은 앱 전용 저장소.
 - 개최자 쪽 목록은 `AppContext.submissions(event_id)`로 연다(필명, 내용 해시, 받은 시각). 기본 비서 도구 `submissions`는 이것을 보여 준다.
 
-## 4. 6-C 평가 요청과 판정 기록 (`review`)
+## 4. 6-C 평가 요청과 판정 기록 (`evaluation`)
 
-**설정**: `{"reviewer_role": "review", "verdict": "review", "per_item": 1}`. 판정 권한은 정책의 `verdict_roles`(지금 있음).
+**설정**: `{"evaluator_role": "evaluator", "verdict": "review", "per_item": 1}`. 판정 권한은 정책의 `verdict_roles`(지금 있음).
 
-**원장**: `feedback`에 공개 정보(평가자, 내용 해시, 판정, 점수)를 더한다. `review`를 켠 이벤트에서 판정 종류가 설정의 `verdict`인 `feedback`은 평가자가 그 내용을 넘겨받은 기록(`share`, `terms: "review"`)이 있어야 한다(지금의 "받은 적 없는 내용" 규칙을 이벤트 범위로).
+**원장**: `feedback`에 공개 정보(평가자, 내용 해시, 판정, 점수)를 더한다. `evaluation`을 켠 이벤트에서 판정 종류가 설정의 `verdict`인 `feedback`은 평가자가 그 내용을 넘겨받은 기록(`share`, `terms: "evaluation"`)이 있어야 한다(지금의 "받은 적 없는 내용" 규칙을 이벤트 범위로).
 
 **peer**:
-- 개최자 도구 `request_review {reviewer, items}`: 넘김 `share` payload를 만들어 평가자의 op `review_request`로 보낸다.
-- 평가자 쪽 내장 앱 `ReviewDesk`가 받아 `ReviewProvider` 능력(`review(ctx, items, request) -> [{content_hash, score, comment}]`)을 가진 앱에 넘긴다. 없으면 기본 비서가 규칙 글을 보고 판정한다. 판정 payload와 서명, 넘김 영수증은 코드가 만든다.
+- 개최자 도구 `request_evaluation {evaluator}`: 넘김 `share` payload를 만들어 평가자의 op `evaluation.request`로 보낸다.
+- 평가자 쪽 내장 앱 `EvaluationDesk`가 받아 `EvaluationProvider` 능력(`evaluate(ctx, items, request) -> [{content_hash, score, comment}]`)을 가진 앱에 넘긴다. 없으면 기본 비서가 규칙 글을 보고 판정한다. 판정 payload와 서명, 넘김 영수증은 코드가 만든다.
 - 개최자가 넘김과 판정을 원장에 기록한다. 도구 `verdicts`는 항목별 판정을 보여 준다. **무엇을 채택할지는 정하지 않는다.**
 
 ## 5. 6-D 봉인 묶음 (`sealed`)
@@ -166,7 +167,7 @@ sequenceDiagram
 
 ### 6.2 경연 모티브를 요소로 (P6-V2)
 
-`tests/motif/`의 대역 앱 `Inbox`, `Judge`를 `IntakeDesk`, `ReviewDesk` + `ReviewProvider` 대역으로 바꾼다. 흐름 함수(`tests/motif/flow.py`)는 요소를 켠 이벤트를 선언하고 요소의 op를 쓴다. 기존 테스트가 그대로 통과해야 한다.
+`tests/motif/`의 대역 앱 `Inbox`, `Judge`를 `IntakeDesk`, `ReviewDesk` + `EvaluationProvider` 대역으로 바꾼다. 흐름 함수(`tests/motif/flow.py`)는 요소를 켠 이벤트를 선언하고 요소의 op를 쓴다. 기존 테스트가 그대로 통과해야 한다.
 
 ### 6.3 있을 때와 없을 때 비교 (P6-V3)
 
@@ -174,7 +175,7 @@ sequenceDiagram
 
 | 대상 | 요소 없이 | 요소를 켜고 |
 |---|---|---|
-| 아이디어 공모 모티브 | 자연어 규칙만 | `intake` + `review` |
+| 아이디어 공모 모티브 | 자연어 규칙만 | `intake` + `evaluation` |
 | 가위바위보 | 자연어 규칙만(5단계 mini, 리그전) | `sealed` + 판정 API peer(`attest_roles`로 결과를 맡김) |
 
 잴 것: 플랫폼 보장(원장 감사), 끝까지 간 비율, 걸린 시간, peer별 LLM 호출 수와 토큰.
@@ -185,7 +186,7 @@ sequenceDiagram
 
 ## 8. 바뀌는 규약 (규약 판 2)
 
-`dev/protocol.md`에 더한다: 이벤트 선언·공지의 `elements` 블록, `share`의 `event_id`, `feedback` 공개 정보, 요소별 원장 규칙(제출, 판정, 봉인), 서비스 결과 영수증 모양, 내장 op `submit`·`review_request`.
+`dev/protocol.md`에 더한다: 이벤트 선언·공지의 `elements` 블록, `share`의 `event_id`, `feedback` 공개 정보, 요소별 원장 규칙(제출, 판정, 봉인), 서비스 결과 영수증 모양, 내장 op `intake.submit`·`evaluation.request`.
 
 ## 9. 설정 (모두 `.env`)
 
@@ -194,4 +195,4 @@ sequenceDiagram
 | `ARENA_SERVICE_PEER_PORT` 등 | 서비스 peer 실행 |
 | `ARENA_APP_STORE_DISCOVER` | 앱 배포 peer를 broker에서 찾을지 |
 | `ARENA_INTAKE_MAX_CONTENT_BYTES` | 제출 내용 크기 상한 |
-| `ARENA_REVIEW_MAX_ITEMS` | 한 번에 넘기는 평가 항목 수 상한 |
+| `ARENA_EVALUATION_MAX_ITEMS` | 한 번에 넘기는 평가 항목 수 상한 |

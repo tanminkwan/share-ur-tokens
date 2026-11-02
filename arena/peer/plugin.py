@@ -82,7 +82,14 @@ class EventHandler(Protocol):
     async def on_event(self, ctx, notice: dict, change: str) -> None: ...  # change: "new" | "updated" | "closed"
 
 
-CAPABILITIES = (OpProvider, OfferProvider, RoleAcceptor, EventApprover, RequestReceiver, ProfileContributor, Lifecycle, EventHandler)
+@runtime_checkable
+class EvaluationProvider(Protocol):
+    """an app that judges items handed over for evaluation (the evaluation element): [{content_hash, score, comment}]"""
+    async def evaluate(self, ctx, items: list, request: dict) -> list: ...
+
+
+CAPABILITIES = (OpProvider, OfferProvider, RoleAcceptor, EventApprover, RequestReceiver, ProfileContributor, Lifecycle, EventHandler,
+                EvaluationProvider)
 
 # ---------------- which app runs an event, and how ----------------
 MODES = ("assistant", "app", "app_or_assistant")

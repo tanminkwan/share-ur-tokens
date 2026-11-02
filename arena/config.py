@@ -158,6 +158,7 @@ class Settings(EnvSettings):
     service_peer_port: int = F("ARENA_SERVICE_PEER_PORT", 9160, int, "서비스 peer(API를 제공하는 peer) A2A 포트")
     service_peer_api_port: int = F("ARENA_SERVICE_PEER_API_PORT", 9161, int, "서비스 peer의 api 연결(REST) 포트")
     service_peer_connections: list[str] = F("ARENA_SERVICE_PEER_CONNECTIONS", ["a2a", "api"], _list, "서비스 peer가 여는 연결 방식(a2a, api 중에서, 쉼표). api만이면 API 전용 peer")
+    evaluation_max_items: int = F("ARENA_EVALUATION_MAX_ITEMS", 20, int, "평가 요소: 한 번에 평가자에게 넘기는 항목 수 상한")
     intake_max_content_bytes: int = F("ARENA_INTAKE_MAX_CONTENT_BYTES", 100000, int, "제출 받기 요소: 제출 내용 하나의 최대 크기(바이트)")
     peer_human_contact: str = F("ARENA_PEER_HUMAN_CONTACT", "", str, "프로필에 실을 사람 연락처(human 연결 방식, 예: mailto:, 채팅 주소). 비면 싣지 않는다")
     service_peer_key_file: str = F("ARENA_SERVICE_PEER_KEY_FILE", "data/service-peer.key", str, "서비스 peer 키 파일")
