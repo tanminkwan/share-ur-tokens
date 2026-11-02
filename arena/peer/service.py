@@ -86,6 +86,8 @@ class ServiceApp:
                 except SignatureError as e:
                     return {"ok": False, "error": f"signed message required: {e}"}
             data = msg.get("input", {}) or {}
+            if d.get("record") and not (msg.get("event_id") and msg.get("subject") and msg.get("recorder_url")):
+                return {"ok": False, "error": f"op {op} records its result on an event's ledger: call it with the event and a subject"}
             if op in self._fns:
                 fn = self._fns[op]
                 takes_request = len(inspect.signature(fn).parameters) >= 3  # async fn(input, ctx[, request])
@@ -94,7 +96,7 @@ class ServiceApp:
             else:
                 relayed = await self._http.ops()[op](ctx, {"path": data.get("path", {}), "query": data.get("query"), "body": data.get("body")}, head)
                 ok, result = relayed.get("ok", False), {k: v for k, v in relayed.items() if k != "ok"}
-            out = {"ok": ok, "result": result}
+            out = {"ok": ok, "result": result, **({"error": str(result.get("error"))} if not ok and isinstance(result, dict) and result.get("error") else {})}
             if ok and d.get("record"):
                 rec = await self._record(ctx, msg, head, d["record"]["kind"], data, result)
                 if not rec.get("ok"):

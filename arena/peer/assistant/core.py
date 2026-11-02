@@ -558,11 +558,14 @@ class EventAssistant:
             if isinstance(inner, dict) and set(args) <= {"tool", "name", "arguments", "args"}:  # {"tool": .., "arguments": {..}} -> {..}
                 args = inner
             key = [name, json.dumps(args, ensure_ascii=False, sort_keys=True)]
-            if key == st.last_action:  # the same call twice in a row: do not run it again
+            if key == st.last_action:  # the same successful call twice in a row: do not run it again
                 result = {"error": "이미 했다: 같은 도구를 같은 인자로 방금 실행했다. 결과를 보고 다음 단계로 가거나 wait"}
             else:
                 result = await self._run_tool(ctx, st, name, dict(args))
-                st.last_action = key
+                # a call that failed may be retried as it is once things changed (comparison run with-2: a reveal refused
+                # before the assignment could never be retried, and the round stalled)
+                failed = isinstance(result, dict) and (result.get("ok") is False or bool(result.get("error")))
+                st.last_action = [] if failed else key
             st.transcript.append(self.shorten(ctx, st, f"[행동] {name} {json.dumps(args, ensure_ascii=False)[:400]}"))
             st.transcript.append(self.shorten(ctx, st, f"{name} 결과: {json.dumps(result, ensure_ascii=False)[:1500]}"))
             ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] {name} → {json.dumps(result, ensure_ascii=False)[:120]}")

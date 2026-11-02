@@ -145,3 +145,18 @@ async def test_p6a9_the_host_sees_open_roles_with_the_peers_offering_them_and_it
     await settle(host, svc)
     await asst(host).progress_entries(ctx(host), st)
     assert "referee(" not in asst(host)._system(ctx(host), st)
+
+
+async def test_p6a3_a_recording_op_called_without_an_event_says_so_and_errors_reach_the_caller(eco):
+    """comparison run with-2: a player called the judging op without a subject and got "KeyError: 'recorder_url'", then
+    "None". A recording op now says what it needs, and an error the service function returns reaches the caller."""
+    from tests.test_assistant import asst, ctx, joined, settle
+    svc = eco.peer("svc", apps=[ServiceApp(eco.s, spec())])
+    await svc.advertise()
+    ev = await joined(eco)
+    a = eco.a
+    a.llm.push("call_service", peer=svc.pen, op="bigger", input_json=json.dumps({"a": 1, "b": 2}))
+    await asst(a).feed(ctx(a), ev, "판정")
+    await settle(a)
+    out = [x for x in asst(a).events[ev].transcript if "call_service 결과" in x][-1]
+    assert "subject" in out and "None" not in out

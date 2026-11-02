@@ -457,3 +457,16 @@ async def test_p5c27_reveal_records_are_checked_by_code_and_bad_ones_block_signi
     await settle(a, b)
     assert any("서명할 수 없다" in x for x in st_b.transcript)
     assert not [x for x in eco.svc.ledger.chain if x["type"] == "attest" and x["payload"]["subject"] == "r2"]
+
+
+async def test_p5c26_a_failed_call_may_be_retried_as_it_is(eco):
+    """comparison run with-2 (2026-11-02): a reveal refused before the assignment was retried with the same arguments once
+    the assignment existed, and the repeat guard refused it, so the round stalled. Only a successful call is not rerun."""
+    ev = await joined(eco)
+    a = eco.a
+    for _ in range(2):
+        a.llm.push("reveal", label="never-registered")
+    await asst(a).feed(ctx(a), ev, "공개")
+    await settle(a)
+    results = [x for x in asst(a).events[ev].transcript if x.startswith("reveal 결과")]
+    assert len(results) == 2 and not any("이미 했다" in x for x in results)
