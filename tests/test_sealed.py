@@ -81,3 +81,16 @@ async def test_p6d3_the_assistant_state_line_shows_the_sealed_rounds_progress(ec
     await _reg(eco, b, ev, "s1-1")
     await asst(a).progress_entries(ctx(a), st)
     assert "봉인 s1-1: 등록 2/2, 공개 가능" in asst(a)._system(ctx(a), st)
+
+
+async def test_p6d2_in_a_sealed_event_a_label_cannot_open_before_it_is_assigned(eco):
+    """live with-elements run 1: a player registered and opened m1 before the host assigned m1; once assigned, m1 was
+    already open and the other player could not register. In a sealed event only assigned labels open."""
+    ev = await asst(eco.host).host_event(ctx(eco.host), title="봉인", kind="k", rules=RULES, policy=POL, instruction="기다려라",
+                                       elements={"sealed": {}})
+    await settle(eco.host)
+    a = eco.a
+    ra, sa = await _reg(eco, a, ev, "m1")
+    assert ra["ok"]  # registering early is harmless: the value stays sealed
+    early = await _open(eco, a, ev, "m1", sa, ra["hash"])
+    assert not early["ok"] and "assigned" in early["error"]

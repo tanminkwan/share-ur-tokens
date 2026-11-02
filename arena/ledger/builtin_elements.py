@@ -108,7 +108,9 @@ def _sealed_rule(chain, e, cfg, s) -> str | None:
     ev, label = p["event_id"], p.get("label")
     subject = sealed_subject(chain, ev, label)
     if subject is None:
-        return None
+        # in a sealed event only labels of an assigned subject open; otherwise a label opened early would be found
+        # already open once its subject is assigned, and the other parties could never register it
+        return f"sealed: {label} is not a label of an assigned subject, so it cannot open yet" if e["type"] == "reveal" else None
     parties = assignments(chain, ev)[subject]
     if e["type"] == "publish":
         if p["author"] not in parties:
