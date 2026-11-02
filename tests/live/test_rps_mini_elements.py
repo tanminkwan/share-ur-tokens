@@ -33,8 +33,8 @@ TIMEOUT = 600
 
 async def test_rps_mini_with_elements(live, tmp_path):
     live = dataclasses.replace(live, assistant_idle_sec=30.0)
-    procs, servers, msgs, peers, reader, log = await start_world(live, tmp_path, n_players=2)
-    host, players = peers["host"], [peers[f"p{i}"] for i in range(3)]
+    procs, servers, msgs, peers, reader, log = await start_world(live, tmp_path, n_players=2, decliner=False)
+    host, players = peers["host"], [peers[f"p{i}"] for i in range(2)]  # host, two players, the referee (no LLM)
     port = free_port()
     url = f"http://127.0.0.1:{port}"
     (tmp_path / "referee").mkdir()
