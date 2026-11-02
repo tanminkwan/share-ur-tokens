@@ -31,3 +31,19 @@ async def test_p5c43_settled_entries_are_marked_and_stale_requests_cleared(eco):
     for p, st in ((a, st_a), (b, st_b)):
         await asst(p).progress_entries(ctx(p), st)
     assert rid not in st_b.pending and "old" not in st_a.proposals
+
+
+async def test_p5c47_the_host_state_line_names_applicants_not_yet_contracted(eco):
+    """run 15: the host thought it had to apply itself, contracted one of three applicants and waited 1500 s"""
+    from tests.test_assistant import open_event
+    ev = await open_event(eco)
+    await settle(eco.host)
+    for p in (eco.a, eco.b):
+        p.llm.push("join_event")
+        await p.events.watch_once(p.ctx(p.events))
+    await settle(eco.a, eco.b, eco.host)
+    eco.host.llm.push("contract", role="member", peer=eco.a.pen)
+    await asst(eco.host).feed(ctx(eco.host), ev, "계약")
+    await settle(eco.host)
+    line = asst(eco.host)._system(ctx(eco.host), asst(eco.host).events[ev])
+    assert f"아직 계약하지 않은 신청자: {eco.b.pen}" in line and "나는 개최자다" in line
