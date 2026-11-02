@@ -64,8 +64,9 @@ async def contract(A, ctx, st, role, peer):
     peer_pub, peer_url = await A.resolve_peer(ctx, st, peer)
     if not peer_pub or not peer_url:
         return {"ok": False, "error": f"{peer}를 찾지 못했다(필명이나 공개키를 확인)"}
-    if peer_pub not in st.applicants:  # enforced by code: only peers whose signed join carried this event's rules hash
-        return {"ok": False, "error": f"참가 신청한 peer만 계약할 수 있다(신청자: {len(st.applicants)}명)"}
+    if peer_pub not in st.applicants and not await A.offers_role(ctx, peer_pub, role):
+        # enforced by code: peers whose signed join carried this event's rules hash, or peers whose profile offers the role
+        return {"ok": False, "error": f"참가 신청한 peer나 그 역할을 프로필에 내건 peer만 계약할 수 있다(신청자: {len(st.applicants)}명)"}
     c = {"event_id": st.event_id, "role": role, "issuer": ctx.pub, "contractor": peer_pub, "nonce": nonce(peer_pub, role),
          "group_id": st.group_id, "rules_hash": st.rules_hash, **(await ledger_tag(ctx, st))}
     eng = await ctx.call(peer_url, {"op": "engage", "role": role, "contract": c, "request": {"event_id": st.event_id, "rules_hash": st.rules_hash}},
@@ -77,6 +78,23 @@ async def contract(A, ctx, st, role, peer):
         st.peers[peer_pub] = peer_url
         st.contracts.append([role, peer_pub])
     return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error"), "contracts_so_far": len(st.contracts)}
+
+
+async def call_service(A, ctx, st, peer, op, input=None):
+    """call an API-providing peer; the code checks the signed receipt and keeps it (P6-A5)"""
+    from ...sdk.service import verify_service_receipt
+    pub, url = await A.resolve_peer(ctx, st, peer)
+    if not pub or not url:
+        return {"ok": False, "error": f"{peer}를 찾지 못했다"}
+    req = {"op": op, "input": input if isinstance(input, dict) else {}}
+    r = await ctx.call(url, req, group=st.group_id, event=st.event_id)
+    if not r.get("ok"):
+        return {"ok": False, "error": r.get("error")}
+    bad = verify_service_receipt(r, req, pub)
+    if bad:
+        return {"ok": False, "error": f"서비스 영수증이 맞지 않는다(코드 확인): {bad}"}
+    st.service_receipts.append({"peer": pub, "op": op, "receipt": r["receipt"], "receipt_sig": r["receipt_sig"]})
+    return {"ok": True, "result": r["result"]}
 
 
 async def send(A, ctx, st, to, text, data=None, attach_reveals=()):
@@ -285,6 +303,8 @@ def default_tools() -> list[Tool]:
              "내 공개값을 보낼 때는 손으로 옮기지 말고 attach_reveals에 라벨을 넣는다. 코드가 공개값 묶음을 data.reveals에 그대로 붙인다",
              dict(_obj(to=S, text=S, data_json=S), properties={"to": S, "text": S, "data_json": S, "attach_reveals": {"type": "array", "items": S}}),
              send),
+        Tool("call_service", "{peer, op, input_json}: API를 제공하는 peer(필명)의 op를 부른다(input_json은 JSON 객체 문자열). "
+             "결과와 함께 온 서명 영수증은 코드가 확인하고 보관한다", _obj(peer=S, op=S, input_json=S), call_service),
         Tool("solicit", "{targets: [필명...], text, data_json}: 고른 peer들에게 직접 요청을 한 번에 보낸다(data_json은 JSON 객체 문자열)",
              _obj(targets={"type": "array", "items": S}, text=S, data_json=S), solicit),
         Tool("publish_text", "{text}: 글을 원장에 먼저 등록한다. 결과 content_hash, publish_hash", _obj(text=S), publish_text),

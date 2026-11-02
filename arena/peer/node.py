@@ -54,7 +54,7 @@ class Peer:
         self._group_ids: dict[str, str] = {}
         self._trust: dict[str, dict] = {}  # recorder url -> its trust check against the root of trust (P5-G6)
         self._requests = DirectRequests(settings)
-        self.events = EventRouter(settings, installer=AppInstaller(settings) if settings.app_store_urls else None)
+        self.events = EventRouter(settings, installer=AppInstaller(settings) if (settings.app_store_urls or settings.app_store_discover) else None)
         self.builtins = [RoleContracts(), EventApprovals(), self._requests, self.events]
         self.apps = list(apps)
         self._contexts: dict[int, AppContext] = {}

@@ -47,9 +47,21 @@ class AppInstaller:
                 out.append(app)
         return out
 
+    async def store_urls(self, ctx) -> list[str]:
+        """the configured app distribution peers, or (ARENA_APP_STORE_DISCOVER) those found on the broker by role (P6-A4)"""
+        urls = list(self.s.app_store_urls)
+        if not urls and self.s.app_store_discover:
+            for broker in ctx.brokers.values():
+                try:
+                    found = await broker.find("앱 배포", role="앱 배포", identity=ctx.identity)
+                except Exception:
+                    continue
+                urls += [p["url"] for p in found.get("peers", []) if p.get("url") and p["url"] not in urls]
+        return urls
+
     async def _fetch(self, ctx, ref) -> tuple[dict | None, str | None, str]:
-        why = "설정된 앱 배포 peer가 없음"
-        for url in self.s.app_store_urls:
+        why = "설정되거나 찾은 앱 배포 peer가 없음"
+        for url in await self.store_urls(ctx):
             try:
                 r = await ctx.call(url, {"op": "app_get", "app_id": ref["id"], "version": ref["version"]})
             except Exception as e:

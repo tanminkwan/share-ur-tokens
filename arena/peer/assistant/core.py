@@ -119,6 +119,14 @@ class EventAssistant:
             return {k: self.expand(st, v) for k, v in obj.items()}
         return obj
 
+    async def offers_role(self, ctx, pub: str, role: str) -> bool:
+        """does this peer's posted profile offer the role (a service peer takes roles it advertises, without applying)?"""
+        try:
+            profiles = (await ctx.brokers[self.group].list_profiles(identity=ctx.identity)).get("profiles", [])
+        except Exception:
+            return False
+        return any(p["pub"] == pub and role in p.get("offers", []) for p in profiles)
+
     async def resolve_peer(self, ctx, st, ref: str, need_url: bool = True) -> tuple[str | None, str | None]:
         """a peer named by handle, public key or address -> (public key, address); unknown handles are looked up on the broker"""
         ref = self.expand(st, str(ref))
@@ -511,7 +519,7 @@ class EventAssistant:
             return {"error": f"인자가 맞지 않음: {', '.join(missing)} 없음"}
         if tool.participant_only and st.role == "host":
             return {"error": "참가자만 쓰는 도구"}
-        for k in ("data_json", "value_json", "subjects_json"):
+        for k in ("data_json", "value_json", "subjects_json", "input_json"):
             if k in args:
                 try:
                     args[k[:-5]] = json.loads(args.pop(k) or "{}")

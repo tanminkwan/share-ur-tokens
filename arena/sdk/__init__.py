@@ -24,3 +24,4 @@ from .adapters import A2AAgentAdapter, HttpServiceAdapter, function_app  # noqa:
 from .context import Context, State  # noqa: F401
 from .discovery import ENTRY_POINT_GROUP, discover_apps  # noqa: F401
 from .packaging import check_package, load_app_file, package_app, source_hash  # noqa: F401  (ship apps through an app distribution peer)
+from .service import make_receipt, request_hash, verify_service_receipt  # noqa: F401  (API-providing peers)

@@ -422,7 +422,7 @@ async def test_p5c27_contracts_only_with_applicants_checked_by_code(eco):
     await settle(eco.host)
     contracts = [x["payload"]["contractor"] for x in eco.svc.ledger.chain if x["type"] == "contract"]
     assert contracts == [eco.a.identity.pub]
-    assert any("참가 신청한 peer만" in x for x in st.transcript)
+    assert any("참가 신청한 peer나 그 역할을 프로필에 내건 peer만" in x for x in st.transcript)
 
 
 async def test_p5c27_reveal_records_are_checked_by_code_and_bad_ones_block_signing(eco):
