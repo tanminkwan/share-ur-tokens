@@ -1,0 +1,69 @@
+{
+  "private_key_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+  "public_key_hex": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+  "pen_name": "필명-79b556",
+  "canonical_json": {
+    "input": {
+      "b": 2,
+      "a": "가위",
+      "n": [
+        1,
+        {
+          "z": true,
+          "y": null
+        }
+      ]
+    },
+    "bytes_utf8": "{\"a\":\"가위\",\"b\":2,\"n\":[1,{\"y\":null,\"z\":true}]}"
+  },
+  "signature": {
+    "payload": {
+      "b": 2,
+      "a": "가위",
+      "n": [
+        1,
+        {
+          "z": true,
+          "y": null
+        }
+      ]
+    },
+    "sig_hex": "afbdc1874dbb89c9175b435e31337442f7821b9a71cb87ac6dafd3a2d3be3708137812de41c272c3c4735899aa655a2d1875440d295d4c914101bb831f9bc907"
+  },
+  "sha256_of_hello": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+  "commit_hash": {
+    "label": "m1",
+    "value": "바위",
+    "salt": "a1b2c3d4e5f60718",
+    "pub": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+    "hash": "2b7ccae2b941f4cffa0c31850faace57b03d5e6f866f41fe18132f40d519b537"
+  },
+  "signed_request": {
+    "method": "GET",
+    "path": "/chain",
+    "ts": 1761955200.0,
+    "headers": {
+      "X-Arena-Pub": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+      "X-Arena-Ts": "1761955200.0",
+      "X-Arena-Sig": "5858b5efb5872f8196ae2de328dfa3d164c38899f22b35e1a015508b8d5e9eb6f703dd660c5100090d7a71eea2b2b05b2b35b65f785bbddc5152383735df610b"
+    }
+  },
+  "ledger_entry_hash": {
+    "body": {
+      "type": "publish",
+      "payload": {
+        "author": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+        "content_hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        "event_id": "ev-0000000000",
+        "group_id": "public",
+        "label": "m1"
+      },
+      "sigs": {
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664": "9875f6de8adf55d830e8b34e0e39076a674394508b81b38ee99b6d84b90e8a95636a09591e7bdfa8614b9afa07e1c1b737ff5ca1ea609b43fd03273cbb42b102"
+      },
+      "prev": "0000000000000000000000000000000000000000000000000000000000000000",
+      "ts": 1761955200.0
+    },
+    "hash": "983cee0b090369e3fc1205305ea640414bb990bb6dd745d3e3ac3da033f7b0d7"
+  }
+}
