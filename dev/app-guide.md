@@ -69,16 +69,20 @@ def make_app(settings):          # 팩토리: 설정을 받아 앱을 돌려준�
 
 ## 5. 문맥(Context): 앱이 쓸 수 있는 것
 
-앱은 peer 객체를 받지 않는다. 플랫폼이 주입하는 **문맥**만 쓴다(인터페이스: `arena.sdk.Context`).
+앱은 peer 객체를 받지 않는다. 플랫폼이 주입하는 **문맥**만 쓴다. 문맥은 **작은 인터페이스 여러 개**로 나뉘어 있고(`arena.sdk`), `Context`는 그 전부를 합친 것이다. 앱의 함수는 자기가 쓰는 인터페이스만 적으면 된다(`def on_timer(self, ctx: Scheduling, ...)`). 그러면 테스트할 때도 그 부분만 흉내 내면 된다. 플랫폼의 문맥은 모든 인터페이스를 갖추고, SDK에 적힌 것과 플랫폼 문맥이 주는 것이 정확히 같은지를 테스트가 지킨다(`tests/test_sdk_context.py`).
 
-| 구분 | 항목 |
-|---|---|
-| 나 | `pub`, `pen`, `url`, `labels`, `identity`, `sign(payload)` |
-| 플랫폼 서비스 | `settings`, `clock()`, `log`, `llm`, `owner`(사람), `area`(공개 영역), `brokers`(그룹별 broker), `recorder(url)`, `receipts`, `known_recorders` |
-| 통신 | `call(url, msg, group=, event=)`, `solicit(targets, request)`, `group_id(그룹 이름)` |
-| 프로필 | `offers()`, `advertise()`, `add_experience(note)` |
-| 앱 전용 저장 | `state.load()` / `state.save(dict)`(재시작 뒤에도 유지), `data_dir`(이 앱만 쓰는 폴더) |
-| 예약 | `schedule(at, kind, data=, event_id=)` → 예약 id, `cancel_timer(id 또는 event_id=)`, `timers(event_id=)`. 홈 폴더에 남아 재시작해도 이어지고, 꺼져 있던 동안 놓친 예약은 켜질 때 한 번 온다. "아직인가?"를 확인하려고 주기적으로 깨어나지 말고 예약을 건다(토큰과 시간을 아낀다) |
+| 인터페이스 | 뜻 | 항목 |
+|---|---|---|
+| `Me` | 나 | `app_name`, `pub`, `pen`, `url`, `labels`, `operator`(service·agent·human), `identity`, `sign(payload)` |
+| `Platform` | 플랫폼 서비스 | `settings`, `clock()`, `log`, `llm`, `owner`(사람), `area`(공개 영역) |
+| `Storage` | 앱 전용 저장 | `state.load()` / `state.save(dict)`(재시작 뒤에도 유지), `data_dir`(이 앱만 쓰는 폴더) |
+| `LedgerAccess` | 기록자와 원장 | `known_recorders`, `recorder(url)`, `recorder_trust(url)`(뿌리 신뢰부터 확인), `ledger_id(url)`, `receipts`(기록자 영수증) |
+| `Messaging` | 다른 peer와 broker | `brokers`(그룹별 broker), `call(url, msg, group=, event=)`, `call_peer(pub, msg, ...)`(그 peer가 밝힌 연결 방식 a2a·api 가운데 쓸 수 있는 것으로), `profile_of(pub)`, `solicit(targets, request)`, `group_id(그룹 이름)` |
+| `Showing` | 나를 알리기 | `offers()`, `advertise()`, `add_experience(note)` |
+| `Scheduling` | 예약 | `schedule(at, kind, data=, event_id=)` → 예약 id, `cancel_timer(id 또는 event_id=)`, `timers(event_id=)`. 홈 폴더에 남아 재시작해도 이어지고, 꺼져 있던 동안 놓친 예약은 켜질 때 한 번 온다. "아직인가?"를 확인하려고 주기적으로 깨어나지 말고 예약을 건다(토큰과 시간을 아낀다) |
+| `ElementAccess` | 기본 요소가 모은 것 | `submissions(event_id)`(받은 제출, `SubmissionSource` 능력을 가진 앱을 거쳐) |
+
+기본 탑재 앱만 쓰는 것(`apps_with`, `app_by_id`, `ctx_of`, `install_app`, `inbox`)은 SDK에 없다. 바깥 앱은 쓸 수 없다.
 
 **하면 안 되는 것**
 
