@@ -2,7 +2,7 @@
 assistant; it does not know HTTP. Every check (signatures, the ledger, handles) stays in the peer's code."""
 from __future__ import annotations
 
-from ..llm import NoLLM
+from ..llm import llm_available
 from ..peer.assistant import EventAssistant
 from ..peer.desk import OwnerDesk
 from ..peer.scheduler import fmt_time
@@ -32,7 +32,7 @@ class OwnerService:
         p = self.peer
         events = [{"event_id": st.event_id, "title": st.title, "role": st.role, "drive": st.drive, "closed": st.closed}
                   for st in self._asst.events.values()]
-        return {"me": {"pen": p.pen, "pub": p.identity.pub, "operator": p.operator(), "llm": not isinstance(p.llm, NoLLM)},
+        return {"me": {"pen": p.pen, "pub": p.identity.pub, "operator": p.operator(), "llm": llm_available(p.llm)},
                 "events": sorted(events, key=lambda x: (x["closed"], x["title"])), "open_items": len(self.desk.list("open"))}
 
     def items(self, status: str = "open") -> list[dict]:

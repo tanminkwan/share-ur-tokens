@@ -13,12 +13,21 @@ class Answer:
 
 
 class Owner(Protocol):
+    """the person behind a peer. `present` says whether there is anyone to ask (an autonomous peer says False)"""
+    present: bool
+
     async def ask(self, question: str, context: str = "") -> Answer: ...
     async def write(self, task: str, context: str, schema: dict) -> dict: ...
 
 
+def owner_present(owner) -> bool:
+    """is there a person behind this peer? (owners that do not say are taken as present)"""
+    return bool(getattr(owner, "present", True))
+
+
 class NoOwner:
     """for autonomous peers: nobody to ask, so every question is answered no and nothing is written"""
+    present = False
 
     async def ask(self, question, context=""):
         return Answer(False, "사람이 없는 자율 peer라 소유자 확인이 필요한 일은 하지 않습니다")

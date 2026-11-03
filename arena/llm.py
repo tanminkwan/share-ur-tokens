@@ -23,6 +23,10 @@ class LLMError(Exception):
 
 
 class LLM(Protocol):
+    """an LLM adapter. `available` says whether it can think at all (a stand-in for "no model" says False), so callers ask
+    the adapter instead of checking its class"""
+    available: bool
+
     async def ask_json(self, *, system: str, schema: dict, user: str | None = None, messages: list | None = None,
                        effort: str | None = None, model: str | None = None, on_usage: Callable | None = None) -> dict: ...
 
@@ -128,8 +132,14 @@ class ClaudeLLM:
         raise LLMError(f"{type(last).__name__}: {str(last)[:120]}")
 
 
+def llm_available(llm) -> bool:
+    """can this LLM think? (adapters say so; ones that do not say are taken as able)"""
+    return bool(getattr(llm, "available", True))
+
+
 class NoLLM:
     """for peers without a model: every call fails, so callers use their fallback (e.g. profile = first line)"""
+    available = False
 
     async def ask_json(self, **kw):
         raise LLMError("no LLM configured for this peer")

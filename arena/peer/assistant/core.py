@@ -9,7 +9,7 @@ import os
 import re
 
 from ...crypto import h, pen_name, verify
-from ...llm import NoLLM, ask_json
+from ...llm import ask_json, llm_available
 from ..event_store import EventStore, FolderEventStore
 from ..elements import element_tools
 from ..events import announce_event, event_times, schedule_event_times
@@ -645,7 +645,7 @@ class EventAssistant:
     def allowed_drives(self, ctx) -> tuple:
         """no LLM: only the owner drives. A human peer (dev/peer-spec.md 1.2): the person drives; an LLM plugin may only
         suggest, never act on its own"""
-        if isinstance(ctx.llm, NoLLM):
+        if not llm_available(ctx.llm):
             return ("manual",)
         if ctx.operator == "human":
             return ("manual", "suggest")
@@ -664,7 +664,7 @@ class EventAssistant:
         if drive not in self.DRIVES:
             return {"ok": False, "error": f"운전석은 {', '.join(self.DRIVES)} 가운데 하나"}
         if drive not in self.allowed_drives(ctx):
-            why = "LLM이 없는 peer는 수동(manual)만 된다" if isinstance(ctx.llm, NoLLM) else "사람 peer는 수동(manual)이나 제안(suggest)만 된다"
+            why = "LLM이 없는 peer는 수동(manual)만 된다" if not llm_available(ctx.llm) else "사람 peer는 수동(manual)이나 제안(suggest)만 된다"
             return {"ok": False, "error": why}
         st.drive = drive
         self.save(ctx, st)

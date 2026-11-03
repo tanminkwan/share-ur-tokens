@@ -13,7 +13,7 @@ from ..rest import RestTransport
 from ..config import Settings
 from ..crypto import Identity, pen_name
 from ..events import EventLog
-from ..llm import LLM
+from ..llm import LLM, llm_available
 from ..ledger.trust import verify_link_entry, verify_trust
 from ..recorder.client import RecorderAPI, RecorderClient
 from .area import PublicArea
@@ -22,7 +22,7 @@ from .app_install import AppInstaller
 from .elements import PEER_ELEMENTS
 from .events import EventRouter
 from .context import AppContext, PlatformContext
-from .owner import NoOwner, Owner
+from .owner import Owner, owner_present
 from .plugin import SDK_VERSION, App, EventHandler, Lifecycle, is_uuid, MessageHead, OfferProvider, OpProvider, capabilities_of
 from .profile import ProfileBuilder
 from .receipts import Receipts
@@ -131,10 +131,9 @@ class Peer:
         """who decides and answers for this peer (dev/peer-spec.md 1절)"""
         if self.config.operator:
             return self.config.operator
-        from ..llm import NoLLM
-        if isinstance(self.owner, NoOwner):
+        if not owner_present(self.owner):
             return "service"  # nobody behind it: code answers
-        return "human" if isinstance(self.llm, NoLLM) else "agent"
+        return "agent" if llm_available(self.llm) else "human"
 
     def connections(self) -> list:
         """the connections this peer's profile lists (P6-A7): the person's choice, or a2a at its url; a human contact only if set"""
