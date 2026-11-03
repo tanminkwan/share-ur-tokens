@@ -151,12 +151,17 @@ classDiagram
 **recorder가 entry를 받기 전에 보는 순서**(`arena/ledger/rules.py`)
 
 ```mermaid
-flowchart LR
-    A["type이 등록됐나"] --> B["prev가 맞나"] --> C["group을 밝혔나"] --> D["branch chain이면<br/>parent_link가 먼저"] --> E["ledger_id가 이 원장 것인가"]
-    E --> F["type별 shape"] --> G["purpose code가 등록됐나"] --> H["signature가 맞나"] --> I["retired key가 아닌가"]
-    I --> J["시각이 거꾸로 가지 않나"] --> K["event가 있고 열려 있나"] --> L["가리키는 content가 등록됐나"] --> M["nonce를 되쓰지 않나"]
-    M --> N["type별 rule"] --> O["event가 켠 element rule"] --> P["seal하고 append"]
+%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
+flowchart TB
+    A["1. type이 등록됐나"] --> B["2. prev가 맞나"] --> C["3. group을 밝혔나"]
+    C --> D["4. branch chain이면 parent_link가 먼저"] --> E["5. ledger_id가 이 원장 것인가"]
+    E --> F["6. type별 shape"] --> G["7. purpose code가 등록됐나"] --> H["8. signature가 맞나"]
+    H --> I["9. retired key가 아닌가"] --> J["10. 시각이 거꾸로 가지 않나"] --> K["11. event가 있고 열려 있나"]
+    K --> L["12. 가리키는 content가 등록됐나"] --> M["13. nonce를 되쓰지 않나"] --> N["14. type별 rule"]
+    N --> O["15. event가 켠 element rule"] --> P["seal하고 append"]
 ```
+
+어느 단계든 걸리면 그 자리에서 거절하고 이유를 돌려준다(`{ok: false, error}`).
 
 **entry types**(register해서 더한다. 원장 코드는 고치지 않는다)
 
