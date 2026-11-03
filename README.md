@@ -103,6 +103,7 @@ scripts/coverage.sh                              # 같은 테스트 + 커버리�
 .venv/bin/python -m arena.peers.service --spec <서비스 설명.json>   # API만 내놓는 peer (ARENA_SERVICE_PEER_*)
 .venv/bin/python -m arena.peers.personal   # 견본 개인 peer(바깥으로는 a2a). ARENA_PERSONAL_MODE=agent: 대화 앱(내 비서와 대화)
                                            # ARENA_PERSONAL_MODE=human: 창구 화면 앱(사람이 운전). 화면 주소(#token=…)를 출력한다
+deploy/build.sh && cd deploy/link-peer && docker compose up -d   # API 서버 peer를 container로 (peer마다 디렉토리, dev/docker.md)
 .venv/bin/python -m scripts.try_personal   # 직접 써 보기: 제네시스 + 사람 peer 둘(LLM 없음). --agent면 agent peer 하나 더(.env의 LLM)
 ```
 
@@ -116,6 +117,7 @@ peer가 진짜 원장만 믿게 하려면 `.env`에 뿌리 값을 둔다: `ARENA
 |---|---|
 | [docs/whitepaper.md](docs/whitepaper.md) | **백서**: 풀려는 문제, 믿을 수 있는 이유, 진짜 원장 증명, 생태계가 자라는 방향, 지금 상태 |
 | [docs/education.md](docs/education.md) | **교육 자료**: 지금의 모습을 spec → 순수 플랫폼 → 플랫폼 부가기능 → 앱 기능 순으로, 구성·동작·사용과 그림으로. 고정은 규약과 코드뿐, 구현체는 누구나 |
+| [dev/docker.md](dev/docker.md) | **Docker 배치**: API 서버 peer마다 실행 디렉토리와 docker compose, 시험용 broker, 이미지 build 분리, 주소와 proxy, broker 재연결 |
 | [dev/peer-spec.md](dev/peer-spec.md) | **peer 표준**: 세 유형(service·agent·human)과 반드시·권함·자유로 나눈 층별 규정. 누구나 peer를 만들 수 있게 |
 | [dev/protocol.md](dev/protocol.md) | **규약**(판 4): 다른 언어로 peer·broker·recorder를 만들기 위한 바이트 단위 규칙과 [시험 벡터](dev/protocol-vectors.json) |
 | [dev/chain-policy.md](dev/chain-policy.md), [dev/entry-columns.md](dev/entry-columns.md), [dev/codebook.md](dev/codebook.md) | 원장 체인 확장 정책, 원장 항목의 칸, 코드표와 판 |

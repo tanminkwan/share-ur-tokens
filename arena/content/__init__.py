@@ -10,4 +10,5 @@ The ledger keeps only the body's hash and the author's signature; the book carri
 from .check import check_work  # noqa: F401
 from .reference import colophon, from_uri, make_reference, to_uri  # noqa: F401
 from .links import link_id, make_link, verify_link  # noqa: F401
-from .works import register_work, relink, resolve_link, set_link  # noqa: F401
+from .link_peers import LinkPeer, LinkPeers  # noqa: F401
+from .works import register_work  # noqa: F401

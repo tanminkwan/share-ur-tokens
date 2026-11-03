@@ -81,7 +81,7 @@ def _area(root: str, settings: Settings, line: str) -> LocalFolderArea:
 
 async def start(settings: Settings, viewers=None) -> Genesis:
     d, host = settings.genesis_dir, settings.host
-    url = lambda port: f"http://{host}:{port}"
+    url = settings.public_url  # what the genesis writes for others; it listens on ARENA_HOST
     god_id = Identity.load_or_create(os.path.join(d, "god.key"))
     broker = BrokerService(settings, Identity.load_or_create(os.path.join(d, "broker.key")), BM25Searcher(settings.bm25_k1, settings.bm25_b),
                            HttpNeighbors(settings.neighbor_timeout_sec), name=settings.genesis_broker_name, neighbors=[],

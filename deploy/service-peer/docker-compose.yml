@@ -1,0 +1,33 @@
+# service peer: an API-providing peer made from a spec file (specs/), python functions or an existing HTTP API
+# Runs on its own, wherever this peer lives. From this directory:
+#   cp .env.example .env     (then set the broker and the addresses; keys and secrets stay in .env)
+#   docker compose up -d
+# The image comes from deploy/build.sh (no build here). Network: host, so this peer is reached at ARENA_PUBLIC_HOST
+# (default: ARENA_HOST, 127.0.0.1). To serve others: ARENA_HOST=0.0.0.0 and ARENA_PUBLIC_HOST=<this server's address>.
+# The peer keeps connecting to its broker until it answers. Guide: dev/docker.md
+services:
+  service-peer:
+    image: ${ARENA_IMAGE:-agent-arena:latest}
+    command: ["arena.peers.service", "--spec", "/app/specs/${ARENA_SERVICE_SPEC_FILE:-example-service.json}"]
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ARENA_HOST: ${ARENA_HOST:-127.0.0.1}
+      ARENA_PUBLIC_HOST: ${ARENA_PUBLIC_HOST:-}
+      ARENA_KEY_STORE: file
+      ARENA_SERVICE_PEER_BROKERS: ${ARENA_SERVICE_PEER_BROKERS:-public=http://127.0.0.1:9100}
+      ARENA_SERVICE_PEER_CONNECTIONS: ${ARENA_SERVICE_PEER_CONNECTIONS:-api}
+      ARENA_SERVICE_PEER_PORT: ${ARENA_SERVICE_PEER_PORT:-9160}
+      ARENA_SERVICE_PEER_API_PORT: ${ARENA_SERVICE_PEER_API_PORT:-9161}
+      ARENA_SERVICE_PEER_KEY_FILE: ${ARENA_SERVICE_PEER_KEY_FILE:-/app/data/service-peer.key}
+      ARENA_SERVICE_PEER_AREA: ${ARENA_SERVICE_PEER_AREA:-/app/data/area}
+      PYTHONPATH: /app/specs
+    volumes:
+      - data:/app/data
+      - ./specs:/app/specs:ro
+
+volumes:
+  data:

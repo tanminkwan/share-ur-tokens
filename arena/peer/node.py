@@ -59,6 +59,7 @@ class Peer:
         if "inbox" in saved:  # older homes kept the inbox at the top level
             self.app_states.setdefault(DirectRequests.name, {"inbox": saved["inbox"]})
         self.last_profile: dict | None = None
+        self.unreached: set[str] = set()  # broker groups that did not answer the last profile post (Presence tries again)
         self._group_ids: dict[str, str] = {}
         self.trust = RecorderTrust(lambda: self.settings, self.recorder)  # proving recorders from the root of trust (P5-G6)
         self._trust = self.trust.cache
@@ -226,7 +227,10 @@ class Peer:
         """start the event router (built-in) and every app that has a start"""
         for app in self.builtins + self.apps:
             if isinstance(app, Lifecycle):
-                await app.start(self.ctx(app))
+                try:
+                    await app.start(self.ctx(app))
+                except Exception as e:  # noqa: BLE001  (one app failing to start, e.g. its recorder not up yet, does not stop the peer)
+                    self.log.emit("apps", self.pen, f"{app.name} 시작 실패: {type(e).__name__}: {e}")
 
     # ---- messages ----
     async def _check_head(self, msg: dict, head: MessageHead) -> str | None:
@@ -273,10 +277,17 @@ class Peer:
     # ---- profile ----
     async def advertise(self) -> dict:
         profile = await self.profiles.build(self)
+        unreached = set()
         for group, broker in self.brokers.items():
-            r = await broker.advertise(self.identity, profile)
+            try:
+                r = await broker.advertise(self.identity, profile)
+            except Exception as e:  # noqa: BLE001  (the broker is not there yet or went away: Presence keeps trying)
+                unreached.add(group)
+                self.log.emit("profile", self.pen, f"{group} broker에 아직 연결되지 않음: {type(e).__name__}: {e}")
+                continue
             if not r.get("ok"):
                 self.log.emit("profile", self.pen, f"{group} 게시 실패: {r.get('error')}")
+        self.unreached = unreached
         self.last_profile = profile
         self.persist()
         caps = [c["label"] for c in profile.get("capabilities", [])]

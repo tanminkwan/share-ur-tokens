@@ -280,9 +280,11 @@ content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
 | `link.get` | `{id}` | `{ok, link}`(가장 새 버전) |
 | `link.history` | `{id}` | `{ok, versions}`(오래된 것부터) |
 
-**읽는 쪽**: link peer의 답을 믿지 않고 버전마다 서명을 확인한다(id가 owner·name에서 나오는가, 서명이 맞는가, signer가 그 신원의 지금 key인가, owner가 원장 기록의 작가인가). link peer는 link를 지우거나 옛 버전을 줄 수는 있어도 위치를 위조할 수는 없다. 그래서 여러 link peer에 두기를 권한다.
+**읽는 쪽**: link peer의 답을 믿지 않고 버전마다 서명을 확인한다(id가 owner·name에서 나오는가, 서명이 맞는가, signer가 그 신원의 지금 key인가, owner가 원장 기록의 작가인가). link peer는 link를 지우거나 옛 버전을 줄 수는 있어도 위치를 위조할 수는 없다.
 
-**ledger reference**에는 선택 `link: {"peer", "id", "via"?}`가 붙고, 한 줄 주소에는 `&link=<peer>/<id>&via=<주소>`가 붙는다.
+**여러 link peer**: link id는 owner와 name에서 나오므로 어느 link peer에서나 같다. 한 작품의 `ref.storage`에 link peer마다 link 하나씩 적는다. 위치를 옮길 때는 link peer마다 새 버전을 서명한다(버전 번호는 link peer마다 따로 센다). 읽는 쪽은 모든 link peer에 묻고, 서명이 맞는 버전 가운데 서명된 시각(`ts`)이 가장 늦은 것을 쓴다. 옛 버전을 주거나, 위조하거나, 닿지 않는 link peer는 밀려나고 답에 이름이 남는다(`arena/content/link_peers.py`).
+
+**ledger reference**에는 선택 `links: [{"peer", "id", "via"?}, ...]`가 붙고, 한 줄 주소에는 link peer마다 `&link=<peer>/<id>|<via>`가 붙는다.
 
 ## 5. broker
 

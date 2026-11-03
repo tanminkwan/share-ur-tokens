@@ -23,6 +23,7 @@ from ..llm import build_llm, llm_available
 from ..peer.assistant import EventAssistant
 from ..peer.desk import DeskOwner, OwnerDesk, OwnerDeskApp
 from ..peer.home import PeerHome
+from ..peer.presence import Presence
 from ..peer.node import Peer, PeerConfig
 from ..serve import serve_background
 from .common import parse_groups
@@ -61,7 +62,7 @@ def build(s: Settings) -> tuple[Peer, OwnerService, str]:
     windows = ([DeskWebApp(None, s.personal_web_host, s.personal_desk_port, token)] if "desk" in screens else []) + \
               ([ChatApp(None, s, s.personal_web_host, s.personal_chat_port, token)] if "chat" in screens else [])
     apps = [OwnerDeskApp(desk), EventAssistant(s), *windows]
-    peer = Peer(home.identity(), s, PeerConfig(url=f"http://{s.host}:{s.personal_peer_port}", labels=list(s.personal_peer_labels),
+    peer = Peer(home.identity(), s, PeerConfig(url=s.public_url(s.personal_peer_port), labels=list(s.personal_peer_labels),
                                                operator=s.personal_mode),
                 home.area(), DeskOwner(desk, s), llm, A2ATransport(s), EventLog(keep=s.event_log_size),
                 brokers={g: FailoverBrokerClient.from_urls(urls, s) for g, urls in groups.items()}, apps=apps, home=home)
@@ -76,14 +77,11 @@ async def run(s: Settings) -> None:
     peer, _, _ = build(s)
     await serve_background(peer.a2a_app(), s.host, s.personal_peer_port)
     peer.log.emit("peer", peer.pen, f"A2A {peer.config.url} · operator {peer.operator()}")
-    await peer.advertise()
     await peer.start()  # the screen apps open their local web here
     for app in peer.apps:
         if hasattr(app, "address"):
             print(f"{app.name}: {app.address}", flush=True)
-    while True:
-        await asyncio.sleep(max(1.0, s.profile_ttl_sec / 2))
-        await peer.advertise()
+    await Presence(peer).keep()  # posts the profile, keeps connecting to brokers that do not answer yet
 
 
 def main():

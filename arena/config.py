@@ -83,11 +83,18 @@ class EnvSettings:
     def key_of(self, name: str) -> str:
         return next(f.metadata["key"] for f in fields(self) if f.name == name)
 
+    def public_url(self, port: int) -> str:
+        """the address others reach this service at (written in profiles): ARENA_PUBLIC_HOST, else ARENA_HOST"""
+        return f"http://{getattr(self, 'public_host', '') or self.host}:{port}"
+
 
 @dataclass
 class Settings(EnvSettings):
     # network
-    host: str = F("ARENA_HOST", "127.0.0.1", str, "서비스가 듣는 주소")
+    host: str = F("ARENA_HOST", "127.0.0.1", str, "서비스가 듣는 주소(container 안에서는 0.0.0.0)")
+    broker_retry_sec: float = F("ARENA_BROKER_RETRY_SEC", 2.0, float, "peer가 broker에 연결되지 않을 때 다시 시도하는 첫 간격(초). 연결될 때까지 간격을 두 배씩 늘린다")
+    broker_retry_max_sec: float = F("ARENA_BROKER_RETRY_MAX_SEC", 60.0, float, "broker에 다시 연결을 시도하는 간격의 상한(초)")
+    public_host: str = F("ARENA_PUBLIC_HOST", "", str, "남에게 알리는 주소(profile, 기록자 주소에 적힘). 비면 ARENA_HOST. 0.0.0.0으로 듣는 container는 닿을 수 있는 주소를 적는다")
     http_timeout_sec: float = F("ARENA_HTTP_TIMEOUT_SEC", 60.0, float, "클라이언트 기본 제한 시간(초)")
     neighbor_timeout_sec: float = F("ARENA_NEIGHBOR_TIMEOUT_SEC", 10.0, float, "이웃 broker 호출 제한 시간(초)")
     sig_window_sec: float = F("ARENA_SIG_WINDOW_SEC", 60.0, float, "서명 요청의 시각 허용 폭(초)")

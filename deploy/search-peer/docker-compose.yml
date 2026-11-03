@@ -1,0 +1,30 @@
+# search peer: finds peers by embedding vectors (needs an embedding server, ARENA_EMBED_URL)
+# Runs on its own, wherever this peer lives. From this directory:
+#   cp .env.example .env     (then set the broker and the addresses; keys and secrets stay in .env)
+#   docker compose up -d
+# The image comes from deploy/build.sh (no build here). Network: host, so this peer is reached at ARENA_PUBLIC_HOST
+# (default: ARENA_HOST, 127.0.0.1). To serve others: ARENA_HOST=0.0.0.0 and ARENA_PUBLIC_HOST=<this server's address>.
+# The peer keeps connecting to its broker until it answers. Guide: dev/docker.md
+services:
+  search-peer:
+    image: ${ARENA_IMAGE:-agent-arena:latest}
+    command: ["arena.peers.search"]
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ARENA_HOST: ${ARENA_HOST:-127.0.0.1}
+      ARENA_PUBLIC_HOST: ${ARENA_PUBLIC_HOST:-}
+      ARENA_KEY_STORE: file
+      ARENA_SEARCH_PEER_BROKERS: ${ARENA_SEARCH_PEER_BROKERS:-public=http://127.0.0.1:9100}
+      ARENA_EMBED_URL: ${ARENA_EMBED_URL:-http://127.0.0.1:8000}
+      ARENA_SEARCH_PEER_PORT: ${ARENA_SEARCH_PEER_PORT:-9130}
+      ARENA_SEARCH_PEER_KEY_FILE: ${ARENA_SEARCH_PEER_KEY_FILE:-/app/data/search-peer.key}
+      ARENA_SEARCH_PEER_AREA: ${ARENA_SEARCH_PEER_AREA:-/app/data/area}
+    volumes:
+      - data:/app/data
+
+volumes:
+  data:

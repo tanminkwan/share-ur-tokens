@@ -1,0 +1,27 @@
+# test broker: a genesis (the public broker, the first recorder and god) to run peers against. For tests, not the real network
+# Runs on its own, wherever this peer lives. From this directory:
+#   cp .env.example .env     (then set the broker and the addresses; keys and secrets stay in .env)
+#   docker compose up -d
+# The image comes from deploy/build.sh (no build here). Network: host, so this peer is reached at ARENA_PUBLIC_HOST
+# (default: ARENA_HOST, 127.0.0.1). To serve others: ARENA_HOST=0.0.0.0 and ARENA_PUBLIC_HOST=<this server's address>.
+# The peer keeps connecting to its broker until it answers. Guide: dev/docker.md
+services:
+  genesis:
+    image: ${ARENA_IMAGE:-agent-arena:latest}
+    command: ["arena.genesis"]
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ARENA_HOST: ${ARENA_HOST:-127.0.0.1}
+      ARENA_PUBLIC_HOST: ${ARENA_PUBLIC_HOST:-}
+      ARENA_KEY_STORE: file
+      ARENA_RECORDER_REQUIRE_GROUP: ${ARENA_RECORDER_REQUIRE_GROUP:-true}
+      ARENA_GENESIS_DIR: ${ARENA_GENESIS_DIR:-/app/data/genesis}
+    volumes:
+      - data:/app/data
+
+volumes:
+  data:
