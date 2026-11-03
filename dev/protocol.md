@@ -274,6 +274,8 @@ content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
 - 모든 peer는 **A2A 1.0** 서버다. 에이전트 카드는 `/.well-known/agent-card.json`, JSON-RPC는 `/rpc`.
 - 메시지 하나 = **JSON 객체 하나를 글자로 담은 텍스트 부분 하나**. 답도 JSON 객체 하나를 담은 텍스트 메시지 하나다.
 - 모든 메시지에는 `op`(무엇을 하라는지)가 있다. 모르는 `op`에는 `{"ok": false, "error": "unknown op: ..."}`로 답한다.
+- **느린 답은 A2A task로**(사람의 속도): 받는 peer는 `ARENA_A2A_ANSWER_WAIT_SEC` 안에 끝나면 message 하나로 답하고, 아니면 task를 `working`으로 알린다. status message는 JSON `{"waiting": true, "note": "<무엇을 기다리나>"}`(예: `waiting for the owner (a person) to answer`)이다. 끝나면 task를 `completed`로 하고 status message에 JSON 답 하나를 싣는다. 부르는 peer는 `SendMessageConfiguration.return_immediately = true`로 보내고, task가 오면 `tasks/get`으로 끝까지 따라간다(간격 `ARENA_A2A_TASK_POLL_SEC`, 한도 `ARENA_A2A_TASK_WAIT_SEC`, 상대가 `human` peer면 `ARENA_A2A_HUMAN_WAIT_SEC`). 한도가 지나면 `{"ok": false, "pending": true, "task_id", "error": "still waiting: ..."}`, `failed`·`canceled`·`rejected`면 그 사유, `input-required`·`auth-required`면 `needs_input: true`로 돌려준다. `return_immediately` 없이 보내는 바깥 A2A client는 끝날 때까지 기다렸다가 같은 답을 받는다.
+- 상태를 `input-required`가 아니라 `working`으로 하는 까닭: 기다리는 사람은 받는 peer 자신의 소유자다. `input-required`는 받는 쪽이 부르는 쪽에게서 더 받아야 할 것이 있을 때 쓴다.
 
 ### 6.2 메시지 머리
 

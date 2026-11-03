@@ -547,6 +547,25 @@ flowchart LR
 ```
 
 - 사람과 사람의 소통도 각자의 peer가 `a2a`로 주고받는다. 그래서 사람의 message에도 signature, head, 원장 연결이 똑같이 붙는다.
+- 사람의 답은 늦을 수 있다. 받는 peer는 짧은 시간 안에 끝나지 않는 답을 **A2A task**(`working`, "waiting for the owner")로 알리고, 부르는 peer는 `tasks/get`으로 끝까지 따라간다(아래 그림). 상대가 human peer면 더 오래 기다리고, 한도가 지나면 거절이 아니라 pending으로 받는다.
+
+```mermaid
+sequenceDiagram
+    participant C as caller peer
+    participant H as human peer
+    participant P as 사람 (desk UI)
+    C->>H: engage (return_immediately)
+    H->>P: desk에 question
+    Note over H: ARENA_A2A_ANSWER_WAIT_SEC 안에 답이 없다
+    H-->>C: task working {"note": "waiting for the owner"}
+    loop ARENA_A2A_TASK_POLL_SEC마다
+        C->>H: tasks/get
+        H-->>C: working
+    end
+    P->>H: 예 (몇 분, 몇 시간 뒤)
+    C->>H: tasks/get
+    H-->>C: completed {ok, sig}
+```
 - 화면은 token이 있어야 열린다(주소의 `#token=`, 열자마자 주소창에서 지워짐).
 - UI 테스트는 Playwright headless Chromium으로 돌린다(`tests/ui/`, 8개).
 
@@ -822,10 +841,9 @@ sequenceDiagram
 flowchart LR
     subgraph NOW["되어 있음"]
         N1["1~5단계: 플랫폼 완성"]
-        N2["6단계: elements, service peer, connection kinds, codebook, schedule, peer spec, desk · chat UI, private envelope, branch link, peer keys, works registry"]
+        N2["6단계: elements, service peer, connection kinds, codebook, schedule, peer spec, desk · chat UI, private envelope, branch link, peer keys, works registry, slow answers as A2A tasks"]
     end
     subgraph NEXT["다음 후보"]
-        X1["A2A input-required<br/>(사람의 느린 답)"]
         X2["6-N broker group without a ledger"]
         X3["6-E notice subscription, matching, decision basis"]
     end

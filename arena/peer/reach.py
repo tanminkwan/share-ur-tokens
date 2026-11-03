@@ -8,9 +8,11 @@ from ..connections import pick
 
 
 class PeerReach:
-    def __init__(self, identity, brokers: dict, a2a_call: Callable[..., Awaitable[dict]], rest_of: Callable):
-        """rest_of() gives the REST binding to use (read when calling, so it may be replaced)"""
-        self.identity, self.brokers, self.a2a_call, self.rest_of = identity, brokers, a2a_call, rest_of
+    def __init__(self, identity, brokers: dict, a2a_call: Callable[..., Awaitable[dict]], rest_of: Callable,
+                 human_wait: Callable[[], float | None] = lambda: None):
+        """rest_of() gives the REST binding to use (read when calling, so it may be replaced); human_wait() how long to
+        follow a slow answer of a human peer (a person answers at a person's pace)"""
+        self.identity, self.brokers, self.a2a_call, self.rest_of, self.human_wait = identity, brokers, a2a_call, rest_of, human_wait
 
     async def profile_of(self, pub: str) -> dict | None:
         """the peer's posted profile on any of my brokers"""
@@ -34,6 +36,7 @@ class PeerReach:
         if c is None:
             return {"ok": False, "error": "no connection method this peer can use (a2a or api)"}
         if c["kind"] == "a2a":
-            return await self.a2a_call(c["url"], msg, timeout, group=group, event=event)
+            wait = self.human_wait() if (prof or {}).get("operator") == "human" else None
+            return await self.a2a_call(c["url"], msg, timeout, group=group, event=event, **({"wait": wait} if wait else {}))
         meta = {"group_id": group, "event_id": event} if (group or event) else None
         return await self.rest_of().call(c["url"], msg, timeout, meta)

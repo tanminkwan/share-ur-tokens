@@ -63,7 +63,7 @@ class Peer:
         self.trust = RecorderTrust(lambda: self.settings, self.recorder)  # proving recorders from the root of trust (P5-G6)
         self._trust = self.trust.cache
         self.rest = RestTransport(settings)
-        self.reach = PeerReach(identity, brokers, self.call, lambda: self.rest)  # reaching peers by their listed connections (P6-A8, Q1)
+        self.reach = PeerReach(identity, brokers, self.call, lambda: self.rest, lambda: self.settings.a2a_human_wait_sec)  # reaching peers by their listed connections (P6-A8, Q1)
         self._requests = DirectRequests(settings)
         self.events = EventRouter(settings, installer=AppInstaller(settings) if (settings.app_store_urls or settings.app_store_discover) else None)
         self.scheduler = Scheduler(settings)  # "이 시각에 이 일": timers kept in the home, handed to the app that set them
@@ -217,7 +217,8 @@ class Peer:
         return list(self.last_profile["labels"]) if self.last_profile else list(self.config.labels)
 
     def a2a_app(self):
-        return build_a2a_app(f"peer-{self.pen}", f"peer {self.pen}", self.config.url, self.skills(), self.handle)
+        return build_a2a_app(f"peer-{self.pen}", f"peer {self.pen}", self.config.url, self.skills(), self.handle,
+                             answer_wait=self.settings.a2a_answer_wait_sec)
 
     async def start(self) -> None:
         """start the event router (built-in) and every app that has a start"""
@@ -251,9 +252,11 @@ class Peer:
             self.log.emit("peer", self.pen, f"{msg.get('op')} 처리 실패({app.name}): {type(e).__name__}: {e}")
             return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
-    async def call(self, url: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None) -> dict:
-        """send to another peer; group/event (if this is about one) ride in the message head"""
-        meta = {"group_id": group, "event_id": event} if (group or event) else None
+    async def call(self, url: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None,
+                   wait: float | None = None) -> dict:
+        """send to another peer; group/event (if this is about one) ride in the message head; `wait` is how long to
+        follow a slow answer (an A2A task) before giving back pending"""
+        meta = {k: v for k, v in (("group_id", group), ("event_id", event), ("wait", wait)) if v} or None
         return await self.transport.call(url, msg, timeout, meta) if meta else await self.transport.call(url, msg, timeout)
 
     async def solicit(self, targets: list[str], request: dict) -> dict:
