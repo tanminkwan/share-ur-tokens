@@ -160,3 +160,19 @@ async def test_p6a3_a_recording_op_called_without_an_event_says_so_and_errors_re
     await settle(a)
     out = [x for x in asst(a).events[ev].transcript if "call_service 결과" in x][-1]
     assert "subject" in out and "None" not in out
+
+
+async def test_p6a9_a_role_contracted_by_hand_is_no_longer_shown_as_open(eco):
+    """try_personal run (2026-11-03): after the owner contracted a member by hand, the state line still said the member role
+    was open until the next ledger look"""
+    from tests.test_assistant import asst, ctx, open_event, settle
+    ev = await open_event(eco)
+    eco.a.llm.push("join_event")
+    await eco.a.events.watch_once(eco.a.ctx(eco.a.events))
+    await settle(eco.a, eco.host)
+    host = eco.host
+    st = asst(host).events[ev]
+    await asst(host).progress_entries(ctx(host), st)
+    assert "아직 계약 없는 역할: member" in asst(host).state_line(ctx(host), st)
+    r = await asst(host).owner_run(ctx(host), ev, "contract", {"role": "member", "peer": eco.a.pen})
+    assert r["ok"] and "아직 계약 없는 역할" not in asst(host).state_line(ctx(host), st)

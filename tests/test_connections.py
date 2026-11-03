@@ -97,3 +97,19 @@ async def test_p6a9_a_call_to_a_peer_without_the_op_names_the_peers_that_offer_i
     await settle(a)
     out = [x for x in asst(a).events[ev].transcript if "call_service 결과" in x][-1]
     assert "unknown op" in out and svc.pen in out
+
+
+async def test_p6q1_calls_between_peers_go_by_the_listed_connections(eco):
+    """P6-Q1: every call between peers (messages, role contracts, signature requests, direct requests) goes by the other
+    peer's listed connections, not by a raw address; an address given in a message is used only when no profile is known."""
+    ev = await joined(eco)
+    a = eco.a
+    a.config.connections = [{"kind": "a2a", "url": "mem://a-moved"}]  # a moves: the profile says where
+    eco.t.register("mem://a-moved", a.handle)
+    eco.t.handlers.pop(a.config.url)
+    await a.advertise()
+    host = eco.host
+    host.llm.push("contract", role="member", peer=a.pen)
+    await asst(host).feed(ctx(host), ev, "계약하라")
+    await settle(host, a)
+    assert ["member", a.identity.pub] in asst(host).events[ev].contracts  # reached at the address the profile lists

@@ -6,8 +6,8 @@ import dataclasses
 
 import pytest
 
-from arena.peer.desk.api import build_owner_api
-from arena.peer.desk.service import OwnerService
+from arena.bundled.desk_web.api import build_owner_api
+from arena.bundled.owner_service import OwnerService
 from arena.serve import serve_background
 from tests.test_assistant import RULES, asst, ctx, eco, settle  # noqa: F401  (eco is a fixture)
 from tests.test_desk import desk_peer, hosted
@@ -79,6 +79,7 @@ async def test_p6p8_a_human_peer_joins_an_event_by_hand(eco, site, browser):
     tool = page.get_by_test_id("tool-join_event")
     await tool.wait_for(timeout=WAIT)
     assert "manual" in await page.get_by_test_id("event-item").inner_text()
+    assert "참가 신청" in await tool.locator("summary").inner_text()  # the plain name, the code name beside it
     await tool.locator("summary").click()
     await page.get_by_test_id("run-join_event").click()
     await page.get_by_test_id("toast-ok").first.wait_for(timeout=WAIT)

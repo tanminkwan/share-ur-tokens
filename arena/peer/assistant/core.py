@@ -506,7 +506,16 @@ class EventAssistant:
                 st.roster.append(p["pub"])
                 st.peers.setdefault(p["pub"], p.get("url"))
 
-    NOTIFY_IN_AUTO = ("notice", "timer")  # the owner hears of these even while the LLM drives
+    NOTIFY_IN_AUTO = ("notice", "timer")
+    TITLE_MAX = 120
+
+    def _title_body(self, ctx, st, text: str) -> tuple[str, str]:
+        """a desk item's title and body: the first line is the title; the body is the rest, or the whole text only when
+        the first line had to be cut (never the title said twice)"""
+        first, _, rest = self.shorten(ctx, st, text).partition("\n")
+        if len(first) > self.TITLE_MAX:
+            return first[:self.TITLE_MAX] + "…", self.shorten(ctx, st, text)
+        return first, rest.strip()  # the owner hears of these even while the LLM drives
 
     def _notifier(self, ctx):
         return ctx.owner if isinstance(ctx.owner, Notifier) else None
@@ -522,10 +531,10 @@ class EventAssistant:
             st.transcript.append(self.shorten(ctx, st, f"[입력] {text}"))
             self.save(ctx, st)
             if note and kind != "owner":
-                note.notify(kind, self.shorten(ctx, st, text.split("\n", 1)[0])[:120], self.shorten(ctx, st, text), event_id)
+                note.notify(kind, *self._title_body(ctx, st, text), event_id)
             return
         if note and kind in self.NOTIFY_IN_AUTO:
-            note.notify(kind, self.shorten(ctx, st, text.split("\n", 1)[0])[:120], self.shorten(ctx, st, text), event_id)
+            note.notify(kind, *self._title_body(ctx, st, text), event_id)
         await self.learn_keys(ctx, st, text)
         st.inbox.append(text)
         st.last_input_at = ctx.clock()
@@ -551,6 +560,8 @@ class EventAssistant:
         assigned = (f"배정(원장): {'; '.join(f'{k}=' + '·'.join(h(p) for p in v) for k, v in st.assignments.items())} / "
                     f"내 배정: {', '.join(mine) or '없음'} / ") if st.assignments else ""
         sealed = (" / ".join(st.sealed_view) + " / ") if st.sealed_view else ""
+        held = {c[0] for c in st.contracts}
+        open_roles = {r: v for r, v in st.role_offers.items() if r not in held}  # a role contracted since the last look is not open
         now = f"지금 시각: {fmt_time(ctx.clock())} / "
         plan = ("일정(원장): " + "; ".join(f"{fmt_time(x['at'])} {x['code']}{' ' + x['subject'] if x.get('subject') else ''}" for x in st.schedule) + " / "
                 if st.schedule else "")
@@ -564,7 +575,7 @@ class EventAssistant:
                  + ((f" / 참가 신청자(코드 확인) {len(st.applicants)}명: {', '.join(h(p) for p in st.applicants) or '없음'}"
                      f" / 아직 계약하지 않은 신청자: {', '.join(h(p) for p in st.applicants if p not in {c[1] for c in st.contracts}) or '없음'}"
                      + (" / 아직 계약 없는 역할: " + "; ".join(f"{r}(프로필에 내건 peer: {', '.join(h(p) for p in v) or '없음'})"
-                                                         for r, v in st.role_offers.items()) if st.role_offers else "")
+                                                         for r, v in open_roles.items()) if open_roles else "")
                      + " / 나는 개최자다(참가 신청은 참가자가 하는 일이고, 개최자는 신청자와 계약한다)") if st.role == "host" else ""))
         return state
 
@@ -631,10 +642,20 @@ class EventAssistant:
     READ_ONLY = ("note", "event_progress", "verify", "my_reveal", "check_reveal", "contact", "submissions", "verdicts", "ask_owner")
     DRIVES = ("auto", "suggest", "manual")
 
-    def initial_drive(self, ctx) -> str:
+    def allowed_drives(self, ctx) -> tuple:
+        """no LLM: only the owner drives. A human peer (dev/peer-spec.md 1.2): the person drives; an LLM plugin may only
+        suggest, never act on its own"""
         if isinstance(ctx.llm, NoLLM):
-            return "manual"  # no LLM: the owner drives
-        return self.s.peer_default_drive if self.s.peer_default_drive in self.DRIVES else "auto"
+            return ("manual",)
+        if ctx.operator == "human":
+            return ("manual", "suggest")
+        return self.DRIVES
+
+    def initial_drive(self, ctx) -> str:
+        allowed = self.allowed_drives(ctx)
+        if self.s.peer_default_drive in allowed:
+            return self.s.peer_default_drive
+        return allowed[0]
 
     def set_drive(self, ctx, event_id: str, drive: str) -> dict:
         st = self.events.get(event_id)
@@ -642,8 +663,9 @@ class EventAssistant:
             return {"ok": False, "error": "모르는 이벤트"}
         if drive not in self.DRIVES:
             return {"ok": False, "error": f"운전석은 {', '.join(self.DRIVES)} 가운데 하나"}
-        if drive != "manual" and isinstance(ctx.llm, NoLLM):
-            return {"ok": False, "error": "LLM이 없는 peer는 수동(manual)만 된다"}
+        if drive not in self.allowed_drives(ctx):
+            why = "LLM이 없는 peer는 수동(manual)만 된다" if isinstance(ctx.llm, NoLLM) else "사람 peer는 수동(manual)이나 제안(suggest)만 된다"
+            return {"ok": False, "error": why}
         st.drive = drive
         self.save(ctx, st)
         return {"ok": True, "drive": drive}
@@ -655,10 +677,23 @@ class EventAssistant:
         return await note.suggest(f"비서가 '{name}'을(를) 하려 합니다", self.shorten(ctx, st, f"{thought}\n인자: {json.dumps(args, ensure_ascii=False)}"),
                                   name, args, st.event_id)
 
+    HIDDEN_FROM_OWNER = ("wait", "ask_owner")  # the owner does not wait for themselves, nor ask themselves
+
     def tools_view(self, st) -> list[dict]:
-        """the tools the owner may run on this event, with their argument schemas (the screen draws forms from them)"""
-        return [{"name": n, "description": self.tools[n].description, "args": self.tools[n].args or {"type": "object", "properties": {}}}
-                for n in self._tools_for(st) if n != "wait"]
+        """the tools the owner may run on this event, in plain names, with argument schemas carrying plain titles (the screen
+        draws forms from them; the code names stay for the record)"""
+        from .tools import ARG_LABELS, LABELS
+        out = []
+        for n in self._tools_for(st):
+            if n in self.HIDDEN_FROM_OWNER:
+                continue
+            t = self.tools[n]
+            args = json.loads(json.dumps(t.args or {"type": "object", "properties": {}}))
+            for k, v in args.get("properties", {}).items():
+                v.setdefault("title", ARG_LABELS.get(k, k))
+            out.append({"name": n, "label": t.label or LABELS.get(n, n), "help": re.sub(r"^\{[^}]*\}:\s*", "", t.description),
+                        "description": t.description, "args": args})
+        return out
 
     async def owner_run(self, ctx, event_id: str, name: str, args: dict) -> dict:
         """the owner runs a tool by hand (any drive): the same code path as the LLM's, so the same checks hold"""
@@ -723,12 +758,15 @@ class EventAssistant:
             return False
         return (not head.group_id or head.group_id == st.group_id) and (not head.event_id or head.event_id == st.event_id)
 
-    async def post(self, ctx, st, url, op, body: dict) -> dict:
+    async def post(self, ctx, st, url, op, body: dict, pub: str | None = None) -> dict:
+        """a signed body to another peer: by its listed connections when I know who it is (P6-Q1), else at the address"""
         msg = self.sign_body(ctx, {"op": op, "event_id": st.event_id, "group_id": st.group_id, "url": ctx.url, **body})
+        if pub:
+            return await ctx.call_peer(pub, msg, group=st.group_id, event=st.event_id, url=url)
         return await ctx.call(url, msg, group=st.group_id, event=st.event_id)
 
-    async def send(self, ctx, st, to_url, text, data) -> dict:
-        return await self.post(ctx, st, to_url, "event_message", {"text": text, "data": data})
+    async def send(self, ctx, st, to_url, text, data, pub: str | None = None) -> dict:
+        return await self.post(ctx, st, to_url, "event_message", {"text": text, "data": data}, pub=pub)
 
     async def _op_message(self, ctx, msg, head: MessageHead):
         who, st = self._check(ctx, msg), self.events.get(msg.get("event_id"))

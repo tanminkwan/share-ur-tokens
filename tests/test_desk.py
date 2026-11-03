@@ -67,8 +67,15 @@ async def test_p6p4_manual_the_owner_drives_with_the_same_tools(eco):
     assert st.drive == "manual"
     notice = [it for it in desk.list() if it.kind == "notice"]
     assert notice and notice[0].event_id == ev  # the notice came to the desk, no LLM ran
-    names = [t["name"] for t in asst(human).tools_view(st)]
+    view = asst(human).tools_view(st)
+    names = [t["name"] for t in view]
     assert "join_event" in names and "wait" not in names and "contract" not in names  # host-only tools are not offered
+    assert "ask_owner" not in names  # the owner does not ask themselves
+    join = next(t for t in view if t["name"] == "join_event")
+    assert join["label"] == "참가 신청" and not join["help"].startswith("{")
+    commit = next(t for t in view if t["name"] == "commit")
+    assert commit["args"]["properties"]["label"]["title"] == "이름표"
+    assert notice[0].body == "" and notice[0].title.startswith("[새 공지]")  # the title is not said twice
     r = await asst(human).owner_run(ctx(human), ev, "join_event", {})
     assert r["ok"]
     await settle(eco.host)
