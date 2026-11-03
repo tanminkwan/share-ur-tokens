@@ -105,3 +105,19 @@ async def test_runner_processes_on_a_real_genesis(tmp_path, procs):
     code, bad, _ = keys("rotate", "--recorder", rec_url, "--backup-file", str(tmp_path / "backup.json"))
     assert code == 1 and "already rotated" in bad["error"]  # the first backup's promise is used up
 
+    # works registry: the author registers a text, a reader checks a copy and finds it by its hash (CP-9, CP-10)
+    (tmp_path / "poem.txt").write_bytes("시 한 편\r\n".encode("utf-8"))
+    (tmp_path / "copy.txt").write_bytes("시 한 편\n".encode("utf-8"))
+
+    def content(*args):
+        full = dict(os.environ, PYTHONPATH=str(ROOT), **env)
+        r = subprocess.run([sys.executable, "-m", "arena.content", *args], env=full, cwd=tmp_path, capture_output=True, text=True, timeout=60)
+        return r.returncode, json.loads(r.stdout or "{}"), r.stdout + r.stderr
+    code, reg, out = content("register", "--home", str(tmp_path / "author"), "--recorder", rec_url, "--file", str(tmp_path / "poem.txt"),
+                             "--out", str(tmp_path / "poem-ref.json"))
+    assert code == 0 and reg["reference"]["ledger_id"] == (await R.trust())["ledger_id"], out
+    code, chk, out = content("check", "--file", str(tmp_path / "copy.txt"), "--ref", str(tmp_path / "poem-ref.json"))
+    assert code == 0 and chk["steps"][0]["ok"] and chk["steps"][1]["ok"], out
+    code, found, out = content("find", "--file", str(tmp_path / "copy.txt"), "--recorder", rec_url)
+    assert code == 0 and found["entry"] == reg["reference"]["entry"], out
+

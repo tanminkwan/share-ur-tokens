@@ -1,6 +1,6 @@
 # 에이전트 아레나 규약 (peer를 다른 언어로 만들기 위한 문서)
 
-> 판 4 · 2026-11-03(판 3에 가지 체인의 갈라진 지점과 1번 기록 `parent_link`(CP-1·2), peer 키 이어받기 `key_commit`·`peer_rotate`와 `GET /key/{pub}`, 암호화한 키 백업의 모양(2.6절)을 더함, 6-K. 판 3 · 2026-11-03: 판 2에 공개 본체와 비공개 봉투, 공개 기록 흐름을 더함. 판 2 · 2026-11-02, 판 1에 6단계를 더함: 이벤트의 요소 블록과 요소별 원장 규칙, 연결 방식과 api 묶음, 서비스 영수증. 판 1: 진짜 원장 증명). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
+> 판 4 · 2026-11-03(판 3에 가지 체인의 갈라진 지점과 1번 기록 `parent_link`(CP-1·2), peer 키 이어받기 `key_commit`·`peer_rotate`와 `GET /key/{pub}`, 암호화한 키 백업의 모양(2.6절)을 더함, 6-K. 원장 밖 content의 `ref` block, content form, `GET /content/{hash}`, 책에 싣는 ledger reference(4.7절)를 더함, CP-4·9·10. 판 3 · 2026-11-03: 판 2에 공개 본체와 비공개 봉투, 공개 기록 흐름을 더함. 판 2 · 2026-11-02, 판 1에 6단계를 더함: 이벤트의 요소 블록과 요소별 원장 규칙, 연결 방식과 api 묶음, 서비스 영수증. 판 1: 진짜 원장 증명). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
 
 이 문서는 에이전트 아레나에 **Python이 아닌 다른 구현**으로 peer 에이전트, broker, recorder를 만들어 참여하려는 개발자를 위한 것이다. 앱(peer 안에 꽂는 플러그인)을 만드는 규약은 [app-guide.md](app-guide.md)에 따로 있다.
 
@@ -109,7 +109,8 @@ peer의 비밀키 백업은 기기 안에서 소유자의 암호문구로 잠근
 | 요청 | 서명 요청 | 하는 일 |
 |---|---|---|
 | `POST /entries` `{"type", "payload", "sigs"}` | 아니요(항목 안의 서명으로 확인) | 원장 항목 제출. 성공 `{"ok": true, "seq", "hash", "seal"}`, 거절 `{"ok": false, "error"}` |
-| `GET /entries/{hash}` | 아니요 | 항목 하나의 공개 정보: `exists`, `type`, `seal_ok`, `event_id`, `group_id`, `seq`, `ts`, `ledger_id`(어느 원장의 몇 번째 기록이고 언제 기록되었나)와 종류별 공개 칸 |
+| `GET /entries/{hash}` | 아니요 | 항목 하나의 공개 정보: `exists`, `type`, `seal_ok`, `sealed_by`(봉인한 기록자 키), `event_id`, `group_id`, `seq`, `ts`, `ledger_id`(어느 원장의 몇 번째 기록이고 언제 기록되었나)와 종류별 공개 칸(`publish`면 `form`도) |
+| `GET /content/{content_hash}` | 아니요 | 본문 hash로 등록 기록 찾기(CP-10): `found`, `entry`와 그 항목의 공개 정보. 같은 hash는 한 번만 등록되므로 결과는 하나다(`ARENA_RECORDER_PUBLIC_CONTENT`) |
 | `GET /events/{event_id}` | 아니요 | 한 이벤트의 항목들을 순서대로, 공개 정보만 |
 | `GET /track/{pub}` | 아니요 | 공개키 하나의 실적 집계(개수만) |
 | `GET /chain` | 예(허용된 키만) | 원장 전체. 시도는 모두 접근 기록에 남는다 |
@@ -136,7 +137,7 @@ peer의 비밀키 백업은 기기 안에서 소유자의 암호문구로 잠근
 
 | 종류 | 반드시 봉투에 넣는 칸 |
 |---|---|
-| `share` | `provider`, `consumer`, `content_hash`, `terms` |
+| `share` | `provider`, `consumer`, `content_hash`, `terms`, `ref` |
 | `contract` | 그 이벤트 정책의 `hidden_roles`에 든 역할이면 `contractor` |
 
 원장 규칙은 기록자 안에서 본체와 봉투를 합친 모습으로 돈다. 받지 않는 것: 본체의 `private`가 비공개 칸의 해시와 다름, 본체가 `private`를 적었는데 비공개 칸이 없음, 한 칸이 본체와 봉투에 함께 있음, 반드시 봉투에 넣을 칸이 본체에 있음. 함께 서명하는 쪽(예: `engage`의 계약자)은 받은 전체 내용과 서명할 본체를 같이 받아, 본체가 그 전체를 해시로 묶는지 확인한 뒤 본체에 서명한다.
@@ -168,9 +169,9 @@ peer의 비밀키 백업은 기기 안에서 소유자의 암호문구로 잠근
 | `group` | `founder` | `group_id`, `founder`, `closed`, `brokers` |
 | `event` | `issuer`와 `approvers` 전원 | `event_id`, `issuer`, `kind`, `policy`, `approvers`, `rules_hash`, `mode`, `apps`, 선택 `elements`(4.6절), 선택 `schedule`(`[{at, code, subject?, note?}]`: 일정. `at`은 초 단위 시각, `code`는 등록된 시각 코드 `start`·`session`·`deadline`·`end`, 항목 수 상한 `ARENA_EVENT_SCHEDULE_MAX`), 선택 `codebook`(`{entry, publisher, version}`: 따르는 코드표 판. 원장이 그 판 기록과 대조하고, 기본 요소가 그 판의 코드인지, 이 기록자가 그 판의 원장 코드를 모두 구현했는지 본다) |
 | `contract` | `issuer`, `contractor` | `event_id`, `role`, `issuer`, `contractor`, `nonce`, `rules_hash` |
-| `publish` | `author` | `author`, `content_hash`, 선택 `event_id`, 선택 `label`, 선택 `purpose`(`authorship` · `commit`) |
+| `publish` | `author` | `author`, `content_hash`, 선택 `event_id`, 선택 `label`, 선택 `purpose`(`authorship` · `commit`), 선택 `form`(content form, 4.7절), 선택 `ref`(원장 밖 위치, 4.7절. 숨기려면 봉투에) |
 | `reveal` | `author` | `author`, `label`, `value`, `salt`, `commit`(그 작성자의 `publish` 항목 해시), `event_id` |
-| `share` | `provider`, `consumer` | `provider`, `consumer`, `content_hash`, `nonce`, 선택 `event_id`, 선택 `purpose`(`delivery` · `submission` · `evaluation`), 선택 `terms`(자유 영역: 조건 설명) |
+| `share` | `provider`, `consumer` | `provider`, `consumer`, `content_hash`, `nonce`, 선택 `event_id`, 선택 `purpose`(`delivery` · `submission` · `evaluation`), 선택 `terms`(자유 영역: 조건 설명), 선택 `ref`(넘긴 자료를 받아 볼 곳, 4.7절. 언제나 봉투에) |
 | `feedback` | `evaluator` | `evaluator`, `content_hash`, `verdict`, 선택 `event_id` |
 | `assign` | `issuer` | `event_id`, `issuer`, `subjects`(`{주제: [공개키, ...]}`) |
 | `attest` | `parties` 전원 | 선택 `event_id`, `kind`, `subject`, `value`, `parties`, `nonce` |
@@ -209,6 +210,44 @@ peer의 비밀키 백업은 기기 안에서 소유자의 암호문구로 잠근
 | `sealed`(봉인 묶음) | `{}` | 배정된 주제 `S`의 라벨(`S` 또는 `S-<숫자>`): 배정된 당사자만 `publish`, 당사자 전원이 등록한 뒤에만 `reveal`, 공개가 있으면 새 등록 없음. 이 요소를 켠 이벤트에서는 배정된 주제에 속하지 않는 라벨의 `reveal`을 받지 않는다 |
 
 요소의 op(받는 peer의 내장 앱): `intake.submit`(`event_id`, `content`, `share`, `sig`(제출자의 `share` 서명), `recorder_url`; 받는 peer가 검사 뒤 함께 서명해 기록하고 기록 결과를 돌려줌), `evaluation.request`(`event_id`, `recorder_url`, `items`: `[{share, sig(개최자의 share 서명), content}]`; 답은 `receipts`(내용 해시 → 평가자의 share 서명)와 `verdicts`(`[{payload, sig, comment}]`)).
+
+### 4.7 원장 밖 content: `ref` block, content form, ledger reference (CP-4, 9, 10)
+
+원장에는 content 자체가 아니라 hash만 둔다. 어디에 있는지(`ref`)와 어떻게 bytes로 만들었는지(`form`)는 등록된 code로 적는다. 정책: `dev/chain-policy.md` 6절. 원본: `arena/ledger/refs.py`, `arena/content/`.
+
+**content form**(`publish.form`): hash하기 전에 본문을 bytes로 만드는 방식.
+
+| form | 만드는 법 |
+|---|---|
+| `utf8-nfc-lf` | UTF-8로 읽고(UTF-8이 아니면 이 form이 아님), 앞의 BOM(U+FEFF)을 빼고, CRLF와 CR을 LF로, Unicode NFC로 정규화해 UTF-8로. 같은 글을 다른 기계에서 저장해 줄바꿈이나 한글 조합 방식(NFD)이 달라도 hash가 같다 |
+| `bytes` | 파일의 bytes 그대로 |
+
+content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
+
+**`ref` block**(`publish`, `share`의 선택 field):
+
+```json
+{"content_hash": "<그 항목의 content_hash와 같아야 함>",
+ "storage": [{"kind": "https", "location": "https://example.com/novel.txt"}],
+ "size": 1234, "media_type": "text/plain",
+ "proof": {"method": "ed25519", "signer": "<공개키>", "sig": "<서명>", "how": "dev/protocol.md 4.7"}}
+```
+
+- `storage`: 1~`ARENA_REF_STORAGE_MAX`곳. `kind`는 등록된 storage kind(`https`, `peer`, `ipfs`, `git`, `place`: 실물 소재 설명), `location`은 `ARENA_REF_LOCATION_MAX`자 이하.
+- `proof.method`: 등록된 proof method. `sha256`은 서명 없이 받는 쪽이 hash만 대조한다. `ed25519`는 `signer`가 정규 JSON `{"content_hash", "storage"}`에 서명한다.
+- 원장은 shape, 등록된 이름, 서명이 있으면 서명을 확인한다. content를 가져오지는 않는다(받는 쪽이 받아서 hash로 확인).
+- `share`의 `ref`는 언제나 비공개 봉투에 든다. `publish`의 `ref`는 쓰는 쪽이 공개 본체와 봉투 가운데 고른다. 공개 확인(`GET /entries`)은 `ref`를 보이지 않는다(위치 공개 범위는 CP-5, 미정).
+
+**ledger reference**(책의 colophon에 싣는 원장 정보, 본문 밖에 둔다):
+
+```json
+{"format": "arena-ledger-ref", "version": 1, "ledger_id": "...", "entry": "<publish 항목 hash>", "seq": 12, "ts": 1761955200.0,
+ "content_hash": "...", "form": "utf8-nfc-lf", "author": "<작가 공개키>", "recorder_url": "...", "did": "<선택>"}
+```
+
+한 줄 주소(QR용): `arena-ref:<ledger_id>/<entry>?content=<hash>&form=<form>&author=<공개키>&recorder=<URL 인코딩한 주소>[&did=...]`.
+
+**읽는 쪽이 확인하는 순서**: ① 사본을 `form`으로 bytes로 만들어 hash가 `content_hash`와 같은가 ② `GET /entries/{entry}`: `publish`이고, 봉인이 맞고, content hash·작가·`ledger_id`가 같은가 ③ 뿌리 값이 있으면 4.5절로 원장을 증명하고, 그 `seq`에서 유효한 기록자 키가 `sealed_by`와 같은가. reference 없이 사본만 있으면 `GET /content/{hash}`로 등록 기록을 찾는다.
 
 ## 5. broker
 

@@ -28,7 +28,7 @@ flowchart LR
 | `name` | 코드표 이름(기본: `agent-arena`) | 비어 있지 않음 |
 | `version` | 판 번호 `x.y` | 모양. 같은 낸 이·같은 이름·같은 번호는 한 번만 |
 | `content_hash` | 코드표 문서(정규 JSON)의 해시. 문서는 낸 peer가 내준다 | 64자 |
-| `codes` | 이 판의 코드 목록: `entry_types`, `purposes`, `elements`, `time_codes`, `connections` | 모양 |
+| `codes` | 이 판의 코드 목록: `entry_types`, `purposes`, `elements`, `time_codes`, `connections`, `storage_kinds`, `proof_methods`, `content_forms`(원장 밖 content의 위치·증명 방법·본문을 bytes로 만드는 방식, CP-4·9) | 모양 |
 | `supersedes` | 이어받은 앞 판의 기록 해시(선택) | 이 원장의 판 기록일 것. 같은 낸 이·같은 이름이면 번호가 더 커야 함 |
 
 판 번호의 뜻(권장): `y`는 코드를 더할 때 올린다(옛 기록과 그대로 맞음). `x`는 코드를 "더 이상 쓰지 않음"으로 표시하는 등 호환이 깨질 때 올린다. 코드의 뜻은 바꾸지 않는다. 뜻이 달라지면 새 이름을 쓴다. 옛 기록은 영원히 옛 뜻으로 읽혀야 하기 때문이다. 다른 peer가 어떤 판을 이어받아 자기 판을 내도 된다(갈래). 어느 쪽이 살아남을지는 따르는 수가 정한다.

@@ -38,6 +38,9 @@ def build_recorder_app(svc: RecorderService) -> Starlette:
     async def trust(_):
         return reply(svc.trust(), fail_status=404)
 
+    async def content(r: Request):
+        return reply(svc.content(r.path_params["content_hash"]), fail_status=404)
+
     async def key(r: Request):
         return reply(svc.key(r.path_params["pub"]), fail_status=404)
 
@@ -72,6 +75,7 @@ def build_recorder_app(svc: RecorderService) -> Starlette:
         Route("/trust", guarded(trust), methods=["GET"]),
         Route("/links/{ledger_id}", guarded(link), methods=["GET"]),
         Route("/key/{pub}", guarded(key), methods=["GET"]),
+        Route("/content/{content_hash}", guarded(content), methods=["GET"]),
         Route("/codes", guarded(codes), methods=["GET"]),
         Route("/log", guarded(log), methods=["GET"]),
         Route("/codebooks", guarded(codebooks), methods=["GET"]),

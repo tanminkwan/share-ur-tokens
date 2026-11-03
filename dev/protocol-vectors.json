@@ -121,5 +121,12 @@
     "_note": "P6-K3: the promised next key = sha256 of the public key hex text (UTF-8)",
     "pub": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
     "hash": "366283b1b946001eb03b73c3fcd3e6956d39427aef0a515e31624a6529c6b970"
+  },
+  "content_form": {
+    "_note": "CP-9 utf8-nfc-lf: decode UTF-8, drop a leading BOM, CRLF and CR to LF, Unicode NFC, encode UTF-8; the work's hash is SHA-256 of these bytes",
+    "form": "utf8-nfc-lf",
+    "input_hex": "efbbbfe18492e185a1e186abe18480e185b3e186af20e1848ee185a5e186ba20e1848ce185aee186af0d0ae18483e185aee186afe1848de185a220e1848ce185aee186af0de18489e185a6e186bae1848de185a220e1848ce185aee186af0a",
+    "bytes_hex": "ed959ceab88020ecb2ab20eca4840aeb9198eca7b820eca4840aec858beca7b820eca4840a",
+    "hash": "b88bcad0d9bbf58135c3900cf04b38752393a2cf4f223090e0e3084c01931549"
   }
 }
