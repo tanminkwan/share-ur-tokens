@@ -3,7 +3,7 @@ argument schema, host-only flag and an async run(assistant, ctx, state, **args).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Protocol
 
 from ...ledger import split_payload
 from ...crypto import h
@@ -18,12 +18,31 @@ S = {"type": "string"}
 PARTY = _obj(pub=S, url=S)
 
 
+class ToolHost(Protocol):
+    """everything a tool may use of the assistant that runs it (SOLID: tools depend on this, not on the whole assistant)"""
+    group: str
+    SETTLED_NOTE: str
+
+    def handle(self, ctx, st, pub: str) -> str: ...
+    async def resolve_peer(self, ctx, st, ref: str, need_url: bool = True) -> tuple: ...
+    async def post(self, ctx, st, url, op, body: dict, pub: str | None = None) -> dict: ...
+    async def send(self, ctx, st, to_url, text, data, pub: str | None = None) -> dict: ...
+    async def progress_entries(self, ctx, st) -> list: ...
+    async def progress_lines(self, ctx, st) -> list: ...
+    async def attest_precheck(self, ctx, st, kind, subject, pubs) -> str | None: ...
+    async def offers_role(self, ctx, pub: str, role: str) -> bool: ...
+    async def offering_op(self, ctx, op: str) -> list: ...
+    def reveal_records(self, obj) -> list: ...
+    async def fill_reveals(self, ctx, st, obj) -> tuple: ...
+    async def verify_reveals(self, ctx, st, obj) -> list: ...
+
+
 @dataclass(frozen=True)
 class Tool:
     name: str
     description: str
     args: dict | None                       # JSON schema of the arguments, None = no arguments
-    run: Callable[..., Awaitable[dict]]     # run(assistant, ctx, state, **args)
+    run: Callable[..., Awaitable[dict]]     # run(host: ToolHost, ctx, state, **args)
     host_only: bool = False
     participant_only: bool = False
     after_close: bool = False               # still usable once the event is closed
