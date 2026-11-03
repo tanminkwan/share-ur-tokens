@@ -14,7 +14,10 @@ from ..llm import NoLLM, build_llm
 from ..peer.area import LocalFolderArea
 from ..peer.node import Peer, PeerConfig
 from ..peer.owner import NoOwner
+from ..rest import build_rest_app
 from ..serve import serve_background
+
+OPENABLE = ("a2a", "api")
 
 
 def parse_groups(items: list[str]) -> dict[str, list[str]]:
@@ -58,3 +61,29 @@ async def run_peer(peer: Peer, port: int) -> None:
     while True:  # keep the profile alive before it expires
         await asyncio.sleep(max(1.0, peer.settings.profile_ttl_sec / 2))
         await peer.advertise()
+
+
+def open_connections(peer: Peer, kinds: list[str], setting: str, api_url: str, ops: list[str]) -> None:
+    """the connection methods an API-serving peer opens (a2a, api, or both), listed in its profile"""
+    if not kinds or any(k not in OPENABLE for k in kinds):
+        raise ConfigError(f"{setting} must be a2a, api or both, not {kinds}")
+    peer.config.connections = ([{"kind": "a2a", "url": peer.config.url}] if "a2a" in kinds else []) + \
+        ([{"kind": "api", "url": api_url, "ops": sorted(ops)}] if "api" in kinds else [])
+
+
+async def run_with_connections(peer: Peer, port: int, api_port: int, label: str) -> None:
+    """serve the connections the profile lists, post the profile and keep it alive"""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    s = peer.settings
+    kinds = {c["kind"] for c in peer.config.connections}
+    if "a2a" in kinds:
+        await serve_background(peer.a2a_app(), s.host, port)
+    if "api" in kinds:
+        await serve_background(build_rest_app(peer.handle), s.host, api_port)
+    peer.log.emit("peer", peer.pen, f"{label} 연결 방식: {', '.join(sorted(kinds))} (op: {', '.join(peer.skills())})")
+    await peer.advertise()
+    await peer.start()
+    while True:  # keep the profile alive before it expires
+        await asyncio.sleep(max(1.0, s.profile_ttl_sec / 2))
+        await peer.advertise()
+

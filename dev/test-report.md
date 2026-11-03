@@ -6,12 +6,12 @@
 
 | 항목 | 값 |
 |---|---|
-| 실제 LLM 없이 도는 테스트 | **434개 모두 통과**(약 31초) |
-| 커버리지(줄 + 분기, 테스트가 띄운 하위 프로세스 포함) | **94.2%**(문장 7,400 가운데 7,074, 분기 2,066 가운데 1,839) |
+| 실제 LLM 없이 도는 테스트 | **442개 모두 통과**(약 31초) |
+| 커버리지(줄 + 분기, 테스트가 띄운 하위 프로세스 포함) | **94.2%**(문장 7,609 가운데 7,276, 분기 2,136 가운데 1,903) |
 | 기준선(이보다 낮아지면 실패) | **92%**(`.coveragerc`의 `fail_under`) |
 | 실제 LLM 테스트(`tests/live`, 따로 돌림) | 11개. 이번에는 돌리지 않았다(LLM 사용을 줄이기로 한 결정, 마지막 실행 결과는 `dev/phase6/test-results.md`) |
 
-이번 작업으로 커버리지는 **88.0% → 93.0%**가 되었다. 하위 프로세스까지 재도록 설정한 것만으로 89.7%가 되었고, 테스트 30개를 더해 93.0%가 되었다. 그 뒤 SOLID 점검 3번 묶음에서 테스트 4개를 더해 **93.3%**가 되었다(5-1절). 가지 체인 연결 마무리(CP-1·2)에 테스트 6개를 더했고 93.3%를 지켰다(5-2절). 개인 키(6-K)에 테스트 12개를 더해 93.4%가 되었다(5-3절). 원장 밖 content와 작품 등록(CP-4·9·10)에 테스트 8개를 더해 93.5%가 되었다(5-4절). 느린 답을 A2A task로(사람의 속도) 하는 데 테스트 5개를 더해 93.7%가 되었다(5-5절). task 보관과 pending 다시 보기에 테스트 6개를 더해 94.2%가 되었다(5-6절).
+이번 작업으로 커버리지는 **88.0% → 93.0%**가 되었다. 하위 프로세스까지 재도록 설정한 것만으로 89.7%가 되었고, 테스트 30개를 더해 93.0%가 되었다. 그 뒤 SOLID 점검 3번 묶음에서 테스트 4개를 더해 **93.3%**가 되었다(5-1절). 가지 체인 연결 마무리(CP-1·2)에 테스트 6개를 더했고 93.3%를 지켰다(5-2절). 개인 키(6-K)에 테스트 12개를 더해 93.4%가 되었다(5-3절). 원장 밖 content와 작품 등록(CP-4·9·10)에 테스트 8개를 더해 93.5%가 되었다(5-4절). 느린 답을 A2A task로(사람의 속도) 하는 데 테스트 5개를 더해 93.7%가 되었다(5-5절). task 보관과 pending 다시 보기에 테스트 6개를 더해 94.2%가 되었다(5-6절). 원장 크기 상한과 link peer에 테스트 8개를 더했고 94.2%를 지켰다(5-7절).
 
 ## 2. 돌리는 법
 
@@ -135,6 +135,21 @@ scripts/coverage.sh                                     # 같은 테스트 + 커
 | finisher | 도구별 마무리는 한 번만 등록 |
 
 이 작업에서 `arena/peer/assistant/core.py`에 똑같이 두 번 들어가 있던 메서드 세 개(`host_event`, `on_event`, `on_timer`, 앞선 refactor의 실수, 동작은 같았음)를 하나로 정리했다.
+
+## 5-7. 원장 크기 상한과 link peer (8개)
+
+| 테스트 | 확인하는 것 |
+|---|---|
+| free-form field 상한 (`tests/test_ledger_sizes.py`) | 기본값 256·4096 bytes, 작은 free-form은 통과, 넘으면 거절하고 field 이름과 "원장 밖에"를 알림, 종류가 아는 field는 free-form이 아님 |
+| entry 상한 | 큰 `ref`는 entry 상한으로 거절, field를 선언하지 않은 앱의 종류는 entry 상한만 받음 |
+| 모든 기본 종류가 field를 선언 | 등록된 event column도 아는 field로 셈 |
+| link peer의 버전 (`tests/test_link_peer.py`) | ver는 마지막 + 1, 남이 서명한 것·바뀐 서명·owner/name/content hash 변경·link 안의 link·빈 목록·모르는 kind·틀린 id 거절, 이력, `link.info`, 프로필 |
+| key rotation 뒤 | 물러난 처음 key는 link를 못 바꾸고 지금 key는 바꿈, 읽는 쪽도 기록자를 물어 확인(묻지 않으면 처음 key만 인정) |
+| 작품과 link | 원장 `ref`에는 link만(URL 없음), colophon과 주소에 link, resolve·relink 뒤 새 위치, **원장은 그대로**, 다른 작가 거절, link peer가 위치를 바꿔치기하면 서명으로 잡힘 |
+| 원장의 link 위치 확인 | `<공개키>/<id>` 모양, `via` 모양 |
+| 명령 | register `--link-peer`, relink(참조 파일), resolve(참조 파일, id와 owner), link peer 주소가 없을 때 |
+
+실제 프로세스 테스트(`tests/test_runner_processes.py`)에 link peer 프로세스(api만)와 `python -m arena.content register --link-peer`·`relink`·`resolve`를 더했다. service peer와 link peer가 연결 방식(a2a, api)을 여는 부분은 `arena/peers/common.py`의 `open_connections`·`run_with_connections`로 합쳤다.
 
 ## 6. 아직 덜 덮인 곳과 그 이유
 

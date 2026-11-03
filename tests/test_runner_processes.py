@@ -28,7 +28,7 @@ def wait_file(path, timeout=20):
 
 
 async def test_runner_processes_on_a_real_genesis(tmp_path, procs):
-    ports = {k: free_port() for k in ("broker", "rec", "api", "god", "me", "desk", "svc", "svc_api", "fnd", "keys")}
+    ports = {k: free_port() for k in ("broker", "rec", "api", "god", "me", "desk", "svc", "svc_api", "fnd", "keys", "link", "link_api")}
     env = make_env(tmp_path, ARENA_GENESIS_DIR=str(tmp_path / "genesis"), ARENA_GENESIS_BROKER_PORT=ports["broker"],
                    ARENA_GENESIS_RECORDER_PORT=ports["rec"], ARENA_GENESIS_RECORDER_API_PORT=ports["api"], ARENA_GENESIS_GOD_PORT=ports["god"],
                    ARENA_RECORDER_REQUIRE_GROUP="true", ARENA_LLM_BACKEND="none")
@@ -120,4 +120,27 @@ async def test_runner_processes_on_a_real_genesis(tmp_path, procs):
     assert code == 0 and chk["steps"][0]["ok"] and chk["steps"][1]["ok"], out
     code, found, out = content("find", "--file", str(tmp_path / "copy.txt"), "--recorder", rec_url)
     assert code == 0 and found["entry"] == reg["reference"]["entry"], out
+
+    # a link peer (api only): the ledger names a permanent link, the author moves the work later (user 2026-11-03)
+    lp = Proc("arena.peers.link_peer", dict(env, ARENA_LINK_PEER_PORT=str(ports["link"]), ARENA_LINK_PEER_API_PORT=str(ports["link_api"]),
+                                            ARENA_LINK_PEER_AREA=str(tmp_path / "lp"), ARENA_LINK_PEER_KEY_FILE=str(tmp_path / "lp.key"),
+                                            ARENA_LINK_PEER_BROKERS=brokers, ARENA_LINK_PEER_RECORDER_URL=rec_url), tmp_path)
+    procs.append(lp)
+    link_url = f"http://127.0.0.1:{ports['link_api']}"
+    end = time.time() + 20
+    while time.time() < end:
+        try:
+            if httpx.post(link_url + "/ops/link.info", json={}, timeout=1).json().get("ok"):
+                break
+        except httpx.HTTPError:
+            time.sleep(0.2)
+    (tmp_path / "story.txt").write_bytes("이야기 하나\n".encode("utf-8"))
+    code, reg, out = content("register", "--home", str(tmp_path / "author"), "--recorder", rec_url, "--file", str(tmp_path / "story.txt"),
+                             "--storage", "https=https://old.example/story.txt", "--link-peer", link_url, "--out", str(tmp_path / "story-ref.json"))
+    assert code == 0 and reg["reference"]["link"]["via"] == link_url, out
+    code, moved, out = content("relink", "--home", str(tmp_path / "author"), "--ref", str(tmp_path / "story-ref.json"),
+                               "--storage", "https=https://new.example/story.txt")
+    assert code == 0 and moved["ver"] == 2, out
+    code, now, out = content("resolve", "--ref", str(tmp_path / "story-ref.json"))
+    assert code == 0 and now["targets"] == [{"kind": "https", "location": "https://new.example/story.txt"}], out
 

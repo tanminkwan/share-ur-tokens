@@ -11,6 +11,7 @@ What the ledger checks: shape, registered names, a signature if there is one. It
 gets it hashes it. Policy: dev/chain-policy.md 6절."""
 from __future__ import annotations
 
+import re
 import unicodedata
 from dataclasses import dataclass
 from typing import Callable
@@ -22,6 +23,7 @@ from ..crypto import canon, h, verify
 class StorageKind:
     name: str
     description: str
+    check: Callable[[str], "str | None"] | None = None  # the location's own shape, if the kind has one
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,7 @@ class ContentForm:
 
 
 STORAGE_KINDS: dict[str, StorageKind] = {}
+LINK_LOCATION = re.compile(r"^[0-9a-f]{64}/[0-9a-f]{32}$")
 PROOF_METHODS: dict[str, ProofMethod] = {}
 CONTENT_FORMS: dict[str, ContentForm] = {}
 
@@ -108,6 +111,11 @@ def ref_error(p: dict, settings) -> str | None:
             return f"each place needs a registered kind ({', '.join(sorted(STORAGE_KINDS))})"
         if not isinstance(x.get("location"), str) or not x["location"] or len(x["location"]) > settings.ref_location_max:
             return f"each place needs a location of at most {settings.ref_location_max} characters"
+        if "via" in x and (not isinstance(x["via"], str) or not x["via"] or len(x["via"]) > settings.ref_location_max):
+            return "a place's via (where to reach it now, a hint) is a short text"
+        bad = STORAGE_KINDS[x["kind"]].check(x["location"]) if STORAGE_KINDS[x["kind"]].check else None
+        if bad:
+            return bad
     if "size" in ref and (not isinstance(ref["size"], int) or isinstance(ref["size"], bool) or ref["size"] < 0):
         return "ref.size is a number of bytes"
     if "media_type" in ref and (not isinstance(ref["media_type"], str) or not ref["media_type"]):
@@ -131,7 +139,9 @@ def form_error(p: dict) -> str | None:
 
 for _k in (StorageKind("https", "웹 주소(https://...)"), StorageKind("peer", "어떤 peer의 공개 영역(공개키와 그 안의 이름)"),
            StorageKind("ipfs", "IPFS 내용 주소(cid)"), StorageKind("git", "git 저장소와 커밋"),
-           StorageKind("place", "실물의 소재 설명(보관 장소, 등기, 위치)")):
+           StorageKind("place", "실물의 소재 설명(보관 장소, 등기, 위치)"),
+           StorageKind("link", "link peer의 영구 link(<link peer 공개키>/<link id>): 실제 위치는 link peer가 들고, 게시자만 서명해 바꾼다",
+                       lambda loc: None if LINK_LOCATION.match(loc) else "a link location is <link peer public key>/<link id> (hex 64 / hex 32)")):
     register_storage_kind(_k)
 register_proof_method(ProofMethod("sha256", "해시 대조만: 받은 내용을 해시해 content_hash와 같은지 본다", _sha256_proof))
 register_proof_method(ProofMethod("ed25519", "서명자가 정규 JSON {content_hash, storage}에 서명했다: 이 위치들을 그 키가 밝혔다", _ed25519_proof))

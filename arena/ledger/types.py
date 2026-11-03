@@ -35,9 +35,17 @@ class EntryType:
     contribute: Callable[[dict, dict, dict], None] | None = None    # (records, payload, index) -> update records
     index: Callable[[dict, dict], None] | None = None     # (payload, index) -> first pass for contributions (e.g. authors)
     private_keys: Callable[[dict, dict], set] | None = None  # (full payload, its event's policy) -> fields that must go in the envelope
+    fields: frozenset | Callable[[], frozenset] | None = None  # the fields the ledger knows for this type (or a function giving
+                                                          # them, when columns may be registered); the rest is free-form, its
+                                                          # size capped tightly (rules.r_size). None: only the entry cap
 
 
 ENTRY_TYPES: dict[str, EntryType] = {}
+COMMON_FIELDS = frozenset({"group_id", "ledger_id", "event_id", "purpose", "nonce", "private"})  # every type's code fields
+
+
+def _f(names: str) -> frozenset:
+    return frozenset(names.split())
 
 
 def register_entry_type(t: EntryType) -> None:
@@ -447,48 +455,48 @@ register_event_column(EventColumn("elements", lambda chain, p, s: check_elements
 
 # ---------------- the built-in types ----------------
 for _t in (
-    EntryType("genesis", lambda p: [p.get("god")], shape=_genesis_shape, public=lambda p, c: {"god": p["god"], "broker": p["broker"], "recorder": p["recorder"],
+    EntryType("genesis", fields=_f("god broker recorder parent"), signers=lambda p: [p.get("god")], shape=_genesis_shape, public=lambda p, c: {"god": p["god"], "broker": p["broker"], "recorder": p["recorder"],
                                                                          **({"parent": p["parent"]} if "parent" in p else {})}),
-    EntryType("group", lambda p: [p.get("founder")], public=lambda p, c: {"founder": p["founder"], "closed": p["closed"], "brokers": list(p.get("brokers", []))},
+    EntryType("group", fields=_f("founder closed brokers"), signers=lambda p: [p.get("founder")], public=lambda p, c: {"founder": p["founder"], "closed": p["closed"], "brokers": list(p.get("brokers", []))},
               counters={"groups": 0}, contribute=_count("groups", "founder")),
-    EntryType("event", lambda p: [p.get("issuer"), *p.get("approvers", [])], shape=_event_shape, rules=(_event_once,),
+    EntryType("event", fields=lambda: _f("issuer kind policy approvers rules_hash mode apps") | frozenset(EVENT_COLUMNS), signers=lambda p: [p.get("issuer"), *p.get("approvers", [])], shape=_event_shape, rules=(_event_once,),
               public=lambda p, c: {**_rules_hash(p), **({"mode": p["mode"], "apps": p.get("apps", [])} if "mode" in p else {}),
                                    **{c.name: p[c.name] for c in EVENT_COLUMNS.values() if c.public and p.get(c.name)},
                                    "issuer": p["issuer"], "kind": p.get("kind"), "approvers": list(p.get("approvers", []))},
               counters={"events": 0, "approvals": 0}, contribute=_event_contribute),
-    EntryType("contract", lambda p: [p.get("issuer"), p.get("contractor")], event_ref="required", unique_nonce=True, rules=(_contract_rule,),
+    EntryType("contract", fields=_f("role issuer contractor rules_hash"), signers=lambda p: [p.get("issuer"), p.get("contractor")], event_ref="required", unique_nonce=True, rules=(_contract_rule,),
               public=_contract_public, counters={"roles": defaultdict(int)}, contribute=_map_count("roles", "contractor", "role"),
               private_keys=lambda p, pol: {"contractor"} if p.get("role") in (pol or {}).get("hidden_roles", []) else set()),
-    EntryType("publish", lambda p: [p.get("author")], event_ref="optional", shape=_publish_shape, rules=(_publish_rule,),
+    EntryType("publish", fields=_f("author content_hash label form ref"), signers=lambda p: [p.get("author")], event_ref="optional", shape=_publish_shape, rules=(_publish_rule,),
               public=lambda p, c: {"author": p["author"], "content_hash": p["content_hash"], **({"label": p["label"]} if "label" in p else {}),
                                    **({"form": p["form"]} if "form" in p else {})},
               counters={"published": 0},
               contribute=_count("published", "author"), index=_publish_index),
-    EntryType("share", lambda p: [p.get("provider"), p.get("consumer")], event_ref="optional", needs_content=True, unique_nonce=True,
+    EntryType("share", fields=_f("provider consumer content_hash ref"), signers=lambda p: [p.get("provider"), p.get("consumer")], event_ref="optional", needs_content=True, unique_nonce=True,
               shape=_share_shape,
               private_keys=lambda p, pol: {"provider", "consumer", "content_hash", "terms", "ref"},  # who handed what to whom, and where it is, stay private
               counters={"received_by": set()}, contribute=_share_contribute),
-    EntryType("feedback", lambda p: [p.get("evaluator")], event_ref="optional", needs_content=True, rules=(_feedback_rule,),
+    EntryType("feedback", fields=_f("evaluator content_hash verdict score comment_hash"), signers=lambda p: [p.get("evaluator")], event_ref="optional", needs_content=True, rules=(_feedback_rule,),
               public=lambda p, c: {k: p[k] for k in ("evaluator", "content_hash", "verdict", "score") if k in p},
               counters={"verdicts_received": defaultdict(int), "verdicts_given": defaultdict(int)}, contribute=_feedback_contribute),
-    EntryType("attest", lambda p: list(p.get("parties", [])) or [None], event_ref="optional", unique_nonce=True, shape=_attest_shape,
+    EntryType("attest", fields=_f("kind subject value parties"), signers=lambda p: list(p.get("parties", [])) or [None], event_ref="optional", unique_nonce=True, shape=_attest_shape,
               rules=(_attest_rule,), public=lambda p, c: {"kind": p.get("kind"), "subject": p.get("subject"), "parties": list(p["parties"]),
                                                           "value": p.get("value")},
               counters={"attested": defaultdict(int)}, contribute=_attest_contribute),
-    EntryType("reveal", lambda p: [p.get("author")], event_ref="required", rules=(_reveal_rule,),
+    EntryType("reveal", fields=_f("author label value salt commit"), signers=lambda p: [p.get("author")], event_ref="required", rules=(_reveal_rule,),
               public=lambda p, c: {"author": p["author"], "label": p.get("label"), "value": p.get("value"), "salt": p.get("salt"),
                                    "commit": p.get("commit")},
               counters={"revealed": 0}, contribute=_count("revealed", "author")),
-    EntryType("assign", lambda p: [p.get("issuer")], event_ref="required", shape=_assign_shape, rules=(_assign_rule,),
+    EntryType("assign", fields=_f("issuer subjects"), signers=lambda p: [p.get("issuer")], event_ref="required", shape=_assign_shape, rules=(_assign_rule,),
               public=lambda p, c: {"issuer": p["issuer"], "subjects": p["subjects"]}),
-    EntryType("chain_link", lambda p: [p.get("child_god"), p.get("child_recorder")], unique_nonce=True, shape=_link_shape, rules=(_link_rule,),
+    EntryType("chain_link", fields=_f("child_ledger_id child_god child_recorder name branch_point"), signers=lambda p: [p.get("child_god"), p.get("child_recorder")], unique_nonce=True, shape=_link_shape, rules=(_link_rule,),
               public=lambda p, c: {k: p.get(k) for k in ("child_ledger_id", "child_god", "child_recorder", "name", "branch_point")}),
-    EntryType("parent_link", lambda p: [p.get("god")], shape=_parent_link_shape, rules=(_parent_link_rule,),
+    EntryType("parent_link", fields=_f("god link"), signers=lambda p: [p.get("god")], shape=_parent_link_shape, rules=(_parent_link_rule,),
               public=lambda p, c: {"god": p["god"], "link_hash": p["link"].get("hash"), "link_seq": p["link"].get("seq"),
                                    "link_seal": p["link"].get("seal")}),
-    EntryType("key_rotate", _rotate_signers, unique_nonce=True, shape=_rotate_shape, rules=(_rotate_rule,),
+    EntryType("key_rotate", fields=_f("role old new god"), signers=_rotate_signers, unique_nonce=True, shape=_rotate_shape, rules=(_rotate_rule,),
               public=lambda p, c: {"role": p.get("role"), "old": p.get("old"), "new": p.get("new"), **({"god": p["god"]} if "god" in p else {})}),
-    EntryType("close", lambda p: [p.get("issuer")], event_ref="required", rules=(_close_rule,),
+    EntryType("close", fields=_f("issuer result_hash"), signers=lambda p: [p.get("issuer")], event_ref="required", rules=(_close_rule,),
               public=lambda p, c: {"issuer": p["issuer"], "result_hash": p.get("result_hash")}, counters={"closed": 0},
               contribute=_count("closed", "issuer")),
 ):

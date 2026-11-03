@@ -116,8 +116,8 @@ def retired_signer(chain, signers: list) -> str | None:
     return f"signed by a retired key {who[:8]} (rotated to {retired[who][:8]})" if who else None
 
 
-register_entry_type(EntryType("key_commit", lambda p: [p.get("pub")], shape=_commit_shape, rules=(_commit_rule,),
+register_entry_type(EntryType("key_commit", fields=frozenset({"pub", "next", "recovery"}), signers=lambda p: [p.get("pub")], shape=_commit_shape, rules=(_commit_rule,),
                               public=lambda p, c: {"pub": p["pub"], "next": p["next"], "recovery": list(p.get("recovery", []))}))
-register_entry_type(EntryType("peer_rotate", lambda p: [p.get("new"), *([p.get("recoverer")] if p.get("by") == "recovery" else [])],
+register_entry_type(EntryType("peer_rotate", fields=frozenset({"old", "new", "next", "by", "recoverer", "recovery"}), signers=lambda p: [p.get("new"), *([p.get("recoverer")] if p.get("by") == "recovery" else [])],
                               unique_nonce=True, shape=_rotate_shape, rules=(_rotate_rule,),
                               public=lambda p, c: {k: p.get(k) for k in ("old", "new", "next", "by", "recoverer", "recovery") if k in p}))

@@ -1,6 +1,6 @@
 # 에이전트 아레나 규약 (peer를 다른 언어로 만들기 위한 문서)
 
-> 판 4 · 2026-11-03(판 3에 가지 체인의 갈라진 지점과 1번 기록 `parent_link`(CP-1·2), peer 키 이어받기 `key_commit`·`peer_rotate`와 `GET /key/{pub}`, 암호화한 키 백업의 모양(2.6절)을 더함, 6-K. 원장 밖 content의 `ref` block, content form, `GET /content/{hash}`, 책에 싣는 ledger reference(4.7절)를 더함, CP-4·9·10. 판 3 · 2026-11-03: 판 2에 공개 본체와 비공개 봉투, 공개 기록 흐름을 더함. 판 2 · 2026-11-02, 판 1에 6단계를 더함: 이벤트의 요소 블록과 요소별 원장 규칙, 연결 방식과 api 묶음, 서비스 영수증. 판 1: 진짜 원장 증명). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
+> 판 4 · 2026-11-03(판 3에 가지 체인의 갈라진 지점과 1번 기록 `parent_link`(CP-1·2), peer 키 이어받기 `key_commit`·`peer_rotate`와 `GET /key/{pub}`, 암호화한 키 백업의 모양(2.6절)을 더함, 6-K. 원장 밖 content의 `ref` block, content form, `GET /content/{hash}`, 책에 싣는 ledger reference(4.7절)를 더함, CP-4·9·10. entry 크기 상한과 free-form field 상한(4.3절), storage kind `link`와 link peer(4.8절)를 더함. 판 3 · 2026-11-03: 판 2에 공개 본체와 비공개 봉투, 공개 기록 흐름을 더함. 판 2 · 2026-11-02, 판 1에 6단계를 더함: 이벤트의 요소 블록과 요소별 원장 규칙, 연결 방식과 api 묶음, 서비스 영수증. 판 1: 진짜 원장 증명). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
 
 이 문서는 에이전트 아레나에 **Python이 아닌 다른 구현**으로 peer 에이전트, broker, recorder를 만들어 참여하려는 개발자를 위한 것이다. 앱(peer 안에 꽂는 플러그인)을 만드는 규약은 [app-guide.md](app-guide.md)에 따로 있다.
 
@@ -151,13 +151,15 @@ peer의 비밀키 백업은 기기 안에서 소유자의 암호문구로 잠근
 2. `prev`가 지금 끝 해시인가
 3. `group_id`가 있는가, 선언된 그룹인가(첫 항목은 제네시스, 만민 그룹은 선언할 수 없음)
 4. 원장이 제네시스로 시작했으면, payload의 `ledger_id`가 제네시스 항목의 해시인가
-5. 종류별 모양
-6. 목적 코드(`purpose`)가 있으면 등록된 코드인가, 그 종류에 쓸 수 있는 코드인가, 코드의 확인을 통과하는가(4.4절 끝)
-7. 종류가 정한 서명자 **전원**의 서명이 `sigs`에 있고 맞는가
-8. 시각이 뒤로 가지 않는가
-9. 이벤트를 가리키면 선언된, 닫히지 않은 이벤트인가
-10. 내용 해시를 가리키는 종류는 그 내용이 먼저 등록되었는가
-11. 한 번만 쓰는 `nonce`를 다시 쓰지 않았는가
+5. **크기**: entry 하나(payload와 envelope 칸을 합친 canonical JSON)가 `ARENA_LEDGER_ENTRY_MAX_BYTES`(기본 4096) 이하인가, 그 종류가 모르는 field(free-form field: 아래 표와 공통 칸 `group_id`·`ledger_id`·`event_id`·`purpose`·`nonce`·`private` 밖의 것)를 합친 크기가 `ARENA_LEDGER_FREE_MAX_BYTES`(기본 256) 이하인가. 내용은 원장 밖에 두고 hash, `ref`, link peer로 가리킨다
+6. 종류별 모양
+7. 목적 코드(`purpose`)가 있으면 등록된 코드인가, 그 종류에 쓸 수 있는 코드인가, 코드의 확인을 통과하는가(4.4절 끝)
+8. 종류가 정한 서명자 **전원**의 서명이 `sigs`에 있고 맞는가
+9. 물러난 peer key(`peer_rotate`의 `old`)가 서명하지 않았는가
+10. 시각이 뒤로 가지 않는가
+11. 이벤트를 가리키면 선언된, 닫히지 않은 이벤트인가
+12. 내용 해시를 가리키는 종류는 그 내용이 먼저 등록되었는가
+13. 한 번만 쓰는 `nonce`를 다시 쓰지 않았는가
 
 ### 4.4 항목 종류
 
@@ -233,7 +235,7 @@ content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
  "proof": {"method": "ed25519", "signer": "<공개키>", "sig": "<서명>", "how": "dev/protocol.md 4.7"}}
 ```
 
-- `storage`: 1~`ARENA_REF_STORAGE_MAX`곳. `kind`는 등록된 storage kind(`https`, `peer`, `ipfs`, `git`, `place`: 실물 소재 설명), `location`은 `ARENA_REF_LOCATION_MAX`자 이하.
+- `storage`: 1~`ARENA_REF_STORAGE_MAX`곳. `kind`는 등록된 storage kind(`https`, `peer`, `ipfs`, `git`, `place`: 실물 소재 설명, `link`: link peer의 영구 link, 4.8절), `location`은 `ARENA_REF_LOCATION_MAX`자 이하. 선택 `via`는 그곳에 지금 닿는 주소(힌트, 바뀔 수 있다).
 - `proof.method`: 등록된 proof method. `sha256`은 서명 없이 받는 쪽이 hash만 대조한다. `ed25519`는 `signer`가 정규 JSON `{"content_hash", "storage"}`에 서명한다.
 - 원장은 shape, 등록된 이름, 서명이 있으면 서명을 확인한다. content를 가져오지는 않는다(받는 쪽이 받아서 hash로 확인).
 - `share`의 `ref`는 언제나 비공개 봉투에 든다. `publish`의 `ref`는 쓰는 쪽이 공개 본체와 봉투 가운데 고른다. 공개 확인(`GET /entries`)은 `ref`를 보이지 않는다(위치 공개 범위는 CP-5, 미정).
@@ -248,6 +250,39 @@ content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
 한 줄 주소(QR용): `arena-ref:<ledger_id>/<entry>?content=<hash>&form=<form>&author=<공개키>&recorder=<URL 인코딩한 주소>[&did=...]`.
 
 **읽는 쪽이 확인하는 순서**: ① 사본을 `form`으로 bytes로 만들어 hash가 `content_hash`와 같은가 ② `GET /entries/{entry}`: `publish`이고, 봉인이 맞고, content hash·작가·`ledger_id`가 같은가 ③ 뿌리 값이 있으면 4.5절로 원장을 증명하고, 그 `seq`에서 유효한 기록자 키가 `sealed_by`와 같은가. reference 없이 사본만 있으면 `GET /content/{hash}`로 등록 기록을 찾는다.
+
+### 4.8 link peer: 원장은 그대로, 위치만 바뀐다
+
+> 사용자(2026-11-03): "영구적인 api 서비스 특수 peer를 만들어서 여기에 link를 달고, 실제 url 등은 향후 바뀔 수 있으니 게시자가 변경할 수 있도록 해. 원장은 변하지 않고 물리적인 link만 변할 수 있도록." "link peer 또한 다른 누군가가 스스로 공신력을 얻어서 만들 수 있음."
+
+`ref.storage`에 `{"kind": "link", "location": "<link peer 공개키>/<link id>", "via": "<지금 주소>"}`를 적는다. 원장에는 이 link만 남고, 실제 위치(URL 등)는 link peer가 들고 있다. 게시자만 서명해 위치를 바꾼다. link peer는 누구나 띄우고, 쓰이는 만큼 신뢰를 얻는다. 한 작품이 여러 link peer를 적어도 된다. 원본: `arena/content/links.py`, `arena/peer/link_role.py`, 실행 `python -m arena.peers.link_peer`.
+
+**link 버전**(link peer가 보관):
+
+```json
+{"id": "<32 hex>", "owner": "<게시자 공개키>", "name": "<이름>", "ver": 2,
+ "targets": [{"kind": "https", "location": "https://new.example/novel.txt"}],
+ "content_hash": "<선택>", "ts": 1761955200.0, "signer": "<서명한 key>", "sig": "<서명>"}
+```
+
+- `id = SHA-256(정규JSON({"owner", "name"}))`의 앞 32자. 만들기 전에 계산할 수 있다.
+- `sig`는 `signer`가 정규 JSON `{"op": "link.set", "id", "owner", "name", "ver", "targets", "ts", "content_hash"?}`에 한 서명이다.
+- `targets`: storage kind(`link` 제외) 1~`ARENA_REF_STORAGE_MAX`곳.
+- **누가 바꾸나**: 그 신원의 지금 key. link peer가 기록자를 물을 수 있으면(`ARENA_LINK_PEER_RECORDER_URL`, `GET /key/{owner}`) key rotation을 따라 지금 key만 받는다. 물러난(도난당했을 수 있는) 처음 key는 더 바꾸지 못한다. 기록자를 묻지 않으면 처음 key만 받는다.
+- 새 버전은 `ver`가 마지막 + 1이고, owner·name·content_hash는 바뀌지 않는다. 버전은 `ARENA_LINK_PEER_HISTORY_MAX`개까지 남는다.
+
+**op**(api binding `POST /ops/{op}` 또는 a2a):
+
+| op | 본문 | 답 |
+|---|---|---|
+| `link.info` | - | `{ok, pub}`: 원장에 적을 location은 `<pub>/<id>` |
+| `link.set` | `{link}`(서명한 새 버전) | `{ok, id, ver, location}` |
+| `link.get` | `{id}` | `{ok, link}`(가장 새 버전) |
+| `link.history` | `{id}` | `{ok, versions}`(오래된 것부터) |
+
+**읽는 쪽**: link peer의 답을 믿지 않고 버전마다 서명을 확인한다(id가 owner·name에서 나오는가, 서명이 맞는가, signer가 그 신원의 지금 key인가, owner가 원장 기록의 작가인가). link peer는 link를 지우거나 옛 버전을 줄 수는 있어도 위치를 위조할 수는 없다. 그래서 여러 link peer에 두기를 권한다.
+
+**ledger reference**에는 선택 `link: {"peer", "id", "via"?}`가 붙고, 한 줄 주소에는 `&link=<peer>/<id>&via=<주소>`가 붙는다.
 
 ## 5. broker
 
