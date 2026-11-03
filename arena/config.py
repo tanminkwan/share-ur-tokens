@@ -131,7 +131,11 @@ class Settings(EnvSettings):
     llm_timeout_sec: float = F("ARENA_LLM_TIMEOUT_SEC", 240.0, float, "LLM 호출 제한 시간(초)")
     llm_effort: str = F("ARENA_LLM_EFFORT", "low", str, "기본 추론 강도(reasoning_effort)")
     # peer
-    a2a_timeout_sec: float = F("ARENA_A2A_TIMEOUT_SEC", 120.0, float, "peer 사이 A2A 호출 제한 시간(초)")
+    a2a_timeout_sec: float = F("ARENA_A2A_TIMEOUT_SEC", 120.0, float, "peer 사이 A2A 호출 제한 시간(초): HTTP 요청 하나의 제한")
+    a2a_answer_wait_sec: float = F("ARENA_A2A_ANSWER_WAIT_SEC", 5.0, float, "받는 쪽이 이 시간 안에 답하지 못하면 A2A task(working)로 알리고 뒤에서 마저 처리한다(초)")
+    a2a_task_poll_sec: float = F("ARENA_A2A_TASK_POLL_SEC", 2.0, float, "부르는 쪽이 working인 A2A task를 다시 물어보는 간격(초)")
+    a2a_task_wait_sec: float = F("ARENA_A2A_TASK_WAIT_SEC", 600.0, float, "부르는 쪽이 A2A task의 완료를 기다리는 시간(초). 지나면 pending과 task id를 돌려준다")
+    a2a_human_wait_sec: float = F("ARENA_A2A_HUMAN_WAIT_SEC", 86400.0, float, "상대가 human peer일 때 A2A task의 완료를 기다리는 시간(초): 사람의 속도")
     profile_ttl_sec: float = F("ARENA_PROFILE_TTL_SEC", 604800.0, float, "프로필 만기(초)")
     profile_lines_max: int = F("ARENA_PROFILE_LINES_MAX", 12, int, "프로필 요약에 넣는 공개 영역 최근 줄 수")
     area_notes_file: str = F("ARENA_AREA_NOTES_FILE", "notes.md", str, "공개 영역에서 경험 노트를 덧붙이는 파일")

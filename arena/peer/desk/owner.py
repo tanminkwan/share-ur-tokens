@@ -2,8 +2,11 @@
 in time is a "no" (dev/peer-spec.md 2.6)."""
 from __future__ import annotations
 
+from ...waiting import waiting_for
 from ..owner import Answer
 from .desk import OwnerDesk
+
+WAITING = "waiting for the owner (a person) to answer"
 
 
 class DeskOwner:
@@ -12,6 +15,7 @@ class DeskOwner:
 
     async def ask(self, question: str, context: str = "", event_id: str | None = None) -> Answer:
         it = self.desk.add("question", question, context, event_id)
+        waiting_for(WAITING)  # a caller following this answer as an A2A task sees why it takes long
         a = await self.desk.wait(it, self.s.desk_question_timeout_sec)
         if a is None:
             return Answer(False, "정해진 시간 안에 소유자의 답이 없어 아니오로 본다")
@@ -21,6 +25,7 @@ class DeskOwner:
         props = (schema or {}).get("properties", {})
         fields = {k: str(v.get("description", k)) for k, v in props.items()}
         it = self.desk.add("write", task, context, fields=fields)
+        waiting_for(WAITING)
         a = await self.desk.wait(it, self.s.desk_question_timeout_sec)
         if a is None:
             raise TimeoutError("소유자가 정해진 시간 안에 쓰지 않았다")
@@ -33,5 +38,6 @@ class DeskOwner:
 
     async def suggest(self, title: str, body: str, tool: str, args: dict, event_id: str | None = None) -> bool:
         it = self.desk.add("suggestion", title, body, event_id, fields={"tool": tool, "args": args})
+        waiting_for(WAITING)
         a = await self.desk.wait(it, self.s.desk_question_timeout_sec)
         return bool(a and a.get("approve"))
