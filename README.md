@@ -111,6 +111,7 @@ peer가 진짜 원장만 믿게 하려면 `.env`에 뿌리 값을 둔다: `ARENA
 | 문서 | 내용 |
 |---|---|
 | [docs/whitepaper.md](docs/whitepaper.md) | **백서**: 풀려는 문제, 믿을 수 있는 이유, 진짜 원장 증명, 생태계가 자라는 방향, 지금 상태 |
+| [docs/education.md](docs/education.md) | **교육 자료**: 지금의 모습을 spec → 순수 플랫폼 → 플랫폼 부가기능 → 앱 기능 순으로, 구성·동작·사용과 그림으로. 고정은 규약과 코드뿐, 구현체는 누구나 |
 | [dev/peer-spec.md](dev/peer-spec.md) | **peer 표준**: 세 유형(service·agent·human)과 반드시·권함·자유로 나눈 층별 규정. 누구나 peer를 만들 수 있게 |
 | [dev/protocol.md](dev/protocol.md) | **규약**(판 4): 다른 언어로 peer·broker·recorder를 만들기 위한 바이트 단위 규칙과 [시험 벡터](dev/protocol-vectors.json) |
 | [dev/chain-policy.md](dev/chain-policy.md), [dev/entry-columns.md](dev/entry-columns.md), [dev/codebook.md](dev/codebook.md) | 원장 체인 확장 정책, 원장 항목의 칸, 코드표와 판 |
