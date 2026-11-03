@@ -1,0 +1,23 @@
+# Test coverage of the platform (user 2026-11-03: "test 철저히 하고 coverage 관리도 해"). Run: scripts/coverage.sh
+[run]
+source = arena
+branch = true
+parallel = true
+# measure the processes the tests start (genesis, broker, recorder, peers) too
+patch = subprocess
+sigterm = true
+
+[report]
+show_missing = true
+skip_covered = true
+precision = 1
+# the gate: the total may not fall below this (raise it as tests are added; dev/test-report.md)
+fail_under = 92
+exclude_also =
+    if __name__ == .__main__.:
+    raise NotImplementedError
+    ^\s*\.\.\.\s*$
+    ^\s*def [a-z_]+\(self[^)]*\)[^:]*: \.\.\.$
+
+[html]
+directory = data/coverage-html

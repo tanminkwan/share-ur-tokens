@@ -79,6 +79,7 @@ cp .env.example .env          # 설정은 모두 .env에 (키 설명은 .env.exa
 
 .venv/bin/python -m playwright install chromium   # 화면 테스트용 headless 브라우저(한 번만)
 .venv/bin/python -m pytest --ignore=tests/live   # 실제 LLM 없이 도는 테스트(화면 테스트 tests/ui 포함)
+scripts/coverage.sh                              # 같은 테스트 + 커버리지(하위 프로세스 포함, 기준선 92% 아래면 실패). 결과서: dev/test-report.md
 .venv/bin/python -m pytest tests/live            # 실제 LLM 테스트 (.env에 ARENA_LLM_* 필요)
 ```
 
@@ -111,6 +112,7 @@ peer가 진짜 원장만 믿게 하려면 `.env`에 뿌리 값을 둔다: `ARENA
 | [dev/protocol.md](dev/protocol.md) | **규약**(판 3): 다른 언어로 peer·broker·recorder를 만들기 위한 바이트 단위 규칙과 [시험 벡터](dev/protocol-vectors.json) |
 | [dev/chain-policy.md](dev/chain-policy.md), [dev/entry-columns.md](dev/entry-columns.md), [dev/codebook.md](dev/codebook.md) | 원장 체인 확장 정책, 원장 항목의 칸, 코드표와 판 |
 | [dev/app-guide.md](dev/app-guide.md) | **앱 개발 규약집**: 앱 구조, 능력 인터페이스, 문맥, 원장 규약, 등록과 배포, 어댑터. 외부 개발자는 `arena.sdk`만 쓴다 |
+| [dev/test-report.md](dev/test-report.md) | **테스트 결과서**: 테스트 종류와 개수, 패키지별 커버리지와 기준선, 덜 덮인 곳 |
 | [dev/plan.md](dev/plan.md) | **개발 계획**: 원칙, 생태계가 자라는 방향, 단계 나눔 |
 | [dev/phase1](dev/phase1) ~ [dev/phase6](dev/phase6) | 단계별 요구사항, 설계, 테스트 결과, 실제 실행 증거 |
 | [dev/acceptance-rps.md](dev/acceptance-rps.md) | 플랫폼 인수 절차: 앱 없는 가위바위보 |

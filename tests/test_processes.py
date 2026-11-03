@@ -27,9 +27,9 @@ def free_port():
 
 
 class Proc:
-    def __init__(self, module, env, cwd):
+    def __init__(self, module, env, cwd, args=()):
         full = dict(os.environ, PYTHONPATH=str(ROOT), **env)
-        self.p = subprocess.Popen([sys.executable, "-m", module], env=full, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        self.p = subprocess.Popen([sys.executable, "-m", module, *args], env=full, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
     def wait_up(self, url, timeout=15, path="/health"):
         end = time.time() + timeout
