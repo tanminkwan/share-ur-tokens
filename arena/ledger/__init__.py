@@ -9,3 +9,4 @@ from .purposes import PURPOSES, Purpose, register_purpose  # noqa: F401
 from . import builtin_elements  # noqa: F401,E402  (registers the built-in elements)
 from . import schedule  # noqa: F401,E402  (registers the schedule column)
 from . import codebook  # noqa: F401,E402  (registers the codebook entry type and column)
+from . import peer_keys  # noqa: F401,E402  (registers key_commit and peer_rotate: a peer's key succession)

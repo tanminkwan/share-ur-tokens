@@ -1,7 +1,11 @@
 """The runners as real processes on a real genesis (2026-11-03: "test 철저히"): the sample personal peer in human mode
 opens its owner desk window, the service peer answers over its api binding with a receipt, the foundation peer records
-the built-in code table edition. No LLM."""
+the built-in code table edition, and the key peer keeps a backup while a peer's owner registers, rotates and checks its
+keys with `python -m arena.keys`. No LLM."""
 import json
+import os
+import subprocess
+import sys
 import time
 
 import httpx
@@ -10,7 +14,7 @@ from arena.broker.client import BrokerClient
 from arena.config import Settings
 from arena.recorder.client import RecorderClient
 from tests.conftest import make_env
-from tests.test_processes import Proc, free_port, procs  # noqa: F401  (procs is a fixture)
+from tests.test_processes import ROOT, Proc, free_port, procs  # noqa: F401  (procs is a fixture)
 from tests.test_service_peer import spec
 
 
@@ -24,7 +28,7 @@ def wait_file(path, timeout=20):
 
 
 async def test_runner_processes_on_a_real_genesis(tmp_path, procs):
-    ports = {k: free_port() for k in ("broker", "rec", "api", "god", "me", "desk", "svc", "svc_api", "fnd")}
+    ports = {k: free_port() for k in ("broker", "rec", "api", "god", "me", "desk", "svc", "svc_api", "fnd", "keys")}
     env = make_env(tmp_path, ARENA_GENESIS_DIR=str(tmp_path / "genesis"), ARENA_GENESIS_BROKER_PORT=ports["broker"],
                    ARENA_GENESIS_RECORDER_PORT=ports["rec"], ARENA_GENESIS_RECORDER_API_PORT=ports["api"], ARENA_GENESIS_GOD_PORT=ports["god"],
                    ARENA_RECORDER_REQUIRE_GROUP="true", ARENA_LLM_BACKEND="none")
@@ -74,3 +78,30 @@ async def test_runner_processes_on_a_real_genesis(tmp_path, procs):
         books = (await R.codebooks()).get("codebooks", [])
         time.sleep(0.2)
     assert books and books[0]["payload"]["name"] == "agent-arena"
+
+    # the key peer keeps the backup; the owner registers, rotates and checks keys from the command line (6-K)
+    kp = Proc("arena.peers.key_peer", dict(env, ARENA_KEY_PEER_PORT=str(ports["keys"]), ARENA_KEY_PEER_AREA=str(tmp_path / "kp"),
+                                           ARENA_KEY_PEER_KEY_FILE=str(tmp_path / "kp.key"), ARENA_KEY_PEER_BROKERS=brokers), tmp_path)
+    procs.append(kp)
+    kp_url = f"http://127.0.0.1:{ports['keys']}"
+    kp.wait_up(kp_url, path="/.well-known/agent-card.json")
+
+    def keys(*args):
+        full = dict(os.environ, PYTHONPATH=str(ROOT), **env, MY_PASS="correct horse battery", MY_SECRET="my recovery secret")
+        r = subprocess.run([sys.executable, "-m", "arena.keys", *args, "--home", str(tmp_path / "owner"), "--passphrase-env", "MY_PASS"],
+                           env=full, cwd=tmp_path, capture_output=True, text=True, timeout=60)
+        return r.returncode, json.loads(r.stdout or "{}"), r.stdout + r.stderr
+    code, reg, out = keys("register", "--recorder", rec_url, "--key-peer", kp_url, "--key-peer-recovers", "--secret-env", "MY_SECRET",
+                          "--backup-file", str(tmp_path / "backup.json"))
+    assert code == 0 and reg["key_peer"]["ok"], out
+    assert "correct horse" not in out and "my recovery secret" not in out  # never printed
+    assert json.loads((tmp_path / "backup.json").read_text())["pub"] == reg["pub"]
+    code, rot, out = keys("rotate", "--recorder", rec_url, "--key-peer", kp_url, "--secret-env", "MY_SECRET")
+    assert code == 0 and rot["pub"] != reg["pub"], out
+    st = (await R.key(reg["pub"]))
+    assert st["status"] == "retired" and st["current"] == rot["pub"]
+    code, where, _ = keys("where")
+    assert code == 0 and "0600" in where["where"]  # ARENA_KEY_STORE=file in tests
+    code, bad, _ = keys("rotate", "--recorder", rec_url, "--backup-file", str(tmp_path / "backup.json"))
+    assert code == 1 and "already rotated" in bad["error"]  # the first backup's promise is used up
+

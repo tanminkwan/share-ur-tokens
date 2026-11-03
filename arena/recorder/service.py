@@ -11,6 +11,7 @@ from typing import Callable, Iterable
 from ..config import Settings
 from ..crypto import Identity, pen_name, verify
 from ..ledger import JsonlStore, Ledger, LedgerCorrupt, LedgerStore, contribution, empty_record, public_view
+from ..ledger.peer_keys import key_status, lineage
 from ..ledger.types import current_keys
 
 
@@ -91,8 +92,11 @@ class RecorderService:
         chain = self.ledger.chain
         if not chain or chain[0]["type"] != "genesis":
             return {"ok": False, "error": "this ledger was not begun by a genesis"}
+        link = chain[1] if len(chain) > 1 and chain[1]["type"] == "parent_link" else None
         return {"ok": True, "ledger_id": chain[0]["hash"], "genesis": chain[0], "recorder": self.identity.pub,
-                "rotations": [e for e in chain if e["type"] == "key_rotate"]}
+                "rotations": [e for e in chain if e["type"] == "key_rotate"],
+                "head": {"seq": len(chain) - 1, "hash": chain[-1]["hash"]},  # where a branch growing now would grow from (CP-1)
+                **({"parent_link": link} if link else {})}
 
     async def record(self, kind: str, payload: dict, sigs: dict, private: dict | None = None) -> dict:
         async with self._lock:
@@ -128,7 +132,15 @@ class RecorderService:
         if not self.settings.recorder_public_track:
             return {"ok": False, "error": "track records are not public on this recorder"}
         empty = {k: (len(v) if isinstance(v, set) else dict(v) if isinstance(v, dict) else v) for k, v in empty_record().items()}
-        return {"ok": True, "pub": pub, "track": contribution(self.ledger.chain).get(pub, empty)}
+        records, line = contribution(self.ledger.chain), lineage(self.ledger.chain, pub)
+        out = empty
+        for k in line:  # the record follows the identity across its keys (P6-K3)
+            out = _add(out, records.get(k, empty))
+        return {"ok": True, "pub": pub, "track": out, **({"lineage": line} if len(line) > 1 else {})}
+
+    def key(self, pub: str) -> dict:
+        """public: is this key current or retired, the latest key of its line, its promise (P6-K3)"""
+        return {"ok": True, **key_status(self.ledger.chain, pub)}
 
     def audit(self) -> dict:
         return {"ok": True, "status": self.ledger.audit(), "length": len(self.ledger.chain), "head": self.ledger.head()}
@@ -168,3 +180,16 @@ class RecorderService:
                 "ledger_id": chain[0]["hash"] if chain and chain[0]["type"] == "genesis" else None,
                 "pen_name": pen_name(self.identity.pub, s.pen_name_prefix, s.pen_name_len),
                 "length": len(self.ledger.chain), "head": self.ledger.head()}
+
+
+def _add(a: dict, b: dict) -> dict:
+    """two track records added: counts add, per-name counts add per name"""
+    out = dict(a)
+    for k, v in b.items():
+        if isinstance(v, dict):
+            prev = out.get(k, {})
+            out[k] = {n: prev.get(n, 0) + v.get(n, 0) for n in set(prev) | set(v)}
+        else:
+            out[k] = out.get(k, 0) + v
+    return out
+

@@ -7,8 +7,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Callable
 
-from ..crypto import commit_hash
+from ..crypto import canon, commit_hash, h, verify
 from .elements import check_elements
+from .envelope import hash_body
 from .run import valid_run
 
 POLICY_LISTS = ("roles", "conflict_roles", "hidden_roles", "reveal_values", "assigned_kinds", "attest_kinds")
@@ -339,22 +340,86 @@ def _rotate_rule(chain, e, now, s):
         return "approved by a key that is not the current god key"
 
 
-# ---------------- chain_link: a community chain links its start into the original (parent) chain ----------------
+# ---------------- branch chains: genesis.parent, chain_link (in the trunk), parent_link (entry 1 of the branch) ----------------
 def _is_hex64(x) -> bool:
     return isinstance(x, str) and len(x) == 64 and all(c in "0123456789abcdef" for c in x)
+
+
+def branch_point_error(bp) -> str | None:
+    """the point a branch grew from: the trunk's last entry when it branched, {seq, hash} (CP-1)"""
+    if not isinstance(bp, dict) or not isinstance(bp.get("seq"), int) or isinstance(bp.get("seq"), bool) or bp["seq"] < 0 \
+            or not _is_hex64(bp.get("hash")):
+        return "branch_point must be {seq, hash}: the original chain's last entry when the branch grew"
+    return None
+
+
+def is_branch(chain) -> bool:
+    return bool(chain) and chain[0]["type"] == "genesis" and "parent" in chain[0]["payload"]
+
+
+def _genesis_shape(chain, e, now, s):
+    """a branch's first entry names where it came from: the trunk's ledger, its recorder (address and key) and the
+    branch point (CP-1)"""
+    par = e["payload"].get("parent")
+    if par is None:
+        return None
+    if not isinstance(par, dict) or not _is_hex64(par.get("ledger_id")) or not isinstance(par.get("recorder_url"), str) \
+            or not par.get("recorder_url") or not isinstance(par.get("recorder"), str) or not par.get("recorder"):
+        return "parent must name the original chain: ledger_id, recorder_url and recorder (its recorder key then)"
+    return branch_point_error(par.get("branch_point"))
 
 
 def _link_shape(chain, e, now, s):
     p = e["payload"]
     if not _is_hex64(p.get("child_ledger_id")) or not p.get("child_god") or not p.get("child_recorder"):
         return "chain_link needs child_ledger_id (the new chain's genesis hash), child_god and child_recorder"
+    return branch_point_error(p.get("branch_point"))
 
 
 def _link_rule(chain, e, now, s):
-    if chain and "parent" in chain[0]["payload"]:  # branches grow only from the trunk (user 2026-11-02, dev/chain-policy.md)
+    if is_branch(chain):  # branches grow only from the trunk (user 2026-11-02, dev/chain-policy.md)
         return "only the trunk (the root chain) takes branch links; a branch chain cannot start a branch"
     if any(x["type"] == "chain_link" and x["payload"]["child_ledger_id"] == e["payload"]["child_ledger_id"] for x in chain):
         return "this chain is already linked"
+    bp = e["payload"]["branch_point"]
+    if bp["seq"] >= len(chain) or chain[bp["seq"]]["hash"] != bp["hash"]:
+        return "the branch point is not an entry of this chain"
+
+
+def _parent_link_shape(chain, e, now, s):
+    p = e["payload"]
+    link = p.get("link")
+    if not isinstance(link, dict) or link.get("type") != "chain_link" or not isinstance(link.get("payload"), dict) \
+            or not isinstance(link.get("seal"), dict) or not p.get("god"):
+        return "parent_link needs god and link: the chain_link entry the original chain sealed (with its hash and seal)"
+
+
+def _parent_link_rule(chain, e, now, s):
+    """entry 1 of a branch: the sealed chain_link from the trunk, so whoever has only this chain knows which trunk entry
+    to look up, and that the trunk took this chain (CP-2)"""
+    if not is_branch(chain):
+        return "parent_link belongs to a branch chain (its genesis names a parent)"
+    if len(chain) != 1:
+        return "parent_link is entry 1 of a branch chain, once"
+    g, p = chain[0], e["payload"]
+    link, par = p["link"], g["payload"]["parent"]
+    lp = link["payload"]
+    if p["god"] != current_keys(chain)["god"]:
+        return "parent_link is signed by this chain's god"
+    if link.get("hash") != h(canon(hash_body(link))):
+        return "the chain_link's hash does not match its body"
+    if not verify(link["seal"].get("pub", ""), link["hash"], link["seal"].get("sig", "")):
+        return "the chain_link's seal does not verify"
+    if lp.get("child_ledger_id") != g["hash"] or lp.get("child_god") != g["payload"]["god"] or lp.get("child_recorder") != g["payload"]["recorder"]:
+        return "the chain_link names another chain or other keys"
+    if lp.get("ledger_id") != par["ledger_id"] or lp.get("branch_point") != par["branch_point"]:
+        return "the chain_link and this genesis name a different original chain or branch point"
+
+
+def r_branch_linked(chain, e, now, s):
+    """a branch chain takes nothing else before its parent_link (CP-2)"""
+    if is_branch(chain) and len(chain) == 1 and e["type"] != "parent_link":
+        return "this branch chain is not linked yet: entry 1 must be its parent_link (the chain_link sealed in the original chain)"
 
 
 # ---------------- close ----------------
@@ -376,7 +441,7 @@ register_event_column(EventColumn("elements", lambda chain, p, s: check_elements
 
 # ---------------- the built-in types ----------------
 for _t in (
-    EntryType("genesis", lambda p: [p.get("god")], public=lambda p, c: {"god": p["god"], "broker": p["broker"], "recorder": p["recorder"],
+    EntryType("genesis", lambda p: [p.get("god")], shape=_genesis_shape, public=lambda p, c: {"god": p["god"], "broker": p["broker"], "recorder": p["recorder"],
                                                                          **({"parent": p["parent"]} if "parent" in p else {})}),
     EntryType("group", lambda p: [p.get("founder")], public=lambda p, c: {"founder": p["founder"], "closed": p["closed"], "brokers": list(p.get("brokers", []))},
               counters={"groups": 0}, contribute=_count("groups", "founder")),
@@ -409,7 +474,10 @@ for _t in (
     EntryType("assign", lambda p: [p.get("issuer")], event_ref="required", shape=_assign_shape, rules=(_assign_rule,),
               public=lambda p, c: {"issuer": p["issuer"], "subjects": p["subjects"]}),
     EntryType("chain_link", lambda p: [p.get("child_god"), p.get("child_recorder")], unique_nonce=True, shape=_link_shape, rules=(_link_rule,),
-              public=lambda p, c: {k: p.get(k) for k in ("child_ledger_id", "child_god", "child_recorder", "name")}),
+              public=lambda p, c: {k: p.get(k) for k in ("child_ledger_id", "child_god", "child_recorder", "name", "branch_point")}),
+    EntryType("parent_link", lambda p: [p.get("god")], shape=_parent_link_shape, rules=(_parent_link_rule,),
+              public=lambda p, c: {"god": p["god"], "link_hash": p["link"].get("hash"), "link_seq": p["link"].get("seq"),
+                                   "link_seal": p["link"].get("seal")}),
     EntryType("key_rotate", _rotate_signers, unique_nonce=True, shape=_rotate_shape, rules=(_rotate_rule,),
               public=lambda p, c: {"role": p.get("role"), "old": p.get("old"), "new": p.get("new"), **({"god": p["god"]} if "god" in p else {})}),
     EntryType("close", lambda p: [p.get("issuer")], event_ref="required", rules=(_close_rule,),

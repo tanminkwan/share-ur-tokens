@@ -93,6 +93,9 @@ scripts/coverage.sh                              # 같은 테스트 + 커버리�
 .venv/bin/python -m arena.peers.search     # 고급 검색 peer: 임베딩 벡터 검색 (ARENA_SEARCH_PEER_*, ARENA_EMBED_URL)
 .venv/bin/python -m arena.peers.app_store  # 앱 배포 peer: 선택, 누구나 띄울 수 있다 (ARENA_APP_STORE_*)
 .venv/bin/python -m arena.peers.foundation # 재단 peer: 기본 코드표 판을 원장에 기록 (선택, ARENA_FOUNDATION_PEER_*)
+.venv/bin/python -m arena.peers.key_peer   # 키 peer: 암호화된 키 백업 보관, 미리 정한 복구에 서명 (선택, ARENA_KEY_PEER_*)
+.venv/bin/python -m arena.keys register --recorder <기록자 API> [--key-peer <주소> --key-peer-recovers]   # 내 peer의 다음 키 약속과 백업
+                                           # rotate(도난), recover(분실), restore(새 기기), where, status. 키는 언제나 peer가 스스로 만든다
 .venv/bin/python -m arena.peers.service --spec <서비스 설명.json>   # API만 내놓는 peer (ARENA_SERVICE_PEER_*)
 .venv/bin/python -m arena.peers.personal   # 견본 개인 peer(바깥으로는 a2a). ARENA_PERSONAL_MODE=agent: 대화 앱(내 비서와 대화)
                                            # ARENA_PERSONAL_MODE=human: 창구 화면 앱(사람이 운전). 화면 주소(#token=…)를 출력한다
@@ -109,7 +112,7 @@ peer가 진짜 원장만 믿게 하려면 `.env`에 뿌리 값을 둔다: `ARENA
 |---|---|
 | [docs/whitepaper.md](docs/whitepaper.md) | **백서**: 풀려는 문제, 믿을 수 있는 이유, 진짜 원장 증명, 생태계가 자라는 방향, 지금 상태 |
 | [dev/peer-spec.md](dev/peer-spec.md) | **peer 표준**: 세 유형(service·agent·human)과 반드시·권함·자유로 나눈 층별 규정. 누구나 peer를 만들 수 있게 |
-| [dev/protocol.md](dev/protocol.md) | **규약**(판 3): 다른 언어로 peer·broker·recorder를 만들기 위한 바이트 단위 규칙과 [시험 벡터](dev/protocol-vectors.json) |
+| [dev/protocol.md](dev/protocol.md) | **규약**(판 4): 다른 언어로 peer·broker·recorder를 만들기 위한 바이트 단위 규칙과 [시험 벡터](dev/protocol-vectors.json) |
 | [dev/chain-policy.md](dev/chain-policy.md), [dev/entry-columns.md](dev/entry-columns.md), [dev/codebook.md](dev/codebook.md) | 원장 체인 확장 정책, 원장 항목의 칸, 코드표와 판 |
 | [dev/app-guide.md](dev/app-guide.md) | **앱 개발 규약집**: 앱 구조, 능력 인터페이스, 문맥, 원장 규약, 등록과 배포, 어댑터. 외부 개발자는 `arena.sdk`만 쓴다 |
 | [dev/test-report.md](dev/test-report.md) | **테스트 결과서**: 테스트 종류와 개수, 패키지별 커버리지와 기준선, 덜 덮인 곳 |

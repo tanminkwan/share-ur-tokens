@@ -1,6 +1,7 @@
 """A peer's home folder: everything that must survive the process stopping and starting again.
 
-    home/identity.key    the peer's key (0600): the same peer after a restart
+    home/identity.key    the peer's key, made by the peer itself: in the OS key store under this name, or this 0600 file
+                         (ARENA_KEY_STORE, arena/keys/store.py): the same peer after a restart
     home/area/           the public area (unless the peer is given another address)
     home/state.json      profile version, recorders used, direct-request inbox, per-app state
     home/receipts.jsonl  recorder-signed receipts, appended (to prove entries later)
@@ -13,6 +14,7 @@ import os
 
 from ..config import Settings
 from ..crypto import Identity
+from ..keys.store import load_or_create, open_key_store
 from .area import LocalFolderArea
 
 
@@ -25,7 +27,13 @@ class PeerHome:
         return os.path.join(self.root, *parts)
 
     def identity(self) -> Identity:
-        return Identity.load_or_create(self.path("identity.key"))
+        return load_or_create(self.key_store(), self.key_name())
+
+    def key_name(self) -> str:
+        return self.path("identity.key")
+
+    def key_store(self):
+        return open_key_store(self.settings)
 
     def area(self) -> LocalFolderArea:
         os.makedirs(self.path("area"), exist_ok=True)

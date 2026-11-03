@@ -14,7 +14,7 @@ from ..crypto import canon, h, verify
 from .elements import LEDGER_ELEMENTS
 from .purposes import PURPOSES, register_local_source
 from .schedule import TIME_CODES
-from .types import ENTRY_TYPES, EntryType, EventColumn, _inc, register_entry_type, register_event_column
+from .types import ENTRY_TYPES, EntryType, EventColumn, _inc, is_branch, register_entry_type, register_event_column
 
 VERSION = re.compile(r"^\d+\.\d+$")
 LOCAL = re.compile(r"^x-[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9_-]*$")  # a branch community's own code: x-<community>.<code>
@@ -85,10 +85,6 @@ def _shape(chain, e, now, s):
     if not isinstance(codes, dict) or not set(codes) <= set(CODE_KINDS) or \
             not all(isinstance(v, list) and all(isinstance(c, str) and c for c in v) for v in codes.values()):
         return f"codebook codes must map {', '.join(CODE_KINDS)} to lists of code names"
-
-
-def is_branch(chain) -> bool:
-    return bool(chain) and chain[0]["type"] == "genesis" and "parent" in chain[0]["payload"]
 
 
 def local_purposes(chain) -> dict:

@@ -8,7 +8,7 @@ import os
 from ..a2a import A2ATransport
 from ..broker.failover import FailoverBrokerClient
 from ..config import ConfigError, Settings
-from ..crypto import Identity
+from ..keys.store import load_or_create, open_key_store
 from ..events import EventLog
 from ..llm import NoLLM, build_llm
 from ..peer.area import LocalFolderArea
@@ -43,7 +43,7 @@ def build_autonomous_peer(settings: Settings, prefix: str, apps: list, descripti
         llm = build_llm(settings)
     except ConfigError:
         llm = NoLLM()
-    return Peer(Identity.load_or_create(get("key_file")), settings,
+    return Peer(load_or_create(open_key_store(settings), get("key_file")), settings,
                 PeerConfig(url=f"http://{settings.host}:{get('port')}", labels=list(get("labels"))),
                 LocalFolderArea(area_dir, settings), NoOwner(), llm, A2ATransport(settings), EventLog(keep=settings.event_log_size),
                 brokers={g: FailoverBrokerClient.from_urls(urls, settings) for g, urls in groups.items()}, apps=apps)

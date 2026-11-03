@@ -1,6 +1,6 @@
 # 에이전트 아레나 규약 (peer를 다른 언어로 만들기 위한 문서)
 
-> 판 3 · 2026-11-03(판 2에 공개 본체와 비공개 봉투, 공개 기록 흐름을 더함. 판 2 · 2026-11-02, 판 1에 6단계를 더함: 이벤트의 요소 블록과 요소별 원장 규칙, 연결 방식과 api 묶음, 서비스 영수증. 판 1: 진짜 원장 증명). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
+> 판 4 · 2026-11-03(판 3에 가지 체인의 갈라진 지점과 1번 기록 `parent_link`(CP-1·2), peer 키 이어받기 `key_commit`·`peer_rotate`와 `GET /key/{pub}`, 암호화한 키 백업의 모양(2.6절)을 더함, 6-K. 판 3 · 2026-11-03: 판 2에 공개 본체와 비공개 봉투, 공개 기록 흐름을 더함. 판 2 · 2026-11-02, 판 1에 6단계를 더함: 이벤트의 요소 블록과 요소별 원장 규칙, 연결 방식과 api 묶음, 서비스 영수증. 판 1: 진짜 원장 증명). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
 
 이 문서는 에이전트 아레나에 **Python이 아닌 다른 구현**으로 peer 에이전트, broker, recorder를 만들어 참여하려는 개발자를 위한 것이다. 앱(peer 안에 꽂는 플러그인)을 만드는 규약은 [app-guide.md](app-guide.md)에 따로 있다.
 
@@ -69,6 +69,24 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 
 ---
 
+### 2.6 암호화한 키 백업 (6-K)
+
+peer의 비밀키 백업은 기기 안에서 소유자의 암호문구로 잠근다. 맡는 쪽(파일, 키 peer)은 암호문만 가진다. 다른 구현도 같은 백업을 열 수 있도록 모양을 정한다(시험 벡터 `key_backup`).
+
+```json
+{"format": "arena-key-backup", "version": 1, "pub": "<지금 공개키>",
+ "kdf": {"name": "scrypt", "n": 32768, "r": 8, "p": 1, "salt": "<16바이트 16진>"},
+ "cipher": {"name": "aes-256-gcm", "nonce": "<12바이트 16진>"},
+ "ciphertext": "<16진>"}
+```
+
+- 키 = scrypt(암호문구의 UTF-8 바이트, salt, n, r, p, 길이 32).
+- 평문 = 정규 JSON `{"current": "<지금 비밀키 16진>", "next": "<약속한 다음 비밀키 16진>"}`(`next`는 없을 수 있다).
+- 덧붙인 확인 자료(AES-GCM associated data) = `ciphertext`를 뺀 나머지 객체의 정규 JSON. 머리를 바꾸면 열리지 않는다.
+- 연 뒤 `current`의 공개키가 `pub`와 같아야 한다. 받는 쪽은 지나치게 큰 `n`을 거절한다(`ARENA_KEY_BACKUP_SCRYPT_N_MAX`).
+
+키 peer에 맡기는 요청 `key.backup.put`의 서명 대상은 `{"op": "key.backup.put", "pub", "backup": SHA-256(정규JSON(백업)), "ts"}`이고 그 백업의 키(`pub`)가 서명한다.
+
 ## 3. broker·recorder에 보내는 HTTP 서명 요청
 
 열람에 권한이 필요한 요청은 세 머리를 단다.
@@ -96,8 +114,9 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `GET /track/{pub}` | 아니요 | 공개키 하나의 실적 집계(개수만) |
 | `GET /chain` | 예(허용된 키만) | 원장 전체. 시도는 모두 접근 기록에 남는다 |
 | `GET /access-log` | 예(허용된 키만) | 접근 기록 |
-| `GET /trust` | 아니요 | 신뢰 문서: `ledger_id`, 제네시스 항목 전체, 모든 `key_rotate` 항목 전체, 지금 기록자 키(4.5절) |
+| `GET /trust` | 아니요 | 신뢰 문서: `ledger_id`, 제네시스 항목 전체, 모든 `key_rotate` 항목 전체, 지금 기록자 키, `head`(`{seq, hash}`: 마지막 기록. 지금 갈라지는 가지의 갈라진 지점), 가지 체인이면 `parent_link`(1번 기록 전체)(4.5절) |
 | `GET /links/{ledger_id}` | 아니요 | 그 커뮤니티 체인을 이 원장에 연결한 `chain_link` 항목 전체 |
+| `GET /key/{pub}` | 아니요 | peer 키의 상태: `status`(`current` · `retired` · `unknown`), `current`(그 신원의 지금 키), `lineage`(처음 키부터 지금 키까지), 지금 키의 `next`(약속한 다음 키의 해시)와 `recovery`(복구 담당 키 peer) |
 | `GET /log?from=N&limit=M` | 아니요 | **공개 기록 흐름**: N번부터 항목들을 공개 모양(봉투 없음)으로. 누구나 가져가 해시 사슬, 봉인, 공개 서명을 확인한다. 답 `{entries, next, size}` |
 | `GET /codebooks` | 아니요 | 이 원장의 판 기록(`codebook`) 전체. 가지 체인이 뿌리의 판을 옮겨 적을 때 쓴다 |
 | `GET /codes` | 아니요 | 이 기록자가 구현한 원장 코드(`implemented`: `entry_types`·`purposes`·`elements`)와 함께 든 기본 판(`builtin`: `{name, version}`) |
@@ -145,7 +164,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 
 | 종류 | 서명자 | payload 칸 |
 |---|---|---|
-| `genesis` | `god` | `god`, `broker`, `recorder`, `group_id`, 커뮤니티 체인이면 `parent`(`{ledger_id, recorder_url}`: 연결한 원래 체인) |
+| `genesis` | `god` | `god`, `broker`, `recorder`, `group_id`, 커뮤니티 체인이면 `parent`(`{ledger_id, recorder_url, recorder, branch_point}`: 연결한 원래 체인, 그 기록자 주소, 갈라질 때 그 기록자 키, 갈라진 지점 `{seq, hash}`(그때 원래 체인의 마지막 기록)) |
 | `group` | `founder` | `group_id`, `founder`, `closed`, `brokers` |
 | `event` | `issuer`와 `approvers` 전원 | `event_id`, `issuer`, `kind`, `policy`, `approvers`, `rules_hash`, `mode`, `apps`, 선택 `elements`(4.6절), 선택 `schedule`(`[{at, code, subject?, note?}]`: 일정. `at`은 초 단위 시각, `code`는 등록된 시각 코드 `start`·`session`·`deadline`·`end`, 항목 수 상한 `ARENA_EVENT_SCHEDULE_MAX`), 선택 `codebook`(`{entry, publisher, version}`: 따르는 코드표 판. 원장이 그 판 기록과 대조하고, 기본 요소가 그 판의 코드인지, 이 기록자가 그 판의 원장 코드를 모두 구현했는지 본다) |
 | `contract` | `issuer`, `contractor` | `event_id`, `role`, `issuer`, `contractor`, `nonce`, `rules_hash` |
@@ -158,7 +177,10 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 | `close` | `issuer` | `event_id`, `issuer`, `result_hash`(이 이벤트의 항목) |
 | `key_rotate` | `old`, `new`, 기록자면 `god`도 | `role`(`recorder`·`god`), `old`(그 시점의 유효한 키), `new`, 기록자면 `god`(지금의 god 키), `nonce` |
 | `codebook` | `publisher` | `publisher`, `name`, `version`(`x.y`), `content_hash`(코드표 문서의 해시), `codes`(`entry_types`·`purposes`·`elements`·`time_codes`·`connections` 목록), 선택 `supersedes`(앞 판의 기록 해시), 선택 `local`(가지 체인만: `{"purposes": {"x-<커뮤니티>.<코드>": {types, description}}}`, 그 체인 안에서만 쓰는 자체 목적 코드). **옮겨 적기**(가지 체인만): `{copier, copied: 뿌리의 판 기록 전체}`, 서명자 `copier`. 원장이 옮긴 기록의 해시·판을 낸 이의 서명·봉인·뿌리 식별자를 확인하고, 그 뒤 이벤트는 뿌리 판 기록의 해시로 판을 가리킨다. 같은 낸 이·이름·번호는 한 번만, 같은 표의 새 판은 번호가 더 커야 함([codebook.md](codebook.md)) |
-| `chain_link` | `child_god`, `child_recorder` | `child_ledger_id`(새 체인의 제네시스 해시), `child_god`, `child_recorder`(새 체인의 첫 기록자 키), `name`, `nonce`. 원래 체인에 남긴다. 한 체인은 한 번만 |
+| `key_commit` | `pub` | `pub`, `next`(다음 키의 약속: 다음 공개키 16진 문자열의 UTF-8 바이트에 대한 SHA-256), 선택 `recovery`(복구에 서명할 수 있는 키 peer 공개키 목록, 최대 `ARENA_KEY_RECOVERY_MAX`, 자기 자신은 안 됨). 키마다 한 번, 이미 이어받기에 든 키는 안 됨 |
+| `peer_rotate` | `new`, 복구면 `recoverer`도 | `old`(지금 키), `new`, `next`(new 다음 키의 약속), `by`(`next`: new의 해시가 old가 약속한 `next`와 같아야 함 · `recovery`: `recoverer`가 old 신원의 `recovery`에 있어야 함), 선택 `recovery`(새 복구 담당), `nonce`. **이 기록 뒤로 원장은 `old`가 서명한 어떤 기록도 받지 않는다**. 기록자의 실적 조회(`GET /track`)는 그 신원의 모든 키를 합쳐 센다 |
+| `chain_link` | `child_god`, `child_recorder` | `child_ledger_id`(새 체인의 제네시스 해시), `child_god`, `child_recorder`(새 체인의 첫 기록자 키), `name`, `branch_point`(새 체인 0번 기록의 `parent.branch_point`와 같은 값. 원래 체인의 원장이 이 지점이 자기 기록인지 확인), `nonce`. 원래 체인에 남긴다. 한 체인은 한 번만 |
+| `parent_link` | `god`(가지 체인의 god) | `god`, `link`(원래 체인이 봉인한 `chain_link` 항목 전체: 해시와 봉인 포함). **가지 체인의 1번 기록**이고 한 번만. 원장이 그 항목의 해시를 다시 계산하고, 봉인 서명, 이 체인의 제네시스 해시·god·첫 기록자 키, 원래 체인 식별자와 갈라진 지점이 0번 기록과 같은지 본다. 이 기록 전에는 가지 체인이 다른 기록을 받지 않는다 |
 
 **코드 칸과 자유 영역**: 위 표의 칸과 공통 칸(`group_id`, `ledger_id`, `event_id`, `purpose`, `nonce`)이 원장이 확인하는 코드 칸이다. payload의 나머지는 자유 영역으로, 원장이 읽지 않고 공개 확인에도 보이지 않는다(서명 범위 안이라 바꿀 수는 없다). 목적 코드 `purpose`는 등록된 값만 받는다. 지금 코드: `authorship`(`publish`, 저작 내용과 그 시점의 증명, 이름표 없음), `commit`(`publish`, 봉인 등록, 이름표 있음), `delivery`(`share`, 자료 전달), `submission`(`share`, 이벤트 제출, 이벤트 필수), `evaluation`(`share`, 평가 건넴, 이벤트 필수). 칸 정책 전체: [entry-columns.md](entry-columns.md).
 
@@ -171,7 +193,7 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 1. **뿌리 값**: 원래 체인의 제네시스 해시와 god 첫 공개키. 원장 밖(백서, 설정 기본값, README, 서명 태그)에 공개된다. 받는 쪽 설정: `ARENA_TRUST_GENESIS_HASH`, `ARENA_TRUST_GOD_PUB`.
 2. **원래 체인 확인**: `GET /trust`의 제네시스 항목 해시를 다시 계산해 뿌리 해시와 비교하고, god 서명과 봉인(제네시스의 `recorder` 키)을 확인한다.
 3. **키 이어받기**: `key_rotate` 항목을 `seq` 순서로 따라간다. 각 항목에서 `old`가 그 시점의 유효한 키인지, 기록자면 `god`가 그 시점의 god 키인지, 서명(4.4절 서명자)과 해시, **그 시점의 기록자 키로 된 봉인**을 확인한다. 기록자 `key_rotate` 항목은 옛 키로 봉인되고, 그다음 항목부터 새 키로 봉인된다. 끝까지 따라간 키가 신뢰 문서의 `recorder`와 같아야 한다.
-4. **커뮤니티 체인**: 제네시스에 `parent`가 있으면, `parent.ledger_id`가 뿌리 해시인지 보고(가지는 뿌리에서만 갈라진다. 가지 체인의 원장은 `chain_link`를 받지 않는다), `parent.recorder_url`의 뿌리 체인을 1~3으로 증명하고, `GET /links/{이 체인의 ledger_id}`로 `chain_link`를 받아: 이 체인의 제네시스 해시·god 키·첫 기록자 키를 가리키는가, 새 god과 새 첫 기록자의 서명이 맞는가, `ledger_id`가 원래 체인의 것인가, **그 시점의 원래 기록자 키로** 봉인됐는가를 본다. 그다음 이 체인에 2~3을 한다(뿌리 값 대신 연결이 증명한 제네시스로).
+4. **커뮤니티 체인**: 제네시스에 `parent`가 있으면, `parent.ledger_id`가 뿌리 해시인지 보고(가지는 뿌리에서만 갈라진다. 가지 체인의 원장은 `chain_link`를 받지 않는다), `parent.recorder_url`의 뿌리 체인을 1~3으로 증명하고, `GET /links/{이 체인의 ledger_id}`로 `chain_link`를 받아: 이 체인의 제네시스 해시·god 키·첫 기록자 키를 가리키는가, 새 god과 새 첫 기록자의 서명이 맞는가, `ledger_id`가 원래 체인의 것인가, **그 시점의 원래 기록자 키로** 봉인됐는가, `branch_point`가 0번 기록의 것과 같은가, 0번 기록의 `parent.recorder`가 **갈라진 지점에서 유효했던** 원래 기록자 키인가를 본다. 그리고 이 체인 신뢰 문서의 `parent_link`가 1번 기록이고 같은 `chain_link`(해시)를 담았는지, god 서명과 그 시점의 이 체인 기록자 봉인이 맞는지 본다. 그다음 이 체인에 2~3을 한다(뿌리 값 대신 연결이 증명한 제네시스로).
 5. 증명된 기록자의 이벤트만 받는다. 공지의 `recorder_pub`이 증명된 지금 키와 같아야 한다.
 
 체인을 넓히는 정책(뿌리 원장, 가지 기록, 가지의 첫 기록, 원장 밖 내용의 링크)과 구현 예정인 칸은 `dev/chain-policy.md`에 있다.

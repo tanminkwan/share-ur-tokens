@@ -1,5 +1,6 @@
 """The protocol spec (dev/protocol.md) ships test vectors (dev/protocol-vectors.json) so a peer written in another
 language can check its encoding, hashing and signing byte for byte. This keeps the vectors equal to what the code does."""
+import dataclasses
 import json
 import pathlib
 
@@ -36,3 +37,17 @@ def test_protocol_3_vector_with_an_envelope():
     assert h(canon(hash_body(e))) == x["hash"]
     assert all(verify(pub, e["payload"], sig) for pub, sig in env["sigs"].items())
     assert "provider" not in e["payload"] and env["fields"]["provider"] == V["public_key_hex"]
+
+
+def test_key_backup_and_commitment_vectors(settings):
+    """P6-K2, K3: the encrypted key backup and the promised-next-key hash, byte for byte"""
+    from arena.keys.backup import open_backup, seal_backup
+    from arena.ledger.peer_keys import key_commitment
+    x = V["key_backup"]
+    b = x["backup"]
+    me, nxt = Identity.from_hex(V["private_key_hex"]), Identity.from_hex(x["next_private_key_hex"])
+    fixed = dataclasses.replace(settings, key_backup_scrypt_n=b["kdf"]["n"], key_backup_scrypt_r=b["kdf"]["r"], key_backup_scrypt_p=b["kdf"]["p"])
+    assert seal_backup(me, x["passphrase"], fixed, nxt, salt=bytes.fromhex(b["kdf"]["salt"]), nonce=bytes.fromhex(b["cipher"]["nonce"])) == b
+    keys = open_backup(b, x["passphrase"], settings)
+    assert keys["current"].pub == me.pub and keys["next"].pub == nxt.pub
+    assert key_commitment(V["key_commitment"]["pub"]) == V["key_commitment"]["hash"] and V["key_commitment"]["pub"] == nxt.pub

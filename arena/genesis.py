@@ -20,7 +20,7 @@ from .config import ConfigError, Settings
 from .crypto import Identity
 from .events import EventLog
 from .ledger import JsonlStore
-from .ledger.trust import anchor_block, link_to_parent
+from .ledger.trust import anchor_block, branch_parent, link_to_parent, record_parent_link
 from .ledger.types import current_keys
 from .recorder.client import RecorderClient
 from .llm import NoLLM, build_llm
@@ -99,7 +99,7 @@ async def start(settings: Settings, viewers=None) -> Genesis:
                 raise RuntimeError(f"parent recorder: {pt.get('error')}")
             if "parent" in ((pt.get("genesis") or {}).get("payload") or {}):  # P5-G10: branches grow only from the trunk
                 raise ConfigError("ARENA_GENESIS_PARENT_RECORDER_URL must be the trunk's recorder: a branch chain cannot start a branch")
-            parent = {"ledger_id": pt["ledger_id"], "recorder_url": settings.genesis_parent_recorder_url}
+            parent = branch_parent(pt, settings.genesis_parent_recorder_url)  # ledger, recorder key, branch point (CP-1)
         r = await record_genesis(svc, god_id, settings, broker.identity.pub, rec_id.pub, parent)
         if not r["ok"]:
             raise RuntimeError(f"genesis failed: {r['error']}")
@@ -113,6 +113,11 @@ async def start(settings: Settings, viewers=None) -> Genesis:
         r = await link_to_parent(parent_client, god_id, rec_id, svc.ledger.chain, settings.genesis_broker_name)
         if not r.get("ok"):
             raise RuntimeError(f"could not link this ledger into the original chain: {r.get('error')}")
+    if parent_client and len(svc.ledger.chain) == 1:  # entry 1 of a branch: the chain_link the trunk sealed (CP-2)
+        link = (await parent_client.link(svc.ledger.chain[0]["hash"])).get("link")
+        r = await record_parent_link(svc, god_id, svc.ledger.chain, link or {})
+        if not r.get("ok"):
+            raise RuntimeError(f"could not record this ledger's parent_link: {r.get('error')}")
     anchor_file = write_anchor(settings, svc.ledger.chain)
     urls = {"broker": url(settings.genesis_broker_port), "recorder": url(settings.genesis_recorder_port),
             "recorder_api": url(settings.genesis_recorder_api_port), "god": url(settings.genesis_god_port)}
