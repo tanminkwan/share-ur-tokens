@@ -36,9 +36,9 @@ flowchart TB
 
 | 예 | 칸 | 상태 |
 |---|---|---|
-| 원장(항목)의 유형 | `type`(payload 밖): `genesis`, `group`, `event`, `contract`, `publish`, `reveal`, `share`, `feedback`, `assign`, `attest`, `close`, `key_rotate`, `chain_link`, `codebook`. 등록해서 더한다. 코드 목록 자체는 판으로 낸다(`dev/codebook.md`) | 구현·테스트됨 |
+| 원장(항목)의 유형 | `type`(payload 밖): `genesis`, `group`, `event`, `contract`, `publish`, `reveal`, `share`, `feedback`, `assign`, `attest`, `close`, `key_rotate`, `chain_link`, `parent_link`, `codebook`. 등록해서 더한다. 코드 목록 자체는 판으로 낸다(`dev/codebook.md`) | 구현·테스트됨 |
 | 저작 내용과 시점 명시 목적 | `publish`의 `purpose: "authorship"` | 구현·테스트됨(이번에 넣음) |
-| 가지 체인 시작점 | 뿌리 쪽은 `type: "chain_link"`, 가지 쪽은 `type: "genesis"` + `parent` 칸. 그 자체가 코드다 | 구현·테스트됨 |
+| 가지 체인 시작점 | 뿌리 쪽은 `type: "chain_link"`, 가지 쪽은 `type: "genesis"` + `parent` 칸(갈라진 지점 포함)과 1번 기록 `type: "parent_link"`. 그 자체가 코드다 | 구현·테스트됨 |
 
 ## 4. 목적 코드(`purpose`)
 

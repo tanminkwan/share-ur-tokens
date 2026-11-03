@@ -276,9 +276,13 @@ async def test_p5g9_a_community_genesis_process_links_into_the_original_chain(tm
     s = Settings.load(env=root_env, dotenv_path=None)
     root, child = RecorderClient(root_api, s), RecorderClient(f"http://127.0.0.1:{ports['api2']}", s)
     rdoc, cdoc = await root.trust(), await child.trust()
-    assert cdoc["genesis"]["payload"]["parent"] == {"ledger_id": rdoc["ledger_id"], "recorder_url": root_api}
+    par = cdoc["genesis"]["payload"]["parent"]
+    assert {k: par[k] for k in ("ledger_id", "recorder_url", "recorder")} == {"ledger_id": rdoc["ledger_id"], "recorder_url": root_api,
+                                                                               "recorder": rdoc["recorder"]}
     link = (await root.link(cdoc["ledger_id"]))["link"]
-    assert link["payload"]["name"] == "team-a"
+    assert link["payload"]["name"] == "team-a" and link["payload"]["branch_point"] == par["branch_point"]  # CP-1: both sides, one point
+    assert par["branch_point"]["seq"] < link["seq"]
+    assert cdoc["parent_link"]["seq"] == 1 and cdoc["parent_link"]["payload"]["link"]["hash"] == link["hash"]  # CP-2: entry 1
     ok, why, keys = verify_linked(cdoc, rdoc, link, rdoc["ledger_id"], rdoc["genesis"]["payload"]["god"])
     assert ok and keys["recorder"] == cdoc["recorder"], why
     assert "연결된 원래 체인" in (tmp_path / "child" / "trust-anchor.md").read_text(encoding="utf-8")

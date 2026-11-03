@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from ..ledger.trust import verify_link_entry, verify_trust
+from ..ledger.trust import verify_link_entry, verify_parent_link, verify_trust
 
 
 class RecorderTrust:
@@ -43,7 +43,8 @@ class RecorderTrust:
         return out
 
     async def _branch(self, doc: dict) -> dict:
-        """a branch chain: its origin must be the trunk, the trunk proven, and the trunk's chain_link must name this chain"""
+        """a branch chain: its origin must be the trunk, the trunk proven, the trunk's chain_link must name this chain at the
+        same branch point, and the branch's entry 1 must hold that chain_link (CP-1, CP-2)"""
         s = self.s
         parent = ((doc.get("genesis") or {}).get("payload") or {}).get("parent")
         if not parent:
@@ -61,7 +62,7 @@ class RecorderTrust:
             return self._fail(f"parent recorder: {type(e).__name__}: {e}")
         pok, _, pkeys = verify_trust(pdoc, pt["ledger_id"], (pdoc.get("genesis") or {}).get("payload", {}).get("god", ""))
         bad = None if pok and pkeys.get("recorder") == pt["recorder"] else "the parent's trust document changed"
-        bad = bad or verify_link_entry(link, pdoc, doc["genesis"])
+        bad = bad or verify_link_entry(link, pdoc, doc["genesis"]) or verify_parent_link(doc, link or {})
         if bad:
             return self._fail(bad)
         ok, why, keys = verify_trust(doc, doc["genesis"]["hash"], doc["genesis"]["payload"]["god"])

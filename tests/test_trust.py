@@ -171,13 +171,21 @@ class Child(Net):
         super().__init__(settings)
         self.parent, self.parent_url = parent, parent_url
 
-    async def boot(self):
-        from arena.ledger.trust import link_to_parent
-        ptrust = await InMemoryRecorderClient(self.parent.svc).trust()
+    async def boot(self, finish=True):
+        """the genesis program's steps: genesis naming the parent (ledger, recorder key, branch point), chain_link in the
+        parent, then entry 1 parent_link holding that sealed chain_link (CP-1, CP-2)"""
+        from arena.ledger.trust import branch_parent, link_to_parent, record_parent_link
+        parent = InMemoryRecorderClient(self.parent.svc)
+        ptrust = await parent.trust()
+        par = branch_parent(ptrust, self.parent_url) if "parent" not in ptrust["genesis"]["payload"] else \
+            {"ledger_id": ptrust["ledger_id"], "recorder_url": self.parent_url, "recorder": ptrust["recorder"], "branch_point": ptrust["head"]}
         p = {"group_id": self.s.genesis_group_id, "god": self.god.pub, "broker": Identity.generate().pub, "recorder": self.rec.pub,
-             "parent": {"ledger_id": ptrust["ledger_id"], "recorder_url": self.parent_url}}
+             "parent": par}
         assert (await self.svc.record("genesis", p, {self.god.pub: self.god.sign(p)}))["ok"]
-        self.link = await link_to_parent(InMemoryRecorderClient(self.parent.svc), self.god, self.rec, self.svc.ledger.chain, "child community")
+        self.link = await link_to_parent(parent, self.god, self.rec, self.svc.ledger.chain, "child community")
+        if finish and self.link.get("ok"):
+            entry = (await parent.link(self.ledger_id))["link"]
+            assert (await record_parent_link(self.svc, self.god, self.svc.ledger.chain, entry))["ok"]
         return self
 
 
@@ -198,7 +206,7 @@ async def test_p5g9_a_community_chain_is_proven_through_its_link_in_the_original
     assert not ok
     # naming the new chain's keys without their signatures is refused by the original ledger
     p = {"child_ledger_id": "0" * 64, "child_god": child.god.pub, "child_recorder": child.rec.pub, "name": "x", "group_id": "public",
-         "ledger_id": net.ledger_id, "nonce": "n"}
+         "ledger_id": net.ledger_id, "nonce": "n", "branch_point": e["payload"]["branch_point"]}
     assert "signature" in (await net.svc.record("chain_link", p, {child.god.pub: child.god.sign(p)}))["error"]
     # one link per community chain
     again = dict(e["payload"], nonce="other")
@@ -232,7 +240,7 @@ async def test_p5g10_only_the_trunk_takes_branch_links(net, settings):
     # even a link entry written by hand into a branch chain is refused by its ledger
     g = Identity.generate()
     p = {"child_ledger_id": "1" * 64, "child_god": g.pub, "child_recorder": g.pub, "name": "x", "group_id": "public",
-         "ledger_id": child.ledger_id, "nonce": "n"}
+         "ledger_id": child.ledger_id, "nonce": "n", "branch_point": {"seq": 0, "hash": child.ledger_id}}
     assert "trunk" in (await child.svc.record("chain_link", p, {g.pub: g.sign(p)}))["error"]
 
 

@@ -91,8 +91,11 @@ class RecorderService:
         chain = self.ledger.chain
         if not chain or chain[0]["type"] != "genesis":
             return {"ok": False, "error": "this ledger was not begun by a genesis"}
+        link = chain[1] if len(chain) > 1 and chain[1]["type"] == "parent_link" else None
         return {"ok": True, "ledger_id": chain[0]["hash"], "genesis": chain[0], "recorder": self.identity.pub,
-                "rotations": [e for e in chain if e["type"] == "key_rotate"]}
+                "rotations": [e for e in chain if e["type"] == "key_rotate"],
+                "head": {"seq": len(chain) - 1, "hash": chain[-1]["hash"]},  # where a branch growing now would grow from (CP-1)
+                **({"parent_link": link} if link else {})}
 
     async def record(self, kind: str, payload: dict, sigs: dict, private: dict | None = None) -> dict:
         async with self._lock:
