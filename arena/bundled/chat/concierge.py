@@ -46,7 +46,7 @@ async def _tell_event(svc, event, text):
 
 
 async def _answer_item(svc, item, yes, why):
-    it = svc.desk.items.get(item)
+    it = svc.item(item)
     if it is None or it.status != "open":
         return {"error": f"열린 알림이 아니다: {item}"}
     answer = {"approve": yes} if it.kind == "suggestion" else {"yes": yes, "why": why}

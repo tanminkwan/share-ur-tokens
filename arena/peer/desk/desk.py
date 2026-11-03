@@ -15,6 +15,10 @@ class OwnerDesk:
         self.items: dict[str, DeskItem] = {}
         self._waiting: dict[str, asyncio.Future] = {}
 
+    def bind(self, save) -> None:
+        """where the desk keeps its items from now on (save(items))"""
+        self._save = save
+
     def load(self, items: list[dict]) -> None:
         self.items = {d["id"]: DeskItem.from_dict(d) for d in items}
         for it in self.items.values():  # nobody waits any more: close what was awaited as "no"
@@ -79,4 +83,4 @@ class OwnerDeskApp(BaseApp):
 
     async def start(self, ctx) -> None:
         self.desk.load(ctx.state.load().get("items", []))
-        self.desk._save = lambda items: ctx.state.save({"items": items})
+        self.desk.bind(lambda items: ctx.state.save({"items": items}))

@@ -1,6 +1,8 @@
 """AppContext: what the platform injects into an app. An app sees only this, never the peer object."""
 from __future__ import annotations
 
+from .plugin import SubmissionSource
+
 
 class AppState:
     """an app's own persistent state (survives restarts through the peer's home); one dict per app"""
@@ -108,9 +110,8 @@ class AppContext:
 
     async def submissions(self, event_id: str) -> list:
         """what this peer's submission desk received for an event (the intake element)"""
-        from .elements.intake import IntakeDesk
-        desk = self._peer.app_by_id(IntakeDesk.app_id)
-        return desk.list(event_id) if desk else []
+        # a capability, not a particular element: the dependency points to the interface
+        return [x for app in self._peer.apps + self._peer.builtins if isinstance(app, SubmissionSource) for x in app.list(event_id)]
 
     async def profile_of(self, pub: str) -> dict | None:
         return await self._peer.profile_of(pub)

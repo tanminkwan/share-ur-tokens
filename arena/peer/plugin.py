@@ -77,6 +77,12 @@ class Lifecycle(Protocol):
 
 
 @runtime_checkable
+class SubmissionSource(Protocol):
+    """an app that keeps what was submitted to this peer for an event (the intake element's desk is one)"""
+    def list(self, event_id: str) -> list: ...
+
+
+@runtime_checkable
 class TimerHandler(Protocol):
     """an app the peer's scheduler wakes at a time it (or the event's schedule) set: timer = {id, at, kind, data, event_id, late}"""
     async def on_timer(self, ctx, timer: dict) -> None: ...
@@ -95,7 +101,7 @@ class EvaluationProvider(Protocol):
 
 
 CAPABILITIES = (OpProvider, OfferProvider, RoleAcceptor, EventApprover, RequestReceiver, ProfileContributor, Lifecycle, EventHandler,
-                EvaluationProvider, TimerHandler)
+                EvaluationProvider, TimerHandler, SubmissionSource)
 
 # ---------------- which app runs an event, and how ----------------
 from ..ledger.run import ASSISTANT_RUN, MODES, is_uuid, valid_app_ref, valid_run, version_ok  # noqa: E402,F401  (the ledger owns the run block)

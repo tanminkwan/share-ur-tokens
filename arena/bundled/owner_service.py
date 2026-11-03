@@ -2,10 +2,27 @@
 assistant; it does not know HTTP. Every check (signatures, the ledger, handles) stays in the peer's code."""
 from __future__ import annotations
 
+from typing import Protocol, runtime_checkable
+
 from ..llm import llm_available
-from ..peer.assistant import EventAssistant
 from ..peer.desk import OwnerDesk
 from ..peer.scheduler import fmt_time
+
+
+@runtime_checkable
+class EventsPort(Protocol):
+    """what the owner's windows need from the app that runs the peer's events (the basic assistant is one). The service
+    depends on this, not on a particular class"""
+    events: dict
+    DRIVES: tuple
+
+    def allowed_drives(self, ctx) -> tuple: ...
+    def state_line(self, ctx, st) -> str: ...
+    def tools_view(self, st) -> list: ...
+    def set_drive(self, ctx, event_id: str, drive: str) -> dict: ...
+    async def owner_run(self, ctx, event_id: str, name: str, args: dict) -> dict: ...
+    async def feed(self, ctx, event_id: str, text: str, idle: bool = False, kind: str = "message"): ...
+    async def host_event(self, ctx, **kw) -> str: ...
 
 
 class OwnerService:
@@ -13,12 +30,12 @@ class OwnerService:
         self.peer, self.desk = peer, desk
 
     @property
-    def _asst(self) -> EventAssistant:
-        return self.peer.app(EventAssistant)
+    def _asst(self) -> EventsPort:
+        return next(a for a in self.peer.apps if isinstance(a, EventsPort))
 
     @property
     def _ctx(self):
-        return self.peer.ctx(EventAssistant)
+        return self.peer.ctx(self._asst)
 
     def config(self) -> dict:
         """what the screen needs to know in advance (no constants in the screen's code)"""
@@ -37,6 +54,10 @@ class OwnerService:
 
     def items(self, status: str = "open") -> list[dict]:
         return [it.to_dict() for it in self.desk.list(status if status in ("open", "all") else "open")]
+
+    def item(self, item_id: str):
+        """one desk item, or None"""
+        return self.desk.items.get(item_id)
 
     def answer(self, item_id: str, answer: dict) -> dict:
         try:
