@@ -1,9 +1,12 @@
-"""Slow answers over A2A as tasks (user 2026-11-03). Two parts, one job each:
+"""Slow answers over A2A as tasks (user 2026-11-03). Three parts, one job each:
 
 - SlowAnswer (the answering side): run an op; if it finishes within the answer window, answer with one message;
   otherwise report a task in state `working` with what it waits for (arena/waiting.py) and complete it later.
 - TaskFollower (the calling side): follow a task with tasks/get until it ends or the wait runs out (then: pending and
   the task id, so the caller can tell it apart from a refusal).
+- FileTaskStore (the answering side): keeps the tasks in the peer's home, so a caller still gets an answer after a
+  restart. A task that was still working when the peer stopped is closed as failed ("ask again"): the person's
+  question on the desk is closed the same way (OwnerDesk), so nothing waits for an answer that cannot come.
 
 `working`, not `input-required`: the person waited on is the answering peer's own owner. `input-required` means the
 answering agent needs more input from the caller; a caller following another agent's task is told so (needs_input)."""
@@ -11,12 +14,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from typing import Awaitable, Callable
 
 from a2a.helpers.proto_helpers import get_message_text, new_task, new_text_message
-from a2a.server.tasks import TaskUpdater
-from a2a.types import GetTaskRequest, TaskState
+from a2a.server.tasks import TaskStore, TaskUpdater
+from a2a.types import GetTaskRequest, ListTasksResponse, Task, TaskState, TaskStatus
+from google.protobuf import json_format
 
 from .waiting import watch
 
@@ -79,3 +84,48 @@ class TaskFollower:
                 return {"ok": False, "pending": True, "task_id": task.id, "error": f"still waiting: {_note(task_text(task))}"}
             await self.sleep(min(self.poll, max(0.0, end - self.clock())))
             task = await client.get_task(GetTaskRequest(id=task.id))
+
+
+RESTARTED = {"ok": False, "error": "the peer restarted before it could answer; ask again"}
+TERMINAL = {TaskState.TASK_STATE_COMPLETED, *DONE_BAD}
+
+
+class FileTaskStore(TaskStore):
+    def __init__(self, path: str, keep: int):
+        self.path, self.keep = path, keep
+        self.tasks: dict[str, Task] = {}
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                for d in json.load(f):
+                    t = json_format.ParseDict(d, Task())
+                    if t.status.state not in TERMINAL:  # it was still working when the peer stopped
+                        t.status.CopyFrom(TaskStatus(state=TaskState.TASK_STATE_FAILED, message=json_message(RESTARTED, t.context_id, t.id)))
+                    self.tasks[t.id] = t
+            self._write()
+
+    def _write(self) -> None:
+        os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
+        tmp = self.path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump([json_format.MessageToDict(t) for t in self.tasks.values()], f, ensure_ascii=False)
+        os.replace(tmp, self.path)
+
+    async def save(self, task, context=None) -> None:
+        self.tasks.pop(task.id, None)
+        self.tasks[task.id] = Task().FromString(task.SerializeToString())  # a copy, newest last
+        while len(self.tasks) > self.keep:
+            self.tasks.pop(next(iter(self.tasks)))
+        self._write()
+
+    async def get(self, task_id, context=None):
+        return self.tasks.get(task_id)
+
+    async def list(self, params, context=None):
+        out = [t for t in self.tasks.values() if (not params.context_id or t.context_id == params.context_id)
+               and (not params.status or t.status.state == params.status)]
+        return ListTasksResponse(tasks=list(reversed(out)))
+
+    async def delete(self, task_id, context=None) -> None:
+        if self.tasks.pop(task_id, None) is not None:
+            self._write()
+

@@ -547,7 +547,7 @@ flowchart LR
 ```
 
 - 사람과 사람의 소통도 각자의 peer가 `a2a`로 주고받는다. 그래서 사람의 message에도 signature, head, 원장 연결이 똑같이 붙는다.
-- 사람의 답은 늦을 수 있다. 받는 peer는 짧은 시간 안에 끝나지 않는 답을 **A2A task**(`working`, "waiting for the owner")로 알리고, 부르는 peer는 `tasks/get`으로 끝까지 따라간다(아래 그림). 상대가 human peer면 더 오래 기다리고, 한도가 지나면 거절이 아니라 pending으로 받는다.
+- 사람의 답은 늦을 수 있다. 받는 peer는 짧은 시간 안에 끝나지 않는 답을 **A2A task**(`working`, "waiting for the owner")로 알리고, 부르는 peer는 `tasks/get`으로 끝까지 따라간다(아래 그림). 상대가 human peer면 더 오래 기다리고, 한도가 지나면 거절이 아니라 pending으로 받는다. basic assistant는 pending으로 돌아온 contract를 기억했다가 timer로 다시 보고, 답이 오면 원장 기록까지 마저 한다(`check_pending` tool로 지금 볼 수도 있다). 받는 peer는 task를 home에 남겨 재시작 뒤에도 결과나 사유("restarted, ask again")를 돌려준다.
 
 ```mermaid
 sequenceDiagram
