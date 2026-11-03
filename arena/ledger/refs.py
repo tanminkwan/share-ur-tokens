@@ -23,7 +23,8 @@ from ..crypto import canon, h, verify
 class StorageKind:
     name: str
     description: str
-    check: Callable[[str], "str | None"] | None = None  # the location's own shape, if the kind has one
+    fields: tuple = ("location",)                     # the place's own fields: code reads them directly, nothing is parsed
+    check: Callable[[dict], "str | None"] | None = None  # the shape of those fields, if the kind has one
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,7 @@ class ContentForm:
 
 
 STORAGE_KINDS: dict[str, StorageKind] = {}
-LINK_LOCATION = re.compile(r"^[0-9a-f]{64}/[0-9a-f]{32}$")
+HEX64, HEX32 = re.compile(r"^[0-9a-f]{64}$"), re.compile(r"^[0-9a-f]{32}$")
 PROOF_METHODS: dict[str, ProofMethod] = {}
 CONTENT_FORMS: dict[str, ContentForm] = {}
 
@@ -107,13 +108,7 @@ def ref_error(p: dict, settings) -> str | None:
     if not isinstance(st, list) or not st or len(st) > settings.ref_storage_max:
         return f"ref.storage must list 1 to {settings.ref_storage_max} places"
     for x in st:
-        if not isinstance(x, dict) or x.get("kind") not in STORAGE_KINDS:
-            return f"each place needs a registered kind ({', '.join(sorted(STORAGE_KINDS))})"
-        if not isinstance(x.get("location"), str) or not x["location"] or len(x["location"]) > settings.ref_location_max:
-            return f"each place needs a location of at most {settings.ref_location_max} characters"
-        if "via" in x and (not isinstance(x["via"], str) or not x["via"] or len(x["via"]) > settings.ref_location_max):
-            return "a place's via (where to reach it now, a hint) is a short text"
-        bad = STORAGE_KINDS[x["kind"]].check(x["location"]) if STORAGE_KINDS[x["kind"]].check else None
+        bad = place_error(x, settings)
         if bad:
             return bad
     if "size" in ref and (not isinstance(ref["size"], int) or isinstance(ref["size"], bool) or ref["size"] < 0):
@@ -130,6 +125,28 @@ def ref_error(p: dict, settings) -> str | None:
     return None
 
 
+def place_error(x, settings, allow: Callable[[str], bool] = lambda kind: True) -> str | None:
+    """one place: a registered kind, exactly that kind's own fields (each a short text) and an optional `via`"""
+    if not isinstance(x, dict) or x.get("kind") not in STORAGE_KINDS or not allow(x["kind"]):
+        return f"each place needs a registered kind ({', '.join(sorted(k for k in STORAGE_KINDS if allow(k)))})"
+    k = STORAGE_KINDS[x["kind"]]
+    extra = set(x) - {"kind", "via", *k.fields}
+    if extra:
+        return f"a {k.name} place has {', '.join(k.fields)} (and via), not {', '.join(sorted(extra))}"
+    for f in k.fields:
+        if not isinstance(x.get(f), str) or not x[f] or len(x[f]) > settings.ref_location_max:
+            return f"a {k.name} place needs {f}, a text of at most {settings.ref_location_max} characters"
+    if "via" in x and (not isinstance(x["via"], str) or not x["via"] or len(x["via"]) > settings.ref_location_max):
+        return "a place's via (where to reach it now, a hint) is a short text"
+    return k.check(x) if k.check else None
+
+
+def _link_place(x: dict) -> str | None:
+    if not HEX64.match(x["peer"]) or not HEX32.match(x["link_id"]):
+        return "a link place names peer (the link peer's public key, hex 64) and link_id (hex 32)"
+    return None
+
+
 def form_error(p: dict) -> str | None:
     f = p.get("form")
     if f is not None and f not in CONTENT_FORMS:
@@ -140,8 +157,8 @@ def form_error(p: dict) -> str | None:
 for _k in (StorageKind("https", "웹 주소(https://...)"), StorageKind("peer", "어떤 peer의 공개 영역(공개키와 그 안의 이름)"),
            StorageKind("ipfs", "IPFS 내용 주소(cid)"), StorageKind("git", "git 저장소와 커밋"),
            StorageKind("place", "실물의 소재 설명(보관 장소, 등기, 위치)"),
-           StorageKind("link", "link peer의 영구 link(<link peer 공개키>/<link id>): 실제 위치는 link peer가 들고, 게시자만 서명해 바꾼다",
-                       lambda loc: None if LINK_LOCATION.match(loc) else "a link location is <link peer public key>/<link id> (hex 64 / hex 32)")):
+           StorageKind("link", "link peer의 영구 link: peer(link peer 공개키)와 link_id. 실제 위치는 link peer가 들고, 게시자만 서명해 바꾼다",
+                       ("peer", "link_id"), _link_place)):
     register_storage_kind(_k)
 register_proof_method(ProofMethod("sha256", "해시 대조만: 받은 내용을 해시해 content_hash와 같은지 본다", _sha256_proof))
 register_proof_method(ProofMethod("ed25519", "서명자가 정규 JSON {content_hash, storage}에 서명했다: 이 위치들을 그 키가 밝혔다", _ed25519_proof))

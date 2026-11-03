@@ -151,7 +151,7 @@ peer의 비밀키 백업은 기기 안에서 소유자의 암호문구로 잠근
 2. `prev`가 지금 끝 해시인가
 3. `group_id`가 있는가, 선언된 그룹인가(첫 항목은 제네시스, 만민 그룹은 선언할 수 없음)
 4. 원장이 제네시스로 시작했으면, payload의 `ledger_id`가 제네시스 항목의 해시인가
-5. **크기**: entry 하나(payload와 envelope 칸을 합친 canonical JSON)가 `ARENA_LEDGER_ENTRY_MAX_BYTES`(기본 4096) 이하인가, 그 종류가 모르는 field(free-form field: 아래 표와 공통 칸 `group_id`·`ledger_id`·`event_id`·`purpose`·`nonce`·`private` 밖의 것)를 합친 크기가 `ARENA_LEDGER_FREE_MAX_BYTES`(기본 256) 이하인가. 내용은 원장 밖에 두고 hash, `ref`, link peer로 가리킨다
+5. **크기**: entry 하나(payload와 envelope 칸을 합친 canonical JSON)가 `ARENA_LEDGER_ENTRY_MAX_BYTES`(기본 4096) 이하인가, 그 종류가 모르는 field(free-form field: 아래 표와 공통 칸 `group_id`·`ledger_id`·`event_id`·`purpose`·`nonce`·`private` 밖의 것)를 합친 크기가 `ARENA_LEDGER_FREE_MAX_BYTES`(기본 256) 이하이고 **값이 모두 글(문자열)인가**. free-form은 짧은 자연어 메모 자리다. 코드가 읽어 쓰는 값(식별자, 구조)은 전용 field를 둔다. 내용은 원장 밖에 두고 hash, `ref`, link peer로 가리킨다
 6. 종류별 모양
 7. 목적 코드(`purpose`)가 있으면 등록된 코드인가, 그 종류에 쓸 수 있는 코드인가, 코드의 확인을 통과하는가(4.4절 끝)
 8. 종류가 정한 서명자 **전원**의 서명이 `sigs`에 있고 맞는가
@@ -235,7 +235,7 @@ content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
  "proof": {"method": "ed25519", "signer": "<공개키>", "sig": "<서명>", "how": "dev/protocol.md 4.7"}}
 ```
 
-- `storage`: 1~`ARENA_REF_STORAGE_MAX`곳. `kind`는 등록된 storage kind(`https`, `peer`, `ipfs`, `git`, `place`: 실물 소재 설명, `link`: link peer의 영구 link, 4.8절), `location`은 `ARENA_REF_LOCATION_MAX`자 이하. 선택 `via`는 그곳에 지금 닿는 주소(힌트, 바뀔 수 있다).
+- `storage`: 1~`ARENA_REF_STORAGE_MAX`곳. 각 곳은 `kind`와 **그 kind의 전용 field**, 선택 `via`(지금 닿는 주소, 힌트)만 가진다. 코드가 field를 바로 읽고, 한 문자열을 잘라 읽지 않는다. `https`·`peer`·`ipfs`·`git`·`place`(실물 소재 설명)는 `location`, `link`(link peer의 영구 link, 4.8절)는 `peer`(link peer 공개키, hex 64)와 `link_id`(hex 32). 각 field는 `ARENA_REF_LOCATION_MAX`자 이하.
 - `proof.method`: 등록된 proof method. `sha256`은 서명 없이 받는 쪽이 hash만 대조한다. `ed25519`는 `signer`가 정규 JSON `{"content_hash", "storage"}`에 서명한다.
 - 원장은 shape, 등록된 이름, 서명이 있으면 서명을 확인한다. content를 가져오지는 않는다(받는 쪽이 받아서 hash로 확인).
 - `share`의 `ref`는 언제나 비공개 봉투에 든다. `publish`의 `ref`는 쓰는 쪽이 공개 본체와 봉투 가운데 고른다. 공개 확인(`GET /entries`)은 `ref`를 보이지 않는다(위치 공개 범위는 CP-5, 미정).
@@ -255,7 +255,7 @@ content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
 
 > 사용자(2026-11-03): "영구적인 api 서비스 특수 peer를 만들어서 여기에 link를 달고, 실제 url 등은 향후 바뀔 수 있으니 게시자가 변경할 수 있도록 해. 원장은 변하지 않고 물리적인 link만 변할 수 있도록." "link peer 또한 다른 누군가가 스스로 공신력을 얻어서 만들 수 있음."
 
-`ref.storage`에 `{"kind": "link", "location": "<link peer 공개키>/<link id>", "via": "<지금 주소>"}`를 적는다. 원장에는 이 link만 남고, 실제 위치(URL 등)는 link peer가 들고 있다. 게시자만 서명해 위치를 바꾼다. link peer는 누구나 띄우고, 쓰이는 만큼 신뢰를 얻는다. 한 작품이 여러 link peer를 적어도 된다. 원본: `arena/content/links.py`, `arena/peer/link_role.py`, 실행 `python -m arena.peers.link_peer`.
+`ref.storage`에 `{"kind": "link", "peer": "<link peer 공개키>", "link_id": "<link id>", "via": "<지금 주소>"}`를 적는다. 식별자는 전용 field라 코드가 그대로 link peer에 넘긴다. 원장에는 이 link만 남고, 실제 위치(URL 등)는 link peer가 들고 있다. 게시자만 서명해 위치를 바꾼다. link peer는 누구나 띄우고, 쓰이는 만큼 신뢰를 얻는다. 한 작품이 여러 link peer를 적어도 된다. 원본: `arena/content/links.py`, `arena/peer/link_role.py`, 실행 `python -m arena.peers.link_peer`.
 
 **link 버전**(link peer가 보관):
 
@@ -267,7 +267,7 @@ content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
 
 - `id = SHA-256(정규JSON({"owner", "name"}))`의 앞 32자. 만들기 전에 계산할 수 있다.
 - `sig`는 `signer`가 정규 JSON `{"op": "link.set", "id", "owner", "name", "ver", "targets", "ts", "content_hash"?}`에 한 서명이다.
-- `targets`: storage kind(`link` 제외) 1~`ARENA_REF_STORAGE_MAX`곳.
+- `targets`: `ref.storage`와 같은 모양의 곳(`link` 제외) 1~`ARENA_REF_STORAGE_MAX`곳.
 - **누가 바꾸나**: 그 신원의 지금 key. link peer가 기록자를 물을 수 있으면(`ARENA_LINK_PEER_RECORDER_URL`, `GET /key/{owner}`) key rotation을 따라 지금 key만 받는다. 물러난(도난당했을 수 있는) 처음 key는 더 바꾸지 못한다. 기록자를 묻지 않으면 처음 key만 받는다.
 - 새 버전은 `ver`가 마지막 + 1이고, owner·name·content_hash는 바뀌지 않는다. 버전은 `ARENA_LINK_PEER_HISTORY_MAX`개까지 남는다.
 
@@ -275,8 +275,8 @@ content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
 
 | op | 본문 | 답 |
 |---|---|---|
-| `link.info` | - | `{ok, pub}`: 원장에 적을 location은 `<pub>/<id>` |
-| `link.set` | `{link}`(서명한 새 버전) | `{ok, id, ver, location}` |
+| `link.info` | - | `{ok, pub}`: 원장의 `ref`에는 `{kind: link, peer: pub, link_id}` |
+| `link.set` | `{link}`(서명한 새 버전) | `{ok, id, ver, peer}` |
 | `link.get` | `{id}` | `{ok, link}`(가장 새 버전) |
 | `link.history` | `{id}` | `{ok, versions}`(오래된 것부터) |
 

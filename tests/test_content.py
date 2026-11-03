@@ -60,7 +60,7 @@ async def test_cp4_the_ledger_checks_the_ref_block_and_its_proof(net, settings):
     assert "own content_hash" in (await publish(ref={"content_hash": "0" * 64, "storage": place}))["error"]
     assert "1 to" in (await publish(ref={"content_hash": ch, "storage": []}))["error"]
     assert "registered kind" in (await publish(ref={"content_hash": ch, "storage": [{"kind": "ftp", "location": "x"}]}))["error"]
-    assert "location of at most" in (await publish(ref={"content_hash": ch, "storage": [{"kind": "https", "location": "x" * (settings.ref_location_max + 1)}]}))["error"]
+    assert "text of at most" in (await publish(ref={"content_hash": ch, "storage": [{"kind": "https", "location": "x" * (settings.ref_location_max + 1)}]}))["error"]
     assert "number of bytes" in (await publish(ref={"content_hash": ch, "storage": place, "size": -1}))["error"]
     assert "media_type" in (await publish(ref={"content_hash": ch, "storage": place, "media_type": ""}))["error"]
     assert "proof.method" in (await publish(ref={"content_hash": ch, "storage": place, "proof": {"method": "rsa"}}))["error"]

@@ -3,7 +3,7 @@ peer, which never changes; this peer keeps where the content is now, and only th
 signed by the owner, or the owner's current key after key rotation, asked of a recorder). It cannot change a link
 itself: a reader checks the owner's signature. Anyone may run one and earns standing by being used.
 
-    link.info                 -> {pub}: the location a ref names is <this pub>/<link id>
+    link.info                 -> {pub}: a ref names this link as {kind: link, peer: <this pub>, link_id}
     link.set {link}           a new version, signed (arena/content/links.py); ver = the last + 1
     link.get {id}             -> {link}: the newest version
     link.history {id}         -> {versions}: every version kept, oldest first"""
@@ -55,7 +55,7 @@ class LinkRole(BaseApp):
         links[rec["id"]] = (versions + [rec])[-self.s.link_peer_history_max:]
         ctx.state.save(state)
         ctx.log.emit("links", ctx.pen, f"link {rec['id'][:10]} v{rec['ver']} ({len(rec['targets'])}곳)")
-        return {"ok": True, "id": rec["id"], "ver": rec["ver"], "location": f"{ctx.pub}/{rec['id']}"}
+        return {"ok": True, "id": rec["id"], "ver": rec["ver"], "peer": ctx.pub}
 
     def _versions(self, ctx, link_id) -> list:
         return ctx.state.load().get("links", {}).get(link_id, [])

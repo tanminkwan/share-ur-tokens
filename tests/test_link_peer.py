@@ -32,7 +32,7 @@ async def test_the_link_peer_keeps_versions_only_the_owner_may_add(tmp_path, set
     me = Identity.generate()
     v1 = make_link(me, me.pub, "novel", 1, PLACE, 1.0)
     r = await ask({"op": "link.set", "link": v1})
-    assert r["ok"] and r["location"] == f"{lp.identity.pub}/{link_id(me.pub, 'novel')}"
+    assert r["ok"] and (r["peer"], r["id"]) == (lp.identity.pub, link_id(me.pub, "novel"))
     assert "ver must be 2" in (await ask({"op": "link.set", "link": make_link(me, me.pub, "novel", 3, MOVED, 2.0)}))["error"]
     assert (await ask({"op": "link.set", "link": make_link(me, me.pub, "novel", 2, MOVED, 2.0)}))["ok"]
     got = await ask({"op": "link.get", "id": v1["id"]})
@@ -45,9 +45,9 @@ async def test_the_link_peer_keeps_versions_only_the_owner_may_add(tmp_path, set
     assert "signature" in (await ask({"op": "link.set", "link": bent}))["error"]
     other = make_link(me, me.pub, "novel", 3, MOVED, 3.0, content_hash="c" * 64)
     assert "keeps its owner, name and content hash" in (await ask({"op": "link.set", "link": other}))["error"]
-    assert "other than link" in (await ask({"op": "link.set", "link": make_link(me, me.pub, "x", 1, [{"kind": "link", "location": "a" * 64 + "/" + "b" * 32}], 1.0)}))["error"]
+    assert "registered kind" in (await ask({"op": "link.set", "link": make_link(me, me.pub, "x", 1, [{"kind": "link", "peer": "a" * 64, "link_id": "b" * 32}], 1.0)}))["error"]
     assert "1 to" in (await ask({"op": "link.set", "link": make_link(me, me.pub, "y", 1, [], 1.0)}))["error"]
-    assert "registered storage kind" in (await ask({"op": "link.set", "link": make_link(me, me.pub, "z", 1, [{"kind": "ftp", "location": "x"}], 1.0)}))["error"]
+    assert "registered kind" in (await ask({"op": "link.set", "link": make_link(me, me.pub, "z", 1, [{"kind": "ftp", "location": "x"}], 1.0)}))["error"]
     assert "id is not the one" in (await ask({"op": "link.set", "link": dict(v1, id="0" * 32)}))["error"]
     assert "needs id, owner" in (await ask({"op": "link.set", "link": {"id": "x"}}))["error"]
     assert "no such link" in (await ask({"op": "link.get", "id": "nothing"}))["error"]
@@ -82,7 +82,7 @@ async def test_a_work_names_only_the_link_and_its_author_moves_it(tmp_path, sett
     ref = r["reference"]
     lid = ref["link"]["id"]
     entry = w.svc.ledger.chain[r["receipt"]["seq"]]["payload"]
-    assert entry["ref"]["storage"] == [{"kind": "link", "location": f"{lp.identity.pub}/{lid}", "via": "http://links.example"}]  # no URL on the ledger
+    assert entry["ref"]["storage"] == [{"kind": "link", "peer": lp.identity.pub, "link_id": lid, "via": "http://links.example"}]  # no URL on the ledger
     assert "영구 link" in r["colophon"] and "link=" in r["uri"]
     assert (await resolve_link(ask, lid, s, me.pub, rec.key))["targets"] == PLACE
     moved = await relink(me, ask, lid, MOVED, s)
@@ -101,18 +101,24 @@ async def test_a_work_names_only_the_link_and_its_author_moves_it(tmp_path, sett
     assert "no such link" in (await resolve_link(ask, "nothing", s))["error"]
 
 
-async def test_the_ledger_checks_a_link_place(tmp_path, settings):
+async def test_the_ledger_checks_a_link_place_by_its_own_fields(tmp_path, settings):
+    """the link's identifiers are fields of their own (code reads them; nothing is parsed out of a text)"""
     w, s, lp, ask = await world(tmp_path, settings)
     me = Identity.generate()
-    lid = "a" * 64 + "/" + "b" * 32
+    n = iter(range(100))
 
     async def publish(place):
-        p = {"author": me.pub, "content_hash": json.dumps(place)[:64].ljust(64, "0"), "group_id": "public", "ledger_id": w.svc.ledger.chain[0]["hash"],
-             "ref": {"content_hash": json.dumps(place)[:64].ljust(64, "0"), "storage": [place]}}
+        ch = f"{next(n):064x}"
+        p = {"author": me.pub, "content_hash": ch, "group_id": "public", "ledger_id": w.svc.ledger.chain[0]["hash"],
+             "ref": {"content_hash": ch, "storage": [place]}}
         return await w.svc.record("publish", p, {me.pub: me.sign(p)})
-    assert "a link location is" in (await publish({"kind": "link", "location": "not-a-link"}))["error"]
-    assert "via" in (await publish({"kind": "link", "location": lid, "via": ""}))["error"]
-    assert (await publish({"kind": "link", "location": lid, "via": "http://links.example"}))["ok"]
+    good = {"kind": "link", "peer": "a" * 64, "link_id": "b" * 32}
+    assert "names peer" in (await publish(dict(good, peer="not-a-key")))["error"]
+    assert "needs link_id" in (await publish({"kind": "link", "peer": "a" * 64}))["error"]
+    assert "not location" in (await publish(dict(good, location="a" * 64 + "/" + "b" * 32)))["error"]  # no packed text
+    assert "via" in (await publish(dict(good, via="")))["error"]
+    assert "needs location" in (await publish({"kind": "https"}))["error"]
+    assert (await publish(dict(good, via="http://links.example")))["ok"]
 
 
 async def test_the_command_line_registers_relinks_and_resolves(tmp_path, settings):
