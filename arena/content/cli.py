@@ -21,7 +21,8 @@ from ..config import Settings
 from ..ledger.refs import STORAGE_KINDS, content_hash_of
 from .check import check_work
 from .reference import from_uri
-from .works import register_work, relink, resolve_link
+from .link_peers import LinkPeer, LinkPeers
+from .works import register_work
 
 
 def parser() -> argparse.ArgumentParser:
@@ -39,7 +40,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--out", help="write the reference JSON here (register)")
     ap.add_argument("--ref", help="the reference JSON (check)")
     ap.add_argument("--uri", help="the reference address arena-ref:... (check)")
-    ap.add_argument("--link-peer", help="a link peer's api address (register, relink, resolve)")
+    ap.add_argument("--link-peer", action="append", default=[], help="a link peer's api address; repeat to keep the link at several (register, relink, resolve)")
     ap.add_argument("--link-id", help="a link id (relink, resolve)")
     ap.add_argument("--owner", help="the link's owner public key (resolve without a reference)")
     return ap
@@ -63,28 +64,30 @@ async def run(a, s: Settings, out=sys.stdout, recorder_of=None, link_of=None) ->
     link_of = link_of or (lambda url: (lambda msg: RestTransport(s).call(url, msg)))  # one message to a link peer's api binding
     data = open(a.file, "rb").read() if a.file else None
     ref = (json.load(open(a.ref, encoding="utf-8")) if a.ref else from_uri(a.uri)) if (a.ref or a.uri) else None
-    link = (ref or {}).get("link") or {}
-    link_url = a.link_peer or link.get("via")
+    ref_links = (ref or {}).get("links") or []
+    link_urls = a.link_peer or [x["via"] for x in ref_links if x.get("via")]
+    peers = lambda: LinkPeers([LinkPeer(link_of(u), u) for u in link_urls], s)
     if a.command == "hash":
         r = {"ok": True, "content_hash": content_hash_of(data, a.form), "form": a.form}
     elif a.command == "register":
         me = PeerHome(a.home or s.personal_peer_home, s).identity()
         r = await register_work(me, data, recorder_of(a.recorder), a.recorder, s.genesis_group_id, a.form, _storage(a.storage),
-                                a.media_type, True, a.hide_storage, a.did, link_of(a.link_peer) if a.link_peer else None, a.link_peer)
+                                a.media_type, True, a.hide_storage, a.did, peers() if link_urls else None)
         if r.get("ok") and a.out:
             with open(a.out, "w", encoding="utf-8") as f:
                 json.dump(r["reference"], f, ensure_ascii=False, indent=2)
         r.pop("receipt", None)
     elif a.command in ("relink", "resolve"):
-        lid = a.link_id or link.get("id")
-        if not lid or not link_url:
-            raise SystemExit("relink and resolve need the link (--ref with a link, or --link-id) and where the link peer is (--link-peer)")
+        lid = a.link_id or (ref_links[0]["id"] if ref_links else None)
+        if not lid or not link_urls:
+            raise SystemExit("relink and resolve need the link (--ref with links, or --link-id) and where the link peers are (--link-peer)")
         if a.command == "relink":
             me = PeerHome(a.home or s.personal_peer_home, s).identity()
-            r = await relink(me, link_of(link_url), lid, _storage(a.storage), s)
+            r = await peers().move(me, lid, _storage(a.storage))
         else:
             rec = recorder_of(ref["recorder_url"]) if ref else (recorder_of(a.recorder) if a.recorder else None)
-            r = await resolve_link(link_of(link_url), lid, s, (ref or {}).get("author") or a.owner, rec.key if rec else None)
+            r = await peers().find(lid, (ref or {}).get("author") or a.owner, rec.key if rec else None)
+            r.pop("link", None)
     elif a.command == "check":
         anchor = {"genesis_hash": s.trust_genesis_hash, "god_pub": s.trust_god_pub} if s.trust_genesis_hash else None
         r = await check_work(data, ref, recorder_of(a.recorder or ref["recorder_url"]), anchor, recorder_of)

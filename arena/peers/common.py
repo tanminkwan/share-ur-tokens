@@ -1,7 +1,6 @@
 """Assemble and run an autonomous peer (no person behind it) from settings with a given prefix, e.g. search_peer_*."""
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 
@@ -14,6 +13,7 @@ from ..llm import NoLLM, build_llm
 from ..peer.area import LocalFolderArea
 from ..peer.node import Peer, PeerConfig
 from ..peer.owner import NoOwner
+from ..peer.presence import Presence
 from ..rest import build_rest_app
 from ..serve import serve_background
 
@@ -47,7 +47,7 @@ def build_autonomous_peer(settings: Settings, prefix: str, apps: list, descripti
     except ConfigError:
         llm = NoLLM()
     return Peer(load_or_create(open_key_store(settings), get("key_file")), settings,
-                PeerConfig(url=f"http://{settings.host}:{get('port')}", labels=list(get("labels"))),
+                PeerConfig(url=settings.public_url(get("port")), labels=list(get("labels"))),
                 LocalFolderArea(area_dir, settings), NoOwner(), llm, A2ATransport(settings), EventLog(keep=settings.event_log_size),
                 brokers={g: FailoverBrokerClient.from_urls(urls, settings) for g, urls in groups.items()}, apps=apps)
 
@@ -56,11 +56,8 @@ async def run_peer(peer: Peer, port: int) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     await serve_background(peer.a2a_app(), peer.settings.host, port)
     peer.log.emit("peer", peer.pen, f"A2A 서버 {peer.config.url} (skills: {', '.join(peer.skills())})")
-    await peer.advertise()
     await peer.start()
-    while True:  # keep the profile alive before it expires
-        await asyncio.sleep(max(1.0, peer.settings.profile_ttl_sec / 2))
-        await peer.advertise()
+    await Presence(peer).keep()  # posts the profile, keeps connecting to brokers that do not answer yet
 
 
 def open_connections(peer: Peer, kinds: list[str], setting: str, api_url: str, ops: list[str]) -> None:
@@ -81,9 +78,6 @@ async def run_with_connections(peer: Peer, port: int, api_port: int, label: str)
     if "api" in kinds:
         await serve_background(build_rest_app(peer.handle), s.host, api_port)
     peer.log.emit("peer", peer.pen, f"{label} 연결 방식: {', '.join(sorted(kinds))} (op: {', '.join(peer.skills())})")
-    await peer.advertise()
     await peer.start()
-    while True:  # keep the profile alive before it expires
-        await asyncio.sleep(max(1.0, s.profile_ttl_sec / 2))
-        await peer.advertise()
+    await Presence(peer).keep()  # posts the profile, keeps connecting to brokers that do not answer yet
 

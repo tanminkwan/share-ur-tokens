@@ -1,0 +1,32 @@
+# link peer: keeps permanent links; where a work is kept changes only by its publisher's signature
+# Runs on its own, wherever this peer lives. From this directory:
+#   cp .env.example .env     (then set the broker and the addresses; keys and secrets stay in .env)
+#   docker compose up -d
+# The image comes from deploy/build.sh (no build here). Network: host, so this peer is reached at ARENA_PUBLIC_HOST
+# (default: ARENA_HOST, 127.0.0.1). To serve others: ARENA_HOST=0.0.0.0 and ARENA_PUBLIC_HOST=<this server's address>.
+# The peer keeps connecting to its broker until it answers. Guide: dev/docker.md
+services:
+  link-peer:
+    image: ${ARENA_IMAGE:-agent-arena:latest}
+    command: ["arena.peers.link_peer"]
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ARENA_HOST: ${ARENA_HOST:-127.0.0.1}
+      ARENA_PUBLIC_HOST: ${ARENA_PUBLIC_HOST:-}
+      ARENA_KEY_STORE: file
+      ARENA_LINK_PEER_BROKERS: ${ARENA_LINK_PEER_BROKERS:-public=http://127.0.0.1:9100}
+      ARENA_LINK_PEER_RECORDER_URL: ${ARENA_LINK_PEER_RECORDER_URL:-http://127.0.0.1:9102}
+      ARENA_LINK_PEER_CONNECTIONS: ${ARENA_LINK_PEER_CONNECTIONS:-api}
+      ARENA_LINK_PEER_PORT: ${ARENA_LINK_PEER_PORT:-9190}
+      ARENA_LINK_PEER_API_PORT: ${ARENA_LINK_PEER_API_PORT:-9191}
+      ARENA_LINK_PEER_KEY_FILE: ${ARENA_LINK_PEER_KEY_FILE:-/app/data/link-peer.key}
+      ARENA_LINK_PEER_AREA: ${ARENA_LINK_PEER_AREA:-/app/data/area}
+    volumes:
+      - data:/app/data
+
+volumes:
+  data:

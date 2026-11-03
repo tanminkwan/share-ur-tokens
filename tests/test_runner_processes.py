@@ -137,10 +137,10 @@ async def test_runner_processes_on_a_real_genesis(tmp_path, procs):
     (tmp_path / "story.txt").write_bytes("이야기 하나\n".encode("utf-8"))
     code, reg, out = content("register", "--home", str(tmp_path / "author"), "--recorder", rec_url, "--file", str(tmp_path / "story.txt"),
                              "--storage", "https=https://old.example/story.txt", "--link-peer", link_url, "--out", str(tmp_path / "story-ref.json"))
-    assert code == 0 and reg["reference"]["link"]["via"] == link_url, out
+    assert code == 0 and reg["reference"]["links"][0]["via"] == link_url, out
     code, moved, out = content("relink", "--home", str(tmp_path / "author"), "--ref", str(tmp_path / "story-ref.json"),
                                "--storage", "https=https://new.example/story.txt")
-    assert code == 0 and moved["ver"] == 2, out
+    assert code == 0 and moved["peers"][0]["ver"] == 2, out
     code, now, out = content("resolve", "--ref", str(tmp_path / "story-ref.json"))
     assert code == 0 and now["targets"] == [{"kind": "https", "location": "https://new.example/story.txt"}], out
 

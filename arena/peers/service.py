@@ -15,7 +15,7 @@ from .common import build_autonomous_peer, open_connections, run_with_connection
 def build(s: Settings, spec_path: str):
     spec = load_spec(spec_path)
     peer = build_autonomous_peer(s, "service_peer", [ServiceApp(s, spec)], spec.get("description") or f"서비스 peer {spec['name']}")
-    open_connections(peer, list(s.service_peer_connections), "ARENA_SERVICE_PEER_CONNECTIONS", f"http://{s.host}:{s.service_peer_api_port}",
+    open_connections(peer, list(s.service_peer_connections), "ARENA_SERVICE_PEER_CONNECTIONS", s.public_url(s.service_peer_api_port),
                      list(spec["ops"]))
     return peer
 

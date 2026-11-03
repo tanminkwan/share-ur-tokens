@@ -13,7 +13,7 @@ from .common import build_autonomous_peer, open_connections, run_with_connection
 def build(s: Settings):
     role = LinkRole(s)
     peer = build_autonomous_peer(s, "link_peer", [role], "link peer: 원장이 가리키는 영구 link를 맡고, 지금 위치는 게시자가 서명해 바꾼다")
-    open_connections(peer, list(s.link_peer_connections), "ARENA_LINK_PEER_CONNECTIONS", f"http://{s.host}:{s.link_peer_api_port}",
+    open_connections(peer, list(s.link_peer_connections), "ARENA_LINK_PEER_CONNECTIONS", s.public_url(s.link_peer_api_port),
                      list(role.ops()))
     return peer
 

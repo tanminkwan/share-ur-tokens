@@ -6,12 +6,12 @@
 
 | 항목 | 값 |
 |---|---|
-| 실제 LLM 없이 도는 테스트 | **442개 모두 통과**(약 31초) |
-| 커버리지(줄 + 분기, 테스트가 띄운 하위 프로세스 포함) | **94.2%**(문장 7,609 가운데 7,276, 분기 2,136 가운데 1,903) |
+| 실제 LLM 없이 도는 테스트 | **449개**: 448개 통과, 1개(실제 docker 실행, `ARENA_TEST_DOCKER=1`일 때만)는 건너뜀(약 31초) |
+| 커버리지(줄 + 분기, 테스트가 띄운 하위 프로세스 포함) | **94.4%**(문장 7,717 가운데 7,390, 분기 2,156 가운데 1,926) |
 | 기준선(이보다 낮아지면 실패) | **92%**(`.coveragerc`의 `fail_under`) |
 | 실제 LLM 테스트(`tests/live`, 따로 돌림) | 11개. 이번에는 돌리지 않았다(LLM 사용을 줄이기로 한 결정, 마지막 실행 결과는 `dev/phase6/test-results.md`) |
 
-이번 작업으로 커버리지는 **88.0% → 93.0%**가 되었다. 하위 프로세스까지 재도록 설정한 것만으로 89.7%가 되었고, 테스트 30개를 더해 93.0%가 되었다. 그 뒤 SOLID 점검 3번 묶음에서 테스트 4개를 더해 **93.3%**가 되었다(5-1절). 가지 체인 연결 마무리(CP-1·2)에 테스트 6개를 더했고 93.3%를 지켰다(5-2절). 개인 키(6-K)에 테스트 12개를 더해 93.4%가 되었다(5-3절). 원장 밖 content와 작품 등록(CP-4·9·10)에 테스트 8개를 더해 93.5%가 되었다(5-4절). 느린 답을 A2A task로(사람의 속도) 하는 데 테스트 5개를 더해 93.7%가 되었다(5-5절). task 보관과 pending 다시 보기에 테스트 6개를 더해 94.2%가 되었다(5-6절). 원장 크기 상한과 link peer에 테스트 8개를 더했고 94.2%를 지켰다(5-7절).
+이번 작업으로 커버리지는 **88.0% → 93.0%**가 되었다. 하위 프로세스까지 재도록 설정한 것만으로 89.7%가 되었고, 테스트 30개를 더해 93.0%가 되었다. 그 뒤 SOLID 점검 3번 묶음에서 테스트 4개를 더해 **93.3%**가 되었다(5-1절). 가지 체인 연결 마무리(CP-1·2)에 테스트 6개를 더했고 93.3%를 지켰다(5-2절). 개인 키(6-K)에 테스트 12개를 더해 93.4%가 되었다(5-3절). 원장 밖 content와 작품 등록(CP-4·9·10)에 테스트 8개를 더해 93.5%가 되었다(5-4절). 느린 답을 A2A task로(사람의 속도) 하는 데 테스트 5개를 더해 93.7%가 되었다(5-5절). task 보관과 pending 다시 보기에 테스트 6개를 더해 94.2%가 되었다(5-6절). 원장 크기 상한과 link peer에 테스트 8개를 더했고 94.2%를 지켰다(5-7절). 여러 link peer, broker 재연결, docker 배치에 테스트 7개를 더해 94.4%가 되었다(5-8절).
 
 ## 2. 돌리는 법
 
@@ -151,6 +151,18 @@ scripts/coverage.sh                                     # 같은 테스트 + 커
 | 명령 | register `--link-peer`, relink(참조 파일), resolve(참조 파일, id와 owner), link peer 주소가 없을 때 |
 
 실제 프로세스 테스트(`tests/test_runner_processes.py`)에 link peer 프로세스(api만)와 `python -m arena.content register --link-peer`·`relink`·`resolve`를 더했다. service peer와 link peer가 연결 방식(a2a, api)을 여는 부분은 `arena/peers/common.py`의 `open_connections`·`run_with_connections`로 합쳤다.
+
+## 5-8. 여러 link peer, broker 재연결, docker 배치
+
+| 테스트 | 확인하는 것 |
+|---|---|
+| 여러 link peer (`tests/test_link_peer.py`) | link id는 어디서나 같음, 원장 `ref`에 link peer마다 link 하나, 위치를 옮기면 모든 link peer에 새 버전, 한 link peer가 위조해도 다른 쪽이 답함, 닿지 않는 link peer는 건너뜀, 아무 데도 없으면 그렇다고 함 |
+| link 보관소 | SQLite와 메모리 보관소가 같은 약속을 지킴(최근 버전만, 개수, 디스크에 남음) |
+| broker 재연결 (`tests/test_presence.py`) | broker가 아직 없으면 1·2·4초…(상한)로 다시 시도하고, 닿으면 profile을 게시하고 만료 전에 다시 게시. 앱 하나가 시작하지 못해도 peer는 멈추지 않음 |
+| docker 배치 (`tests/test_deploy.py`) | peer마다 디렉토리·compose·`.env.example`, compose에 build 없음, 실행 모듈이 있음, `.env.example`의 설정이 실제 설정, 예시 service spec이 실림, compose 문법(docker가 있을 때) |
+| 실제 container (선택, `ARENA_TEST_DOCKER=1`) | 이미지 build, broker보다 먼저 뜬 link peer가 다시 시도하다가 broker가 뜨면 연결하고 `link.info`에 답함 |
+
+이 서버에서 실제로 6개 container(test broker, link, foundation, service, key, app store peer)를 띄워 확인했다(`dev/docker.md` 5절).
 
 ## 6. 아직 덜 덮인 곳과 그 이유
 

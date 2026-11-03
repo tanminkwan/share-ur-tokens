@@ -4,7 +4,7 @@ on the body's hash, so the body cannot contain it): it goes on the colophon, out
     {"format": "arena-ledger-ref", "version": 1, "ledger_id", "entry", "seq", "ts", "content_hash", "form",
      "author", "recorder_url", "did"?}
 
-`link` ({peer, id, via?}, optional) names a permanent link at a link peer: where the work is kept now, which its author
+`links` ([{peer, id, via?}], optional) name a permanent link at one or more link peers: where the work is kept now, which its author
 may change without touching the ledger. `ledger_id`, `entry`, `content_hash`, `form`, `author` and the link never change.
 `recorder_url` (and the link's `via`) are where to look today and may change (finding the recorder by ledger_id alone is CP-11, undecided). `did` is the author's existing DID if any: the
 platform does not issue or check DIDs (6-K4)."""
@@ -18,18 +18,17 @@ FIXED = ("ledger_id", "entry", "content_hash", "form", "author")
 
 
 def make_reference(ledger_id: str, entry: str, seq: int, ts: float, content_hash: str, form: str, author: str,
-                   recorder_url: str, did: str | None = None, link: dict | None = None) -> dict:
+                   recorder_url: str, did: str | None = None, links: list[dict] | None = None) -> dict:
     return {"format": FORMAT, "version": VERSION, "ledger_id": ledger_id, "entry": entry, "seq": seq, "ts": ts,
             "content_hash": content_hash, "form": form, "author": author, "recorder_url": recorder_url, **({"did": did} if did else {}),
-            **({"link": dict(link)} if link else {})}
+            **({"links": [dict(x) for x in links]} if links else {})}
 
 
 def to_uri(ref: dict) -> str:
     """one line for a QR code: arena-ref:<ledger_id>/<entry>?content=..&form=..&author=..&recorder=..[&did=..]"""
     q = [("content", ref["content_hash"]), ("form", ref["form"]), ("author", ref["author"]), ("recorder", ref["recorder_url"])]
     q += [("did", ref["did"])] if ref.get("did") else []
-    q += [("link", f"{ref['link']['peer']}/{ref['link']['id']}")] + ([("via", ref["link"]["via"])] if ref["link"].get("via") else []) \
-        if ref.get("link") else []
+    q += [("link", f"{x['peer']}/{x['id']}" + (f"|{x['via']}" if x.get("via") else "")) for x in ref.get("links", [])]
     return f"{SCHEME}:{ref['ledger_id']}/{ref['entry']}?" + "&".join(f"{k}={quote(v, safe='')}" for k, v in q)
 
 
@@ -42,12 +41,13 @@ def from_uri(uri: str) -> dict:
     missing = [k for k in ("content", "form", "author", "recorder") if k not in q]
     if missing:
         raise ValueError(f"the address lacks {', '.join(missing)}")
-    link = None
-    if "link" in q:
-        peer, _, lid = q["link"].partition("/")
-        link = {"peer": peer, "id": lid, **({"via": q["via"]} if "via" in q else {})}
+    links = []
+    for v in parse_qs(u.query).get("link", []):
+        where, _, via = v.partition("|")
+        peer, _, lid = where.partition("/")
+        links.append({"peer": peer, "id": lid, **({"via": via} if via else {})})
     return {"format": FORMAT, "version": VERSION, "ledger_id": ledger_id, "entry": entry, "content_hash": q["content"], "form": q["form"],
-            "author": q["author"], "recorder_url": q["recorder"], **({"did": q["did"]} if "did" in q else {}), **({"link": link} if link else {})}
+            "author": q["author"], "recorder_url": q["recorder"], **({"did": q["did"]} if "did" in q else {}), **({"links": links} if links else {})}
 
 
 def colophon(ref: dict) -> str:
@@ -60,7 +60,6 @@ def colophon(ref: dict) -> str:
         f"본문 해시: {ref['content_hash']} (방식 {ref['form']})",
         f"작가 공개키: {ref['author']}" + (f" / DID {ref['did']}" if ref.get("did") else ""),
         f"확인할 곳: {ref['recorder_url']}",
-        *([f"영구 link: {ref['link']['peer']}/{ref['link']['id']}" + (f" (지금 주소 {ref['link']['via']})" if ref['link'].get('via') else "")]
-          if ref.get("link") else []),
+        *[f"영구 link: {x['peer']}/{x['id']}" + (f" (지금 주소 {x['via']})" if x.get("via") else "") for x in ref.get("links", [])],
         f"주소: {to_uri(ref)}",
     ])

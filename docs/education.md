@@ -585,6 +585,8 @@ sequenceDiagram
 
 플랫폼 시설의 role app(`god_role`, `record_role`)은 genesis가 띄운다.
 
+**container로 띄우기**(`dev/docker.md`): API 서버 peer는 서로 다른 곳에서 따로 운영되므로 peer마다 실행 디렉토리(`deploy/<peer>/`)에 `docker-compose.yml`과 `.env.example`이 있다. 이미지는 하나이고 `deploy/build.sh`가 build한다(compose에는 build가 없다). 시험용 broker는 `deploy/test-broker/`(genesis). peer는 broker에 연결될 때까지 간격을 늘려 가며 계속 시도한다(`Presence`). 듣는 주소(`ARENA_HOST`)와 남에게 알리는 주소(`ARENA_PUBLIC_HOST`)는 따로다.
+
 **service peer를 api로 부르기**
 
 ```mermaid
@@ -668,7 +670,7 @@ sequenceDiagram
 | **content form** (CP-9) | 본문을 hash하기 전에 bytes로 만드는 방식. `utf8-nfc-lf`(UTF-8, BOM 제거, 줄바꿈 LF, Unicode NFC: 한글 조합형과 완성형을 하나로), `bytes`(파일 그대로). `publish.form`에 적는다 |
 | **ledger reference** (CP-9) | `{ledger_id, entry, seq, ts, content_hash, form, author, recorder_url, did?}`. 바뀌지 않는 것은 ledger_id · entry · content_hash · form · author, 바뀔 수 있는 것은 recorder_url. QR용 한 줄 주소 `arena-ref:<ledger_id>/<entry>?content=…&form=…&author=…&recorder=…` |
 | **`ref` block** (CP-4) | 원장 밖 content가 어디 있는지: `storage`(`https` · `peer` · `ipfs` · `git` · `place`), `size`, `media_type`, `proof`(`sha256`: hash 대조만, `ed25519`: 그 key가 {content_hash, storage}에 서명). 원장은 shape와 signature만 보고 content를 가져오지 않는다. 위치를 숨기려면 private envelope에 넣는다(공개 기본값은 CP-5, 미정). `share`의 `ref`는 언제나 envelope |
-| **link peer** (CP-20) | 위치가 바뀔 수 있으면 `ref`에 URL 대신 영구 link만 적는다: `{kind: link, peer: <link peer 공개키>, link_id}`(전용 field라 코드가 그대로 link peer에 넘긴다). 실제 위치는 link peer가 들고, 작가가 서명해 바꾼다(`relink`). 원장은 그대로다. link peer는 위치를 위조하지 못하고(작가 signature), 누구나 띄울 수 있다 |
+| **link peer** (CP-20) | 위치가 바뀔 수 있으면 `ref`에 URL 대신 영구 link만 적는다: `{kind: link, peer: <link peer 공개키>, link_id}`(전용 field라 코드가 그대로 link peer에 넘긴다). 여러 link peer에 둘 수 있고, 읽는 쪽은 서명이 맞는 가장 새 버전을 쓴다. 실제 위치는 link peer가 들고, 작가가 서명해 바꾼다(`relink`). 원장은 그대로다. link peer는 위치를 위조하지 못하고(작가 signature), 누구나 띄울 수 있다 |
 | **content lookup** (CP-10) | `GET /content/{hash}`: reference 없이 사본만 가진 사람도 등록 entry를 찾는다. content hash는 한 번만 등록되므로(먼저 등록한 사람이 이긴다) 결과는 하나다 |
 
 **사용**(`python -m arena.content`):
