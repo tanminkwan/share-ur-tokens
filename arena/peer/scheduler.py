@@ -82,7 +82,7 @@ class Scheduler(BaseApp):
                 raise
             except Exception as e:  # a failing handler must not stop the clock
                 ctx.log.emit("scheduler", ctx.pen, f"예약 처리 실패: {type(e).__name__}: {e}")
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(self.s.scheduler_retry_sec)
 
     async def fire_due(self, ctx, now: float | None = None) -> int:
         """hand every due timer to its app (once); returns how many fired"""

@@ -1,4 +1,4 @@
-import { h, replace } from './dom.js';
+import { h, replace } from '/common/dom.js';
 
 // EventsView: the events this peer hosts or takes part in.
 export class EventsView {

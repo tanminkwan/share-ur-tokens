@@ -145,9 +145,9 @@ async def test_p5a19_verify_returns_rules_hash(svc, cast):
     kind, p, _ = cast.event(policy={})
     p["rules_hash"] = "f" * 64
     ev = await svc.record(kind, p, {cast.issuer.pub: cast.issuer.sign(p)})
-    kind, c, _ = cast.contract(role="judge")
+    kind, c, _, private = cast.contract(role="judge")  # a hidden role: the contractor is in the private envelope
     c["rules_hash"] = "f" * 64
-    ct = await svc.record(kind, c, {cast.issuer.pub: cast.issuer.sign(c), cast.judge.pub: cast.judge.sign(c)})
+    ct = await svc.record(kind, c, {cast.issuer.pub: cast.issuer.sign(c), cast.judge.pub: cast.judge.sign(c)}, private)
     assert meta(svc.verify(ev["hash"]))["rules_hash"] == "f" * 64 and meta(svc.verify(ct["hash"]))["rules_hash"] == "f" * 64
 
 

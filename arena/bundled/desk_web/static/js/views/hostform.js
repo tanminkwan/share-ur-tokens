@@ -1,4 +1,4 @@
-import { h, replace } from './dom.js';
+import { h, replace } from '/common/dom.js';
 
 // HostForm: open an event (title, kind, rules, roles, schedule). Time codes come from the peer's config.
 export class HostForm {

@@ -4,6 +4,7 @@ hash, the submitter's signature on the share, recipient, size, audience), co-sig
 Assistant tools: submit (participants) and submissions (the host)."""
 from __future__ import annotations
 
+from ...ledger import split_payload
 from ...crypto import h, verify
 from ..assistant.tools import S, Tool, _obj, _record, ledger_tag
 from ..assistant.state import nonce
@@ -38,7 +39,8 @@ class IntakeDesk(BaseApp):
             return {"ok": False, "error": "이 제출은 이 peer에게 온 이 이벤트의 제출이 아니다"}
         if h(content.encode("utf-8")) != sp.get("content_hash"):
             return {"ok": False, "error": "내용이 먼저 등록한 해시와 맞지 않는다"}
-        if not verify(sp.get("provider", ""), sp, sig):
+        body, private = split_payload("share", sp)  # who handed what to whom goes in the private envelope (protocol 3)
+        if not verify(sp.get("provider", ""), body, sig):
             return {"ok": False, "error": "제출한 사람의 서명이 맞지 않는다"}
         trust = await ctx.recorder_trust(url) if url else {"ok": False, "why": "recorder_url 없음"}
         if not trust["ok"]:
@@ -51,7 +53,7 @@ class IntakeDesk(BaseApp):
             prof = await ctx.profile_of(sp["provider"]) or {}
             if not set(prof.get("labels", [])) & set(cfg["audience"]):
                 return {"ok": False, "error": f"응모 대상({', '.join(cfg['audience'])})이 아니다"}
-        r = await ctx.recorder(url).record("share", sp, {sp["provider"]: sig, ctx.pub: ctx.sign(sp)})
+        r = await ctx.recorder(url).record("share", body, {sp["provider"]: sig, ctx.pub: ctx.sign(body)}, private)
         if not r.get("ok"):
             return {"ok": False, "error": r.get("error")}
         self.items.setdefault(ev, []).append({"author": sp["provider"], "content_hash": sp["content_hash"], "content": content,
@@ -79,10 +81,11 @@ async def submit(A, ctx, st, text):
         return {"ok": False, "error": r.get("error")}
     sp = {"provider": ctx.pub, "consumer": to, "content_hash": ch, "purpose": "submission", "nonce": nonce(ch), "event_id": st.event_id,
           "group_id": st.group_id, **(await ledger_tag(ctx, st))}
-    out = await ctx.call_peer(to, {"op": "intake.submit", "event_id": st.event_id, "content": str(text), "share": sp, "sig": ctx.sign(sp),
+    body, private = split_payload("share", sp)
+    out = await ctx.call_peer(to, {"op": "intake.submit", "event_id": st.event_id, "content": str(text), "share": sp, "sig": ctx.sign(body),
                                    "recorder_url": st.recorder_url}, group=st.group_id, event=st.event_id)
     if out.get("ok"):
-        ctx.receipts.keep(out, "share", sp, expected_recorder=st.recorder_pub)
+        ctx.receipts.keep(out, "share", body, expected_recorder=st.recorder_pub, private=private)
     return {"ok": bool(out.get("ok")), "share_hash": out.get("hash"), "error": out.get("error")}
 
 

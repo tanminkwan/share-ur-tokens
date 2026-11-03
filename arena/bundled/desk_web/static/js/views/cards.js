@@ -1,4 +1,4 @@
-import { h } from './dom.js';
+import { h } from '/common/dom.js';
 
 // Cards for desk items. One renderer per kind, registered here: a new kind is a new registration, not an edit of the
 // views (open/closed). A renderer gets the item and the actions and returns an element.

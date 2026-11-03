@@ -19,7 +19,7 @@ from ..bundled.desk_web import DeskWebApp
 from ..bundled.owner_service import OwnerService
 from ..config import ConfigError, Settings
 from ..events import EventLog
-from ..llm import NoLLM, build_llm
+from ..llm import build_llm, llm_available
 from ..peer.assistant import EventAssistant
 from ..peer.desk import DeskOwner, OwnerDesk, OwnerDeskApp
 from ..peer.home import PeerHome
@@ -49,11 +49,11 @@ def build(s: Settings) -> tuple[Peer, OwnerService, str]:
     if s.personal_mode not in SCREENS:
         raise ConfigError(f"{s.key_of('personal_mode')}는 agent 또는 human이어야 합니다: {s.personal_mode!r}")
     llm = build_llm(s)  # a misconfigured LLM is an error, not a silent fallback; ARENA_LLM_BACKEND=none: no LLM at all
-    if s.personal_mode == "agent" and isinstance(llm, NoLLM):
+    if s.personal_mode == "agent" and not llm_available(llm):
         raise ConfigError("agent 모드에는 LLM이 필요합니다(ARENA_LLM_*). LLM 없이 쓰려면 ARENA_PERSONAL_MODE=human")
     screens = list(s.personal_apps) or SCREENS[s.personal_mode]
     unknown = [x for x in screens if x not in ("desk", "chat")]
-    if unknown or ("chat" in screens and isinstance(llm, NoLLM)):
+    if unknown or ("chat" in screens and not llm_available(llm)):
         raise ConfigError(f"{s.key_of('personal_apps')}: desk, chat 가운데서 고른다(chat에는 LLM이 필요하다): {screens}")
     home = PeerHome(s.personal_peer_home, s)
     token = web_token(s, home)

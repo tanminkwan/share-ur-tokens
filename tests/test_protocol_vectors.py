@@ -25,3 +25,14 @@ def test_protocol_vectors_match_the_code(settings):
     e = V["ledger_entry_hash"]
     assert h(canon(e["body"])) == e["hash"]
     assert all(verify(pub, e["body"]["payload"], sig) for pub, sig in e["body"]["sigs"].items())
+
+
+def test_protocol_3_vector_with_an_envelope():
+    """protocol 3: the private hash, the hash of the private signatures and the entry hash, byte for byte"""
+    from arena.ledger import hash_body, private_hash
+    x = V["ledger_entry_with_envelope"]
+    e, env = x["entry"], x["envelope"]
+    assert e["payload"]["private"] == private_hash(env["fields"]) and e["private_sigs"] == private_hash(env["sigs"])
+    assert h(canon(hash_body(e))) == x["hash"]
+    assert all(verify(pub, e["payload"], sig) for pub, sig in env["sigs"].items())
+    assert "provider" not in e["payload"] and env["fields"]["provider"] == V["public_key_hex"]

@@ -8,13 +8,11 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from ..a2a import Transport, build_a2a_app
-from ..connections import pick
 from ..rest import RestTransport
 from ..config import Settings
 from ..crypto import Identity, pen_name
 from ..events import EventLog
-from ..llm import LLM
-from ..ledger.trust import verify_link_entry, verify_trust
+from ..llm import LLM, llm_available
 from ..recorder.client import RecorderAPI, RecorderClient
 from .area import PublicArea
 from .builtin import RESERVED_OPS, DirectRequests, EventApprovals, RoleContracts
@@ -22,11 +20,13 @@ from .app_install import AppInstaller
 from .elements import PEER_ELEMENTS
 from .events import EventRouter
 from .context import AppContext, PlatformContext
-from .owner import NoOwner, Owner
+from .owner import Owner, owner_present
 from .plugin import SDK_VERSION, App, EventHandler, Lifecycle, is_uuid, MessageHead, OfferProvider, OpProvider, capabilities_of
 from .profile import ProfileBuilder
+from .reach import PeerReach
 from .receipts import Receipts
 from .scheduler import Scheduler
+from .trust_check import RecorderTrust
 
 
 @dataclass
@@ -60,8 +60,10 @@ class Peer:
             self.app_states.setdefault(DirectRequests.name, {"inbox": saved["inbox"]})
         self.last_profile: dict | None = None
         self._group_ids: dict[str, str] = {}
-        self._trust: dict[str, dict] = {}
-        self.rest = RestTransport(settings)  # the api connection method (P6-A8)  # recorder url -> its trust check against the root of trust (P5-G6)
+        self.trust = RecorderTrust(lambda: self.settings, self.recorder)  # proving recorders from the root of trust (P5-G6)
+        self._trust = self.trust.cache
+        self.rest = RestTransport(settings)
+        self.reach = PeerReach(identity, brokers, self.call, lambda: self.rest)  # reaching peers by their listed connections (P6-A8, Q1)
         self._requests = DirectRequests(settings)
         self.events = EventRouter(settings, installer=AppInstaller(settings) if (settings.app_store_urls or settings.app_store_discover) else None)
         self.scheduler = Scheduler(settings)  # "이 시각에 이 일": timers kept in the home, handed to the app that set them
@@ -131,10 +133,9 @@ class Peer:
         """who decides and answers for this peer (dev/peer-spec.md 1절)"""
         if self.config.operator:
             return self.config.operator
-        from ..llm import NoLLM
-        if isinstance(self.owner, NoOwner):
+        if not owner_present(self.owner):
             return "service"  # nobody behind it: code answers
-        return "human" if isinstance(self.llm, NoLLM) else "agent"
+        return "agent" if llm_available(self.llm) else "human"
 
     def connections(self) -> list:
         """the connections this peer's profile lists (P6-A7): the person's choice, or a2a at its url; a human contact only if set"""
@@ -144,31 +145,12 @@ class Peer:
         return out
 
     async def profile_of(self, pub: str) -> dict | None:
-        for broker in self.brokers.values():
-            try:
-                found = next((p for p in (await broker.list_profiles(identity=self.identity)).get("profiles", []) if p["pub"] == pub), None)
-            except Exception:
-                continue
-            if found:
-                return found
-        return None
+        return await self.reach.profile_of(pub)
 
     async def call_peer(self, pub: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None,
                         url: str | None = None) -> dict:
-        """reach a peer by the connection its profile lists that code may use: a2a first, else api (P6-A8). Every call
-        between peers goes this way (P6-Q1), so a peer that opens only api (a human peer) takes part too. Without a
-        profile on my brokers, the address the peer gave (`url`) is used as an A2A address."""
-        prof = await self.profile_of(pub)
-        if prof is None and url:
-            return await self.call(url, msg, timeout, group=group, event=event)
-        conns = (prof or {}).get("connections") or ([{"kind": "a2a", "url": prof["url"]}] if prof and prof.get("url") else [])
-        c = pick(conns)
-        if c is None:
-            return {"ok": False, "error": "no connection method this peer can use (a2a or api)"}
-        if c["kind"] == "a2a":
-            return await self.call(c["url"], msg, timeout, group=group, event=event)
-        meta = {"group_id": group, "event_id": event} if (group or event) else None
-        return await self.rest.call(c["url"], msg, timeout, meta)
+        """reach a peer by the connection its profile lists (a2a first, else api); see PeerReach"""
+        return await self.reach.call(pub, msg, timeout, group=group, event=event, url=url)
 
     def offers(self) -> list[str]:
         out = list(self.config.offers)
@@ -205,48 +187,8 @@ class Peer:
             self.home.save_state({"profile_ver": self.profiles.version, "known_recorders": self.known_recorders, "apps": self.app_states})
 
     async def recorder_trust(self, url: str) -> dict:
-        """is the recorder at url the one this peer's root of trust proves? {ok, anchored, recorder, ledger_id, why}.
-        The root is the trunk (the original chain); a branch chain is proven through its chain_link in the trunk (P5-G9).
-        Branches grow only from the trunk (P5-G10), so the proof is always one step.
-        Without a root of trust in the settings every recorder passes (anchored False). Checked once per url."""
-        if url in self._trust:
-            return self._trust[url]
-        s = self.settings
-        fail = lambda why: {"ok": False, "anchored": bool(s.trust_genesis_hash), "why": why}
-        try:
-            doc = await self.recorder(url).trust()
-        except Exception as e:
-            return fail(f"{type(e).__name__}: {e}")
-        if not s.trust_genesis_hash:
-            out = {"ok": True, "anchored": False, "recorder": doc.get("recorder"), "ledger_id": doc.get("ledger_id")}
-        elif (doc.get("genesis") or {}).get("hash") == s.trust_genesis_hash:
-            ok, why, keys = verify_trust(doc, s.trust_genesis_hash, s.trust_god_pub)
-            out = {"ok": ok, "anchored": True, "recorder": keys.get("recorder"), "ledger_id": doc.get("ledger_id") if ok else None, "why": why}
-        else:
-            parent = ((doc.get("genesis") or {}).get("payload") or {}).get("parent")
-            if not parent:
-                return fail("not the trunk and not linked into it")
-            if parent.get("ledger_id") != s.trust_genesis_hash:
-                return fail("branches grow only from the trunk; this chain names another chain as its origin")
-            pt = await self.recorder_trust(parent["recorder_url"])
-            if not pt["ok"] or pt["ledger_id"] != parent["ledger_id"]:
-                return fail(f"parent chain not proven: {pt.get('why')}")
-            try:
-                pdoc = await self.recorder(parent["recorder_url"]).trust()
-                link = (await self.recorder(parent["recorder_url"]).link(doc["genesis"]["hash"])).get("link")
-            except Exception as e:
-                return fail(f"parent recorder: {type(e).__name__}: {e}")
-            pok, _, pkeys = verify_trust(pdoc, pt["ledger_id"], (pdoc.get("genesis") or {}).get("payload", {}).get("god", ""))
-            bad = None if pok and pkeys.get("recorder") == pt["recorder"] else "the parent's trust document changed"
-            bad = bad or verify_link_entry(link, pdoc, doc["genesis"])
-            if bad:
-                return fail(bad)
-            ok, why, keys = verify_trust(doc, doc["genesis"]["hash"], doc["genesis"]["payload"]["god"])
-            out = {"ok": ok, "anchored": True, "recorder": keys.get("recorder"), "ledger_id": doc.get("ledger_id") if ok else None,
-                   "why": why, "linked_from": parent["ledger_id"]}
-        if out["ok"]:
-            self._trust[url] = out
-        return out
+        """is the recorder at url the one this peer's root of trust proves? see RecorderTrust"""
+        return await self.trust.check(url)
 
     async def ledger_id(self, url: str) -> str | None:
         """the id of the ledger kept at url (its genesis hash), to put inside every payload this peer signs for it"""

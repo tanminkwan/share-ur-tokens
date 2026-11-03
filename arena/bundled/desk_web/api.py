@@ -2,38 +2,20 @@
 served at /. Open it on the peer's own machine (127.0.0.1 by default)."""
 from __future__ import annotations
 
-import hmac
 import os
 
 from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse
-from starlette.routing import Mount, Route
-from starlette.staticfiles import StaticFiles
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 from ..owner_service import OwnerService
+from ..web_api import read_body, screen_routes, token_guard
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 
 
 def build_owner_api(service: OwnerService, token: str, static_dir: str = STATIC) -> Starlette:
-    def authorized(r: Request) -> bool:
-        got = r.headers.get("authorization", "")
-        return hmac.compare_digest(got, f"Bearer {token}")
-
-    def guarded(fn):
-        async def wrap(r: Request):
-            if not authorized(r):
-                return JSONResponse({"ok": False, "error": "token required"}, status_code=401)
-            return await fn(r)
-        return wrap
-
-    async def body(r: Request) -> dict:
-        try:
-            d = await r.json()
-        except ValueError:
-            return {}
-        return d if isinstance(d, dict) else {}
+    guarded, body = token_guard(token), read_body
 
     async def config(_):
         return JSONResponse(service.config())
@@ -64,11 +46,7 @@ def build_owner_api(service: OwnerService, token: str, static_dir: str = STATIC)
         out = await service.host(await body(r))
         return JSONResponse(out, status_code=200 if out["ok"] else 400)
 
-    async def index(_):
-        return FileResponse(os.path.join(static_dir, "index.html"))
-
     return Starlette(routes=[
-        Route("/", index),
         Route("/api/config", guarded(config)),
         Route("/api/state", guarded(state)),
         Route("/api/items", guarded(items)),
@@ -77,5 +55,5 @@ def build_owner_api(service: OwnerService, token: str, static_dir: str = STATIC)
         Route("/api/events/{event_id}", guarded(event)),
         Route("/api/events/{event_id}/drive", guarded(drive), methods=["POST"]),
         Route("/api/events/{event_id}/tools/{name}", guarded(tool), methods=["POST"]),
-        Mount("/static", StaticFiles(directory=static_dir)),
+        *screen_routes(static_dir),
     ])

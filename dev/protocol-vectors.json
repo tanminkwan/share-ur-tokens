@@ -65,5 +65,34 @@
       "ts": 1761955200.0
     },
     "hash": "983cee0b090369e3fc1205305ea640414bb990bb6dd745d3e3ac3da033f7b0d7"
+  },
+  "ledger_entry_with_envelope": {
+    "note": "protocol 3: a share whose parties are private. body.private = sha256(canon(envelope.fields)); private_sigs = sha256(canon(envelope.sigs)); hash = sha256(canon(entry without seq/hash/seal/envelope)); every signature is over body (the public payload)",
+    "other_private_key_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "entry": {
+      "type": "share",
+      "payload": {
+        "purpose": "delivery",
+        "nonce": "n1",
+        "group_id": "public",
+        "private": "68b6be974d7dd48235f513daccfb38545f28cc4112dc65e0a9a45771b0bb76aa"
+      },
+      "sigs": {},
+      "prev": "0000000000000000000000000000000000000000000000000000000000000000",
+      "ts": 1761955200.0,
+      "private_sigs": "90f039e29c3f0a29fe0ea36898ef24b89ecd2d2ba19c3dcbe6295d04ff96c21d"
+    },
+    "envelope": {
+      "fields": {
+        "content_hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        "consumer": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "provider": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+      },
+      "sigs": {
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664": "58d72c2c6f08d9077bbe5862c1560c6650713510760388d8e55b48bfdb90aa014ef25fb9968f5274d8157c10eeb4b8486b9b4eec1d88263228e7396fca94b80b",
+        "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737": "0ed84e40441bf155e65311b579cc196791b95efebb616f2e1a21a3be41e30863e236e4e045cbeb385302808aa344fefa1867bf7e1d021fe5c9f67ee877a4050e"
+      }
+    },
+    "hash": "4457af63a0b8f5d39b0728ad8190687d080133eacd80f21f46173b52d4c4d8a0"
   }
 }

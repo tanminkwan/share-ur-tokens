@@ -4,7 +4,7 @@ import json
 import pytest
 
 from arena.crypto import Identity, canon, h, verify
-from arena.ledger import JsonlStore, Ledger, LedgerCorrupt, MemoryStore, audit_chain, contribution
+from arena.ledger import JsonlStore, Ledger, LedgerCorrupt, MemoryStore, audit_chain, contribution, hash_body, public_form, split_payload, stored
 
 # an example policy; the platform only compares these strings, it does not know what they mean
 POLICY = {"roles": ["keeper", "judge"], "conflict_roles": ["keeper", "judge"],
@@ -22,13 +22,15 @@ class Cast:
         self.author, self.issuer, self.judge, self.keeper, self.approver, self.other = (Identity.generate() for _ in range(6))
         self.ev, self.group = "ev-1", GROUP
         self.ledger_id = None  # set it to write into a ledger begun by a genesis (P5-G4)
+        self.policy = POLICY  # the policy of the last event declared (which roles are hidden: protocol 3)
 
     def _tag(self) -> dict:
         return {"group_id": self.group, **({"ledger_id": self.ledger_id} if self.ledger_id else {})}
 
     def event(self, ev=None, policy=None, approvers=(), issuer=None, sign_by=None):
         i = issuer or self.issuer
-        p = {"event_id": ev or self.ev, "issuer": i.pub, "kind": "test", "policy": POLICY if policy is None else policy,
+        self.policy = POLICY if policy is None else policy
+        p = {"event_id": ev or self.ev, "issuer": i.pub, "kind": "test", "policy": self.policy,
              "approvers": [a.pub for a in approvers], **self._tag()}
         sigs = {i.pub: i.sign(p)}
         for a in (approvers if sign_by is None else sign_by):
@@ -44,14 +46,16 @@ class Cast:
 
     def share(self, content="doc A", provider=None, consumer=None, nonce="n1"):
         pr, co = provider or self.author, consumer or self.issuer
-        p = {"provider": pr.pub, "consumer": co.pub, "content_hash": h(canon({"c": content})), "terms": "t", "nonce": nonce,
-             **self._tag()}
-        return "share", p, {pr.pub: pr.sign(p), co.pub: co.sign(p)}
+        full = {"provider": pr.pub, "consumer": co.pub, "content_hash": h(canon({"c": content})), "terms": "t", "nonce": nonce,
+                **self._tag()}
+        p, private = split_payload("share", full)  # who handed what to whom: private envelope (protocol 3)
+        return "share", p, {pr.pub: pr.sign(p), co.pub: co.sign(p)}, private
 
     def contract(self, role="judge", contractor=None, nonce="c1", ev=None, issuer=None):
         c, i = contractor or self.judge, issuer or self.issuer
-        p = {"event_id": ev or self.ev, "role": role, "issuer": i.pub, "contractor": c.pub, "nonce": nonce, **self._tag()}
-        return "contract", p, {i.pub: i.sign(p), c.pub: c.sign(p)}
+        full = {"event_id": ev or self.ev, "role": role, "issuer": i.pub, "contractor": c.pub, "nonce": nonce, **self._tag()}
+        p, private = split_payload("contract", full, self.policy)  # a hidden role's contractor: private envelope (protocol 3)
+        return "contract", p, {i.pub: i.sign(p), c.pub: c.sign(p)}, private
 
     def close(self, ev=None, issuer=None, result_hash=None):
         i = issuer or self.issuer
@@ -104,16 +108,16 @@ def test_r2_2_missing_or_wrong_signature_rejected(ledger, cast):
     assert err(ledger, (kind, p, {})).startswith("missing/invalid signature")
     assert err(ledger, (kind, p, {cast.author.pub: cast.other.sign(p)})).startswith("missing/invalid signature")
     ok(ledger, cast.publish(ev=None))
-    kind, p, sigs = cast.share()
+    kind, p, sigs, private = cast.share()
     del sigs[cast.issuer.pub]
-    assert err(ledger, (kind, p, sigs)).startswith("missing/invalid signature")
+    assert err(ledger, (kind, p, sigs, private)).startswith("missing/invalid signature")
 
 
 def test_r2_3_chain_links_and_recorder_seal(ledger, cast):
     e0 = ok(ledger, cast.publish(ev=None))
     e1 = ok(ledger, cast.share())
     assert (e0["seq"], e1["seq"]) == (0, 1) and e0["prev"] == "0" * 64 and e1["prev"] == e0["hash"]
-    assert e1["hash"] == h(canon({k: e1[k] for k in ("type", "payload", "sigs", "prev", "ts")}))
+    assert e1["hash"] == h(canon(hash_body(stored(e1))))  # protocol 3: the body, public signatures and the hash of private ones
     assert e1["seal"]["pub"] == ledger.identity.pub and verify(ledger.identity.pub, e1["hash"], e1["seal"]["sig"])
     assert ledger.head() == e1["hash"] and ledger.find(e0["hash"]) is e0 and ledger.find("nope") is None
 
@@ -231,9 +235,13 @@ def test_r2_10_audit_finds_first_tampered_entry(ledger, cast):
     ok(ledger, cast.share())
     ok(ledger, cast.publish(content="doc B", ev=None))
     assert ledger.audit() == "ok" and audit_chain(ledger.chain) == "ok"
-    t = json.loads(json.dumps(ledger.chain))
-    t[1]["payload"]["terms"] = "changed"
+    t = json.loads(json.dumps(ledger.raw))
+    t[1]["envelope"]["fields"]["terms"] = "changed"  # the share's terms are in its private envelope
+    assert audit_chain(t) == "TAMPERED at seq 1 (private envelope)"
+    t = json.loads(json.dumps(ledger.raw))
+    t[1]["payload"]["group_id"] = "other"
     assert audit_chain(t) == "TAMPERED at seq 1 (hash chain)"
+    assert audit_chain([public_form(e) for e in ledger.raw]) == "ok"  # a public copy (no envelopes) still audits
     t = json.loads(json.dumps(ledger.chain))
     t[2]["sigs"][cast.author.pub] = "00" * 64
     t[2]["hash"] = h(canon({k: t[2][k] for k in ("type", "payload", "sigs", "prev", "ts")}))

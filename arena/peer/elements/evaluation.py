@@ -4,6 +4,7 @@ basic assistant), signs the verdict payloads in code and returns them with its h
 both. What the event then does with the verdicts is its own judgement (an app's or an API-providing peer's job)."""
 from __future__ import annotations
 
+from ...ledger import split_payload
 from ...crypto import h, verify
 from ..assistant.state import nonce
 from ..assistant.tools import S, Tool, _obj, ledger_tag
@@ -34,7 +35,8 @@ class EvaluationDesk(BaseApp):
         for it in items:
             sh = it.get("share") or {}
             if (sh.get("consumer") != ctx.pub or sh.get("purpose") != "evaluation" or sh.get("event_id") != ev or sh.get("provider") != decl["issuer"]
-                    or h(str(it.get("content", "")).encode("utf-8")) != sh.get("content_hash") or not verify(decl["issuer"], sh, it.get("sig", ""))):
+                    or h(str(it.get("content", "")).encode("utf-8")) != sh.get("content_hash")
+                    or not verify(decl["issuer"], split_payload("share", sh)[0], it.get("sig", ""))):  # signatures are on the public body
                 return {"ok": False, "error": "넘김 기록, 내용 해시나 개최자 서명이 맞지 않는 항목이 있다"}
         judges = [(a, c) for a, c in ctx.apps_with(EvaluationProvider) if a.app_id != ASSISTANT_APP_ID]
         judges += [(a, c) for a, c in ctx.apps_with(EvaluationProvider) if a.app_id == ASSISTANT_APP_ID]  # the basic assistant last
@@ -53,7 +55,8 @@ class EvaluationDesk(BaseApp):
                  **({"ledger_id": trust["ledger_id"]} if trust.get("ledger_id") else {})}
             verdict_list.append({"payload": p, "sig": ctx.sign(p), "comment": str(r.get("comment", ""))})
         ctx.log.emit("evaluation", ctx.pen, f"[{ev}] {len(items)}개 항목 평가, 판정 {len(verdict_list)}개")
-        return {"ok": True, "receipts": {it["share"]["content_hash"]: ctx.sign(it["share"]) for it in items}, "verdicts": verdict_list}
+        return {"ok": True, "receipts": {it["share"]["content_hash"]: ctx.sign(split_payload("share", it["share"])[0]) for it in items},
+                "verdicts": verdict_list}
 
 
 # ---------------- assistant tools (host) ----------------
@@ -71,7 +74,7 @@ async def request_evaluation(A, ctx, st, evaluator):
     for x in todo:
         sh = {"provider": ctx.pub, "consumer": pub, "content_hash": x["content_hash"], "purpose": "evaluation", "nonce": nonce(x["content_hash"], pub),
               "event_id": st.event_id, "group_id": st.group_id, **tag}
-        items.append({"share": sh, "sig": ctx.sign(sh), "content": x["content"]})
+        items.append({"share": sh, "sig": ctx.sign(split_payload("share", sh)[0]), "content": x["content"]})
     out = await ctx.call_peer(pub, {"op": "evaluation.request", "event_id": st.event_id, "recorder_url": st.recorder_url, "items": items},
                               group=st.group_id, event=st.event_id)
     if not out.get("ok"):
@@ -79,7 +82,8 @@ async def request_evaluation(A, ctx, st, evaluator):
     rec, errors = ctx.recorder(st.recorder_url), []
     for it in items:
         ch = it["share"]["content_hash"]
-        r = await rec.record("share", it["share"], {ctx.pub: it["sig"], pub: out["receipts"].get(ch, "")})
+        body, private = split_payload("share", it["share"])
+        r = await rec.record("share", body, {ctx.pub: it["sig"], pub: out["receipts"].get(ch, "")}, private)
         if not r.get("ok"):
             errors.append(r.get("error"))
     n = 0

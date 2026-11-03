@@ -1,4 +1,4 @@
-import { h, replace } from './dom.js';
+import { h, replace } from '/common/dom.js';
 
 // HeaderView: who this peer is and who drives it.
 export class HeaderView {

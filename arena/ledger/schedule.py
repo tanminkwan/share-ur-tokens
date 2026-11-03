@@ -8,6 +8,8 @@ from __future__ import annotations
 import numbers
 from dataclasses import dataclass
 
+from .types import EventColumn, register_event_column
+
 
 @dataclass(frozen=True)
 class TimeCode:
@@ -45,3 +47,6 @@ def check_schedule(schedule, max_items: int) -> str | None:
             return f"schedule: unknown time code {x.get('code')!r}"
         if any(k in x and not isinstance(x[k], str) for k in ("subject", "note")):
             return "schedule: subject and note are text"
+
+
+register_event_column(EventColumn("schedule", lambda chain, p, s: check_schedule(p["schedule"], s.event_schedule_max)))

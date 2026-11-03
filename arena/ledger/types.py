@@ -9,7 +9,7 @@ from typing import Callable
 
 from ..crypto import commit_hash
 from .elements import check_elements
-from ..peer.plugin import valid_run
+from .run import valid_run
 
 POLICY_LISTS = ("roles", "conflict_roles", "hidden_roles", "reveal_values", "assigned_kinds", "attest_kinds")
 POLICY_MAPS = ("verdict_roles", "attest_roles")
@@ -32,6 +32,7 @@ class EntryType:
     counters: dict = field(default_factory=dict)          # contribution fields this type adds, with their empty values
     contribute: Callable[[dict, dict, dict], None] | None = None    # (records, payload, index) -> update records
     index: Callable[[dict, dict], None] | None = None     # (payload, index) -> first pass for contributions (e.g. authors)
+    private_keys: Callable[[dict, dict], set] | None = None  # (full payload, its event's policy) -> fields that must go in the envelope
 
 
 ENTRY_TYPES: dict[str, EntryType] = {}
@@ -99,6 +100,24 @@ def _inc_map(rec, who, key, name):
 
 
 # ---------------- event ----------------
+@dataclass(frozen=True)
+class EventColumn:
+    """an optional column of the event declaration that some module owns (elements, schedule, codebook, ...): its check
+    and whether its value shows in the public view. Registered, so the event rule never names them (open/closed)"""
+    name: str
+    check: Callable | None = None   # (chain, payload, settings) -> why refused, or None; runs when the column is present
+    public: bool = True
+
+
+EVENT_COLUMNS: dict[str, EventColumn] = {}
+
+
+def register_event_column(c: EventColumn) -> None:
+    if c.name in EVENT_COLUMNS:
+        raise ValueError(f"event column {c.name!r} registered twice")
+    EVENT_COLUMNS[c.name] = c
+
+
 def _event_shape(chain, e, now, s):
     p = e["payload"]
     if not isinstance(p.get("approvers", []), list):
@@ -115,16 +134,11 @@ def _event_once(chain, e, now, s):
     p = e["payload"]
     if ("mode" in p or "apps" in p) and not valid_run(p.get("mode"), p.get("apps", [])):
         return "bad mode or app list"
-    bad = check_elements(p.get("elements", {}))
-    if bad:
-        return bad
-    if "schedule" in p:
-        from .schedule import check_schedule
-        bad = check_schedule(p["schedule"], s.event_schedule_max)
-        if bad:
-            return bad
-    from .codebook import check_event_codebook  # registered after the built-in types
-    return check_event_codebook(chain, p)
+    for col in EVENT_COLUMNS.values():  # the optional columns, each checked by the module that owns it
+        if col.check and col.name in p:
+            bad = col.check(chain, p, s)
+            if bad:
+                return bad
 
 
 def _event_contribute(rec, p, index):
@@ -357,6 +371,9 @@ def _map_count(key, who_field, name_field):
     return lambda rec, p, index: _inc_map(rec, p[who_field], key, p[name_field])
 
 
+register_event_column(EventColumn("elements", lambda chain, p, s: check_elements(p["elements"])))
+
+
 # ---------------- the built-in types ----------------
 for _t in (
     EntryType("genesis", lambda p: [p.get("god")], public=lambda p, c: {"god": p["god"], "broker": p["broker"], "recorder": p["recorder"],
@@ -365,18 +382,18 @@ for _t in (
               counters={"groups": 0}, contribute=_count("groups", "founder")),
     EntryType("event", lambda p: [p.get("issuer"), *p.get("approvers", [])], shape=_event_shape, rules=(_event_once,),
               public=lambda p, c: {**_rules_hash(p), **({"mode": p["mode"], "apps": p.get("apps", [])} if "mode" in p else {}),
-                                   **({"elements": p["elements"]} if p.get("elements") else {}),
-                                   **({"codebook": p["codebook"]} if p.get("codebook") else {}),
-                                   **({"schedule": p["schedule"]} if p.get("schedule") else {}),
+                                   **{c.name: p[c.name] for c in EVENT_COLUMNS.values() if c.public and p.get(c.name)},
                                    "issuer": p["issuer"], "kind": p.get("kind"), "approvers": list(p.get("approvers", []))},
               counters={"events": 0, "approvals": 0}, contribute=_event_contribute),
     EntryType("contract", lambda p: [p.get("issuer"), p.get("contractor")], event_ref="required", unique_nonce=True, rules=(_contract_rule,),
-              public=_contract_public, counters={"roles": defaultdict(int)}, contribute=_map_count("roles", "contractor", "role")),
+              public=_contract_public, counters={"roles": defaultdict(int)}, contribute=_map_count("roles", "contractor", "role"),
+              private_keys=lambda p, pol: {"contractor"} if p.get("role") in (pol or {}).get("hidden_roles", []) else set()),
     EntryType("publish", lambda p: [p.get("author")], event_ref="optional", shape=_publish_shape, rules=(_publish_rule,),
               public=lambda p, c: {"author": p["author"], "content_hash": p["content_hash"], **({"label": p["label"]} if "label" in p else {})},
               counters={"published": 0},
               contribute=_count("published", "author"), index=_publish_index),
     EntryType("share", lambda p: [p.get("provider"), p.get("consumer")], event_ref="optional", needs_content=True, unique_nonce=True,
+              private_keys=lambda p, pol: {"provider", "consumer", "content_hash", "terms"},  # who handed what to whom stays private
               counters={"received_by": set()}, contribute=_share_contribute),
     EntryType("feedback", lambda p: [p.get("evaluator")], event_ref="optional", needs_content=True, rules=(_feedback_rule,),
               public=lambda p, c: {k: p[k] for k in ("evaluator", "content_hash", "verdict", "score") if k in p},
@@ -400,3 +417,13 @@ for _t in (
               contribute=_count("closed", "issuer")),
 ):
     register_entry_type(_t)
+
+
+def split_payload(kind: str, full: dict, policy: dict | None = None) -> tuple[dict, dict | None]:
+    """a full payload -> (the public body to sign, the private fields or None), by the type's rule for what must stay
+    private (protocol 3). `policy` is the policy of the event the entry belongs to (from its notarized notice)"""
+    from .envelope import with_private
+    t = ENTRY_TYPES[kind]
+    keys = t.private_keys(full, policy or {}) if t.private_keys else set()
+    fields = {k: full[k] for k in keys if k in full}
+    return with_private({k: v for k, v in full.items() if k not in fields}, fields), (fields or None)

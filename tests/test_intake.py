@@ -8,6 +8,7 @@ import time
 import pytest
 
 from arena.crypto import h
+from arena.ledger import split_payload
 from tests.test_assistant import RULES, asst, ctx, eco, settle  # noqa: F401  (eco is a fixture)
 
 POL = {"roles": ["member", "review"], "conflict_roles": ["review"]}
@@ -72,9 +73,10 @@ async def test_p6b2_the_ledger_checks_recipient_deadline_limit_and_conflicting_r
     async def share(provider, consumer, text, purpose="submission"):
         ch = h(text.encode())
         await publish(provider, text)
-        p = {"provider": provider.identity.pub, "consumer": consumer.identity.pub, "content_hash": ch, "purpose": purpose, "nonce": text,
-             "event_id": ev, "group_id": "public", "ledger_id": lid}
-        return await eco.svc.record("share", p, {provider.identity.pub: provider.identity.sign(p), consumer.identity.pub: consumer.identity.sign(p)})
+        full = {"provider": provider.identity.pub, "consumer": consumer.identity.pub, "content_hash": ch, "purpose": purpose, "nonce": text,
+                "event_id": ev, "group_id": "public", "ledger_id": lid}
+        p, private = split_payload("share", full)
+        return await eco.svc.record("share", p, {provider.identity.pub: provider.identity.sign(p), consumer.identity.pub: consumer.identity.sign(p)}, private)
     assert "receiver" in (await share(a, b, "x1"))["error"]
     assert (await share(a, eco.host, "x2"))["ok"] and (await share(a, eco.host, "x3"))["ok"]
     assert "at most" in (await share(a, eco.host, "x4"))["error"]

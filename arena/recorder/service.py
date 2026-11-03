@@ -72,12 +72,12 @@ class RecorderService:
 
     def link(self, child_ledger_id: str) -> dict:
         """public: the entry by which a community chain linked its start into this chain (P5-G9)"""
-        e = next((x for x in self.ledger.chain if x["type"] == "chain_link" and x["payload"]["child_ledger_id"] == child_ledger_id), None)
+        e = next((x for x in self.ledger.raw if x["type"] == "chain_link" and x["payload"]["child_ledger_id"] == child_ledger_id), None)
         return {"ok": True, "link": e} if e else {"ok": False, "error": "no chain_link for this ledger"}
 
     def codebooks(self) -> dict:
         """public: the code table editions on this ledger, as whole entries (a branch copies the trunk's from here)"""
-        return {"ok": True, "codebooks": [e for e in self.ledger.chain if e["type"] == "codebook"]}
+        return {"ok": True, "codebooks": [e for e in self.ledger.raw if e["type"] == "codebook"]}
 
     def codes(self) -> dict:
         """public: the ledger codes this recorder implements and the built-in edition it ships with. An event that follows
@@ -94,9 +94,9 @@ class RecorderService:
         return {"ok": True, "ledger_id": chain[0]["hash"], "genesis": chain[0], "recorder": self.identity.pub,
                 "rotations": [e for e in chain if e["type"] == "key_rotate"]}
 
-    async def record(self, kind: str, payload: dict, sigs: dict) -> dict:
+    async def record(self, kind: str, payload: dict, sigs: dict, private: dict | None = None) -> dict:
         async with self._lock:
-            entry, err = self.ledger.propose(kind, payload, sigs)
+            entry, err = self.ledger.propose(kind, payload, sigs, private)
         if err:
             return {"ok": False, "error": err}
         return {"ok": True, "seq": entry["seq"], "hash": entry["hash"], "seal": entry["seal"]}
@@ -146,7 +146,15 @@ class RecorderService:
     def read_chain(self, reader_pub: str) -> dict:
         if not self._allowed(reader_pub):
             return {"ok": False, "error": "not authorized"}
-        return {"ok": True, "chain": self.ledger.chain}
+        return {"ok": True, "chain": self.ledger.raw}  # as stored, envelopes included (an allowed reader sees everything)
+
+    def log(self, start: int = 0, limit: int | None = None) -> dict:
+        """public: the entries from `start` on in their public form (no envelopes). Anyone may copy the ledger this way and
+        check it: hash chain, seals, public signatures (dev/chain-policy.md 8.2)"""
+        from ..ledger.envelope import public_form
+        n = limit or self.settings.recorder_log_page
+        rows = [public_form(e) for e in self.ledger.raw[max(0, start):max(0, start) + n]]
+        return {"ok": True, "entries": rows, "next": max(0, start) + len(rows), "size": len(self.ledger.raw)}
 
     def read_access_log(self, reader_pub: str) -> dict:
         if reader_pub not in self.readers:

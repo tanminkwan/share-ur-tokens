@@ -4,6 +4,7 @@ reviewer use the built-in elements (P6-V2): the org's IntakeDesk and the reviewe
 import time
 
 from arena.crypto import canon, h
+from arena.ledger import split_payload
 from tests.motif.doubles import APPROVER_LABEL, AUDIENCE, KIND, OPEN, POLICY, REVIEW
 
 
@@ -57,9 +58,10 @@ async def open_event(w, text=CALL, reviewer=None, post=True):
     cr = await R.record("contract", c_rec, {org.identity.pub: org.sign(c_rec), rec_hit["pub"]: eng["sig"]})
     rev_hit = reviewer or (await org.brokers[REVIEW].find("공모 심사 평가 기준", role="review", identity=org.identity))["peers"][0]
     c_rev = {"event_id": ev_id, "role": "review", "issuer": org.identity.pub, "contractor": rev_hit["pub"], "nonce": nonce("rev"), "group_id": g_rev, **L}
-    eng2 = await org.call(rev_hit["url"], {"op": "engage", "role": "review", "contract": c_rev, "request": {"text": text}})
+    rev_body, rev_private = split_payload("contract", c_rev, POLICY)  # the review role is hidden: its contractor is private (protocol 3)
+    eng2 = await org.call(rev_hit["url"], {"op": "engage", "role": "review", "contract": c_rev, "body": rev_body, "request": {"text": text}})
     assert eng2["ok"], eng2
-    cv = await R.record("contract", c_rev, {org.identity.pub: org.sign(c_rev), rev_hit["pub"]: eng2["sig"]})
+    cv = await R.record("contract", rev_body, {org.identity.pub: org.sign(rev_body), rev_hit["pub"]: eng2["sig"]}, rev_private)
     assert ev_rec["ok"] and cr["ok"] and cv["ok"], (ev_rec, cr, cv)
     notice = {"notice_id": ev_id, "kind": KIND, "title": text[:30], "text": text, "audience": AUDIENCE,
               "until": time.time() + 600, "issuer_pub": org.identity.pub, "issuer_url": org.config.url,
@@ -102,10 +104,10 @@ async def apply(p, n, content):
     share_p = {"provider": p.identity.pub, "consumer": n["issuer_pub"], "content_hash": ch, "purpose": "submission", "nonce": nonce(ch),
                "event_id": n["notice_id"], "group_id": n["group_id"], **L}
     sub = await p.call(n["issuer_url"], {"op": "intake.submit", "event_id": n["notice_id"], "content": text, "share": share_p,
-                                         "sig": p.sign(share_p), "recorder_url": n["recorder_url"]})
+                                         "sig": p.sign(split_payload("share", share_p)[0]), "recorder_url": n["recorder_url"]})
     if not sub.get("ok"):
         return sub
-    assert p.receipts.keep(sub, "share", share_p, expected_recorder=n["recorder_pub"]), sub
+    assert p.receipts.keep(sub, "share", split_payload("share", share_p)[0], expected_recorder=n["recorder_pub"]), sub
     return {"ok": True, "content_hash": ch}
 
 
@@ -125,11 +127,12 @@ async def review_and_adopt(w, opened, top=1):
     for k, v in submissions(w, ev).items():
         sh = {"provider": org.identity.pub, "consumer": rv["pub"], "content_hash": k, "purpose": "evaluation", "nonce": nonce(k, rv["pub"]),
               "event_id": ev, "group_id": g_rev, **L}
-        items.append({"share": sh, "sig": org.sign(sh), "content": v["content"]})
+        items.append({"share": sh, "sig": org.sign(split_payload("share", sh)[0]), "content": v["content"]})
     res = await org.call(rv["url"], {"op": "evaluation.request", "event_id": ev, "recorder_url": opened["recorder"]["recorder_url"], "items": items})
     assert res["ok"], res
     for it in items:
-        r = await R.record("share", it["share"], {org.identity.pub: it["sig"], rv["pub"]: res["receipts"][it["share"]["content_hash"]]})
+        body, private = split_payload("share", it["share"])
+        r = await R.record("share", body, {org.identity.pub: it["sig"], rv["pub"]: res["receipts"][it["share"]["content_hash"]]}, private)
         assert r["ok"], r
     scores = {}
     for x in res["verdicts"]:

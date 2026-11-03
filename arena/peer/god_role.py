@@ -4,7 +4,7 @@ see content (only hashes are on the ledger) and cannot re-identify anyone."""
 from __future__ import annotations
 
 from ..crypto import pen_name
-from ..ledger import audit_chain
+from ..ledger import audit_chain, merged
 from ..signing import SignatureError, verify_message
 from ..stats import ledger_stats, per_peer
 from .plugin import BaseApp, MessageHead
@@ -63,7 +63,7 @@ class GodRole(BaseApp):
         for group, broker in ctx.brokers.items():
             r = await broker.list_profiles(identity=ctx.identity)
             profiles += [dict(p, group=group) for p in r.get("profiles", [])]
-        chain = copies[0][1]
+        chain = [merged(e) for e in copies[0][1]]  # stats read the full view (body + envelope); the audit above checked the stored form
         pen = lambda pub: pen_name(pub, self.settings.pen_name_prefix, self.settings.pen_name_len)
         snap = {"ok": True, "integrity": {"recorders": integ, "agree": agree},
                 "stats": ledger_stats(chain, self.settings.god_top_flows, self.settings.genesis_group_id), "peers": per_peer(chain, profiles, pen),

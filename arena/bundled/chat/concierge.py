@@ -36,7 +36,7 @@ async def _event_status(svc, event):
     d = svc.event(ev) if ev else None
     if d is None:
         return {"error": f"모르는 이벤트: {event}"}
-    return {k: d[k] for k in ("event_id", "title", "role", "drive", "closed", "state_line")} | {"recent": d["transcript"][-8:],
+    return {k: d[k] for k in ("event_id", "title", "role", "drive", "closed", "state_line")} | {"recent": d["transcript"][-svc.peer.settings.chat_recent_lines:],
                                                                                             "schedule": d["schedule"]}
 
 
@@ -46,7 +46,7 @@ async def _tell_event(svc, event, text):
 
 
 async def _answer_item(svc, item, yes, why):
-    it = svc.desk.items.get(item)
+    it = svc.item(item)
     if it is None or it.status != "open":
         return {"error": f"열린 알림이 아니다: {item}"}
     answer = {"approve": yes} if it.kind == "suggestion" else {"yes": yes, "why": why}
@@ -88,7 +88,7 @@ class Concierge:
         me = st["me"]
         events = "\n".join(f"- {e['event_id']} '{e['title']}' ({'개최' if e['role'] == 'host' else '참가'}, 운전석 {e['drive']}"
                            f"{', 닫힘' if e['closed'] else ''})" for e in st["events"]) or "- 없음"
-        items = "\n".join(f"- {it['id']} [{it['kind']}] {it['title'][:120]}{' (이벤트 ' + it['event_id'] + ')' if it['event_id'] else ''}"
+        items = "\n".join(f"- {it['id']} [{it['kind']}] {it['title'][:self.s.desk_title_chars]}{' (이벤트 ' + it['event_id'] + ')' if it['event_id'] else ''}"
                           for it in self.svc.items("open")) or "- 없음"
         tools = "\n".join(f"- {t.name} {t.description}" for t in self.tools.values())
         return (f"당신은 peer '{me['pen']}'의 대화 비서입니다. 소유자(사람)와 한국어로 짧고 분명하게 대화합니다. 소유자가 말한 일만 하고, "
@@ -119,8 +119,9 @@ class Concierge:
                 break
             missing = [k for k in (tool.args or {}).get("required", []) if k not in args]
             result = {"error": f"인자가 맞지 않음: {', '.join(missing)} 없음"} if missing else await tool.run(self.svc, **{k: args[k] for k in (tool.args or {}).get("properties", {}) if k in args})
-            work.append(f"{tool.name} {json.dumps(args, ensure_ascii=False)[:300]} → {json.dumps(result, ensure_ascii=False)[:800]}")
-            ctx.log.emit("chat", ctx.pen, f"{tool.name} → {json.dumps(result, ensure_ascii=False)[:120]}")
+            work.append(f"{tool.name} {json.dumps(args, ensure_ascii=False)[:self.s.text_args_chars]} → "
+                        f"{json.dumps(result, ensure_ascii=False)[:self.s.chat_work_chars]}")
+            ctx.log.emit("chat", ctx.pen, f"{tool.name} → {json.dumps(result, ensure_ascii=False)[:self.s.text_log_chars]}")
         if not said:
             said.append("요청하신 일을 처리했습니다." if work else "알겠습니다.")
         return said

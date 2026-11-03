@@ -14,11 +14,12 @@ class Receipts:
         seal = response.get("seal") or {}
         return bool(response.get("ok") and seal.get("pub") == recorder_pub and verify(recorder_pub, response.get("hash", ""), seal.get("sig", "")))
 
-    def keep(self, response: dict, kind: str, payload: dict, expected_recorder: str) -> bool:
+    def keep(self, response: dict, kind: str, payload: dict, expected_recorder: str, private: dict | None = None) -> bool:
         """keep the receipt only if the expected recorder sealed it; False means do not trust this recorder"""
         if not self.sealed_by(response, expected_recorder):
             return False
-        item = {"kind": kind, "payload": payload, "seq": response["seq"], "hash": response["hash"], "seal": response["seal"]}
+        item = {"kind": kind, "payload": payload, "seq": response["seq"], "hash": response["hash"], "seal": response["seal"],
+                **({"private": private} if private else {})}  # a party keeps its envelope fields too
         self.items.append(item)
         if self.on_keep:
             self.on_keep(item)

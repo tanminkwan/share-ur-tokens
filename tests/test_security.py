@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from arena.crypto import Identity, canon, h
-from arena.ledger import BODY, MemoryStore, audit_chain
+from arena.ledger import MemoryStore, audit_chain, hash_body, private_hash
 from arena.peer.receipts import Receipts
 from arena.recorder.api import build_recorder_app
 from arena.recorder.service import RecorderService
@@ -26,7 +26,10 @@ async def built(settings):
 
 
 def rehash(e):
-    e["hash"] = h(canon({k: e[k] for k in BODY}))
+    """what a forger with the recorder's key would redo: the private signatures' hash, then the entry hash (protocol 3)"""
+    if e.get("envelope", {}).get("sigs"):
+        e["private_sigs"] = private_hash(e["envelope"]["sigs"])
+    e["hash"] = h(canon(hash_body(e)))
 
 
 # ---------------- P5-B1: audit catches every edit of history ----------------
@@ -41,15 +44,15 @@ def rehash(e):
 ])
 def test_p5b1_tamper_checklist(built, attack, expected):
     svc, cast, _, _ = built
-    c = copy.deepcopy(svc.ledger.chain)
+    c = copy.deepcopy(svc.ledger.raw)  # the stored form: a share's parties and their signatures are in its private envelope
     if attack == "payload":
-        c[2]["payload"]["terms"] = "changed"
+        c[2]["payload"]["nonce"] = "changed"
     elif attack == "payload+rehash":
-        c[2]["payload"]["terms"] = "changed"
+        c[2]["payload"]["nonce"] = "changed"
         rehash(c[2])
         c[2]["seal"]["sig"] = svc.identity.sign(c[2]["hash"])  # even the recorder re-seals it
     elif attack == "signature":
-        c[2]["sigs"][cast.author.pub] = cast.other.sign(c[2]["payload"])
+        c[2]["envelope"]["sigs"][cast.author.pub] = cast.other.sign(c[2]["payload"])
         rehash(c[2])
         c[2]["seal"]["sig"] = svc.identity.sign(c[2]["hash"])
         for i in range(3, len(c)):
@@ -75,8 +78,8 @@ def test_p5b2_truncation_needs_receipts(built):
     missing = receipts.missing_from(cut)
     assert [m["seq"] for m in missing] == [3, 4] and all(m["kind"] in ("publish", "share") for m in missing)
     assert receipts.missing_from(svc.ledger.chain) == []
-    swapped = copy.deepcopy(svc.ledger.chain)
-    swapped[4]["payload"]["terms"] = "x"
+    swapped = copy.deepcopy(svc.ledger.raw)
+    swapped[4]["payload"]["nonce"] = "x"
     rehash(swapped[4])
     assert [m["seq"] for m in receipts.missing_from(swapped)] == [4]  # a rewritten entry no longer matches the receipt
 

@@ -4,13 +4,13 @@ holds the genesis entry and every key_rotate entry, enough to check the current 
 from __future__ import annotations
 
 from ..crypto import canon, h, verify
-from .core import BODY
+from .envelope import BODY, hash_body
 from .rules import signers
 from .types import current_keys
 
 
 def _entry_ok(e: dict, sealer: str) -> str | None:
-    if e.get("hash") != h(canon({k: e[k] for k in BODY})):
+    if e.get("hash") != h(canon(hash_body(e))):
         return "hash"
     if any(not s or not verify(s, e["payload"], e["sigs"].get(s, "")) for s in signers(e)):
         return "signature"
