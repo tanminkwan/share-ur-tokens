@@ -9,10 +9,10 @@ from collections import defaultdict
 from typing import Callable
 
 from ..crypto import Identity, canon, h, verify
-from .envelope import PRIVATE, hash_body, merged, private_hash, stored
+from .envelope import PRIVATE, assemble, exposed, hash_body, merged, private_hash, stored
 from .rules import check, signers
 from .store import LedgerStore
-from .types import ENTRY_TYPES
+from .types import ENTRY_TYPES, events
 
 
 class LedgerCorrupt(Exception):
@@ -48,32 +48,17 @@ class Ledger:
     def propose(self, kind: str, payload: dict, sigs: dict, private: dict | None = None) -> tuple[dict | None, str | None]:
         """sequencer path: assign prev/ts, validate, seal, append. `payload` is the signed public body; `private` the
         fields of the private envelope (their hash must be the body's `private` column)"""
-        if kind not in ENTRY_TYPES:
+        t = ENTRY_TYPES.get(kind)
+        if t is None:
             return None, "unknown type"
-        if private is not None and (not isinstance(private, dict) or not private):
-            return None, "private fields must be a non-empty object"
-        if private and payload.get(PRIVATE) != private_hash(private):
-            return None, "the body's private column must be the hash of the private fields"
-        if not private and PRIVATE in payload:
-            return None, "the private fields are missing (the body names their hash)"
-        if private and (PRIVATE in private or set(private) & set(payload)):
-            return None, "a field is either in the body or in the envelope, not both"
-        full = {**payload, **(private or {})}
-        public_signers = set(ENTRY_TYPES[kind].signers(payload)) - {None}
-        pub_sigs = {k: v for k, v in sigs.items() if k in public_signers or k not in set(ENTRY_TYPES[kind].signers(full))}
-        priv_sigs = {k: v for k, v in sigs.items() if k not in pub_sigs}
-        e = {"type": kind, "payload": payload, "sigs": pub_sigs, "prev": self.head(), "ts": self.clock(),
-             **({"private_sigs": private_hash(priv_sigs)} if priv_sigs else {})}
-        envelope = {"fields": private or {}, "sigs": priv_sigs} if (private or priv_sigs) else None
-        view = dict(e, payload=full, sigs={**pub_sigs, **priv_sigs}, signed_payload=payload) if envelope else e
+        e, envelope, view, err = assemble(kind, payload, sigs, private, t.signers)
+        if err:
+            return None, err
+        e.update(prev=self.head(), ts=self.clock())
+        view.update(prev=e["prev"], ts=e["ts"])
         err = check(self.chain, view, self.clock(), self.settings)
-        if not err:
-            from .types import events
-            policy = events(self.chain).get(full.get("event_id"), {}).get("policy", {})
-            must = ENTRY_TYPES[kind].private_keys(full, policy) if ENTRY_TYPES[kind].private_keys else set()
-            exposed = sorted(k for k in must if k in payload)
-            if exposed:
-                err = f"{', '.join(exposed)} must go in the private envelope, not the public body"
+        if not err and t.private_keys:
+            err = exposed(t.private_keys(view["payload"], events(self.chain).get(view["payload"].get("event_id"), {}).get("policy", {})), payload)
         return (None, err) if err else (self._seal(e, envelope), None)
 
     def audit(self) -> str:

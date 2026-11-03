@@ -61,3 +61,30 @@ def body_of(full: dict, body: dict) -> dict | None:
     if rest:
         return rest if body.get(PRIVATE) == private_hash(rest) else None
     return {} if PRIVATE not in body else None
+
+
+def assemble(kind: str, payload: dict, sigs: dict, private: dict | None, signers_of) -> tuple[dict, dict | None, dict, str | None]:
+    """a proposed entry -> (its stored fields without prev/ts, its envelope or None, its full view for the rules, why refused).
+    Public signers' signatures stay on the entry; those of signers whose identity is private go in the envelope"""
+    if private is not None and (not isinstance(private, dict) or not private):
+        return {}, None, {}, "private fields must be a non-empty object"
+    if private and payload.get(PRIVATE) != private_hash(private):
+        return {}, None, {}, "the body's private column must be the hash of the private fields"
+    if not private and PRIVATE in payload:
+        return {}, None, {}, "the private fields are missing (the body names their hash)"
+    if private and (PRIVATE in private or set(private) & set(payload)):
+        return {}, None, {}, "a field is either in the body or in the envelope, not both"
+    full = {**payload, **(private or {})}
+    public_signers, all_signers = set(signers_of(payload)) - {None}, set(signers_of(full))
+    pub_sigs = {k: v for k, v in sigs.items() if k in public_signers or k not in all_signers}
+    priv_sigs = {k: v for k, v in sigs.items() if k not in pub_sigs}
+    e = {"type": kind, "payload": payload, "sigs": pub_sigs, **({"private_sigs": private_hash(priv_sigs)} if priv_sigs else {})}
+    envelope = {"fields": private or {}, "sigs": priv_sigs} if (private or priv_sigs) else None
+    view = dict(e, payload=full, sigs={**pub_sigs, **priv_sigs}, signed_payload=payload) if envelope else e
+    return e, envelope, view, None
+
+
+def exposed(must: set, payload: dict) -> str | None:
+    """why refused, if a field that must stay private is in the public body"""
+    out = sorted(k for k in must if k in payload)
+    return f"{', '.join(out)} must go in the private envelope, not the public body" if out else None
