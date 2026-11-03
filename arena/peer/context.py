@@ -96,9 +96,10 @@ class AppContext:
     async def call(self, url: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None) -> dict:
         return await self._peer.call(url, msg, timeout, group=group, event=event)
 
-    async def call_peer(self, pub: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None) -> dict:
+    async def call_peer(self, pub: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None,
+                        url: str | None = None) -> dict:
         """reach a peer by a connection method its profile lists (a2a, else api)"""
-        return await self._peer.call_peer(pub, msg, timeout, group=group, event=event)
+        return await self._peer.call_peer(pub, msg, timeout, group=group, event=event, url=url)
 
     async def submissions(self, event_id: str) -> list:
         """what this peer's submission desk received for an event (the intake element)"""

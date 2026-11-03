@@ -153,9 +153,14 @@ class Peer:
                 return found
         return None
 
-    async def call_peer(self, pub: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None) -> dict:
-        """reach a peer by the connection its profile lists that code may use: a2a first, else api (P6-A8)"""
+    async def call_peer(self, pub: str, msg: dict, timeout: float | None = None, group: str | None = None, event: str | None = None,
+                        url: str | None = None) -> dict:
+        """reach a peer by the connection its profile lists that code may use: a2a first, else api (P6-A8). Every call
+        between peers goes this way (P6-Q1), so a peer that opens only api (a human peer) takes part too. Without a
+        profile on my brokers, the address the peer gave (`url`) is used as an A2A address."""
         prof = await self.profile_of(pub)
+        if prof is None and url:
+            return await self.call(url, msg, timeout, group=group, event=event)
         conns = (prof or {}).get("connections") or ([{"kind": "a2a", "url": prof["url"]}] if prof and prof.get("url") else [])
         c = pick(conns)
         if c is None:

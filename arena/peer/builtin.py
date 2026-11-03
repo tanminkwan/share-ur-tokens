@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections import deque
 
 from ..crypto import verify
 from .plugin import BaseApp, EventApprover, MessageHead, RequestReceiver, RoleAcceptor
+
+
+HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 
 class RoleContracts(BaseApp):
@@ -69,10 +73,12 @@ class DirectRequests(BaseApp):
     async def send(self, ctx, targets: list[str], request: dict) -> dict:
         sig = ctx.sign(request)
 
-        async def one(url):
+        async def one(target):
+            msg = {"op": "solicit", "request": request, "sig": sig}
             try:
-                return await ctx.call(url, {"op": "solicit", "request": request, "sig": sig}, group=request.get("group_id"),
-                                      event=request.get("event_id"))
+                if HEX64.fullmatch(target):  # a public key: by its listed connections (P6-Q1)
+                    return await ctx.call_peer(target, msg, group=request.get("group_id"), event=request.get("event_id"))
+                return await ctx.call(target, msg, group=request.get("group_id"), event=request.get("event_id"))
             except Exception as e:
                 return {"ok": False, "error": f"{type(e).__name__}: {e}"}
         acks = await asyncio.gather(*(one(u) for u in targets))

@@ -55,7 +55,7 @@ async def join_event(A, ctx, st):
     if st.role == "host":
         return {"error": "개최자는 참가 신청하지 않는다"}
     st.joined = True
-    r = await A.send(ctx, st, st.issuer_url, "참가 신청", {"type": "join", "rules_hash": st.rules_hash})
+    r = await A.send(ctx, st, st.issuer_url, "참가 신청", {"type": "join", "rules_hash": st.rules_hash}, pub=st.issuer_pub)
     if not r.get("ok"):
         st.joined = False
     return r
@@ -70,8 +70,8 @@ async def contract(A, ctx, st, role, peer):
         return {"ok": False, "error": f"참가 신청한 peer나 그 역할을 프로필에 내건 peer만 계약할 수 있다(신청자: {len(st.applicants)}명)"}
     c = {"event_id": st.event_id, "role": role, "issuer": ctx.pub, "contractor": peer_pub, "nonce": nonce(peer_pub, role),
          "group_id": st.group_id, "rules_hash": st.rules_hash, **(await ledger_tag(ctx, st))}
-    eng = await ctx.call(peer_url, {"op": "engage", "role": role, "contract": c, "request": {"event_id": st.event_id, "rules_hash": st.rules_hash}},
-                         group=st.group_id, event=st.event_id)
+    eng = await ctx.call_peer(peer_pub, {"op": "engage", "role": role, "contract": c, "request": {"event_id": st.event_id, "rules_hash": st.rules_hash}},
+                              group=st.group_id, event=st.event_id, url=peer_url)
     if not eng.get("ok"):
         return {"ok": False, "error": eng.get("error")}
     r = await ctx.recorder(st.recorder_url).record("contract", c, {ctx.pub: ctx.sign(c), peer_pub: eng["sig"]})
@@ -128,7 +128,7 @@ async def send(A, ctx, st, to, text, data=None, attach_reveals=()):
     pub, url = await A.resolve_peer(ctx, st, to)
     if not url:
         return {"ok": False, "error": f"{to}의 주소를 찾지 못했다"}
-    r = await A.send(ctx, st, url, text, data)
+    r = await A.send(ctx, st, url, text, data, pub=pub)
     if r.get("ok"):
         for label in attach_reveals or ():
             st.sent_reveals.setdefault(label, [])
@@ -138,13 +138,13 @@ async def send(A, ctx, st, to, text, data=None, attach_reveals=()):
 
 
 async def solicit(A, ctx, st, targets, text, data=None):
-    urls = []
+    found = []
     for t in targets:
-        _, url = await A.resolve_peer(ctx, st, t)
-        if not url:
+        pub, url = await A.resolve_peer(ctx, st, t)
+        if not url and not pub:
             return {"error": f"{t}의 주소를 찾지 못했다"}
-        urls.append(url)
-    targets = urls
+        found.append(pub or url)
+    targets = found  # by who they are (their listed connections), or by address when unknown
     req = {"request_id": f"{st.event_id}-{nonce(text)[:8]}", "event_id": st.event_id, "text": text, "data": data or {},
            "issuer_pub": ctx.pub, "issuer_url": ctx.url, "until": ctx.clock() + ctx.settings.event_request_ttl_sec, "group_id": st.group_id}
     acks = await ctx.solicit(list(targets), req)
@@ -250,7 +250,7 @@ async def propose_attest(A, ctx, st, kind, subject, value, parties):
     acks = {}
     for x in parties:
         if x["pub"] != ctx.pub:
-            acks[x["pub"][:8]] = bool((await A.post(ctx, st, x["url"], "attest_request", {"request_id": rid, "payload": p})).get("ok"))
+            acks[x["pub"][:8]] = bool((await A.post(ctx, st, x["url"], "attest_request", {"request_id": rid, "payload": p}, pub=x["pub"])).get("ok"))
     return {"request_id": rid, "sent": acks}
 
 
@@ -261,14 +261,14 @@ async def cosign(A, ctx, st, request_id):
     if req.get("reveals_ok") is False:  # enforced by code
         return {"error": "이 요청의 공개값이 원장과 맞지 않아 서명할 수 없다(코드 확인). decline으로 거절하라"}
     st.pending.pop(request_id)
-    return await A.post(ctx, st, req["from_url"], "attest_signature", {"request_id": request_id, "attest_sig": ctx.sign(req["payload"])})
+    return await A.post(ctx, st, req["from_url"], "attest_signature", {"request_id": request_id, "attest_sig": ctx.sign(req["payload"])}, pub=req["from_pub"])
 
 
 async def decline(A, ctx, st, request_id, reason):
     req = st.pending.pop(request_id, None)
     if not req:
         return {"error": f"서명 요청 {request_id}이 없다"}
-    return await A.post(ctx, st, req["from_url"], "attest_signature", {"request_id": request_id, "declined": True, "reason": reason})
+    return await A.post(ctx, st, req["from_url"], "attest_signature", {"request_id": request_id, "declined": True, "reason": reason}, pub=req["from_pub"])
 
 
 async def assign(A, ctx, st, subjects):
