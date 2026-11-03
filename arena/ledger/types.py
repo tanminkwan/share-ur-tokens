@@ -9,7 +9,7 @@ from typing import Callable
 
 from ..crypto import commit_hash
 from .elements import check_elements
-from ..peer.plugin import valid_run
+from .run import valid_run
 
 POLICY_LISTS = ("roles", "conflict_roles", "hidden_roles", "reveal_values", "assigned_kinds", "attest_kinds")
 POLICY_MAPS = ("verdict_roles", "attest_roles")
@@ -100,6 +100,24 @@ def _inc_map(rec, who, key, name):
 
 
 # ---------------- event ----------------
+@dataclass(frozen=True)
+class EventColumn:
+    """an optional column of the event declaration that some module owns (elements, schedule, codebook, ...): its check
+    and whether its value shows in the public view. Registered, so the event rule never names them (open/closed)"""
+    name: str
+    check: Callable | None = None   # (chain, payload, settings) -> why refused, or None; runs when the column is present
+    public: bool = True
+
+
+EVENT_COLUMNS: dict[str, EventColumn] = {}
+
+
+def register_event_column(c: EventColumn) -> None:
+    if c.name in EVENT_COLUMNS:
+        raise ValueError(f"event column {c.name!r} registered twice")
+    EVENT_COLUMNS[c.name] = c
+
+
 def _event_shape(chain, e, now, s):
     p = e["payload"]
     if not isinstance(p.get("approvers", []), list):
@@ -116,16 +134,11 @@ def _event_once(chain, e, now, s):
     p = e["payload"]
     if ("mode" in p or "apps" in p) and not valid_run(p.get("mode"), p.get("apps", [])):
         return "bad mode or app list"
-    bad = check_elements(p.get("elements", {}))
-    if bad:
-        return bad
-    if "schedule" in p:
-        from .schedule import check_schedule
-        bad = check_schedule(p["schedule"], s.event_schedule_max)
-        if bad:
-            return bad
-    from .codebook import check_event_codebook  # registered after the built-in types
-    return check_event_codebook(chain, p)
+    for col in EVENT_COLUMNS.values():  # the optional columns, each checked by the module that owns it
+        if col.check and col.name in p:
+            bad = col.check(chain, p, s)
+            if bad:
+                return bad
 
 
 def _event_contribute(rec, p, index):
@@ -358,6 +371,9 @@ def _map_count(key, who_field, name_field):
     return lambda rec, p, index: _inc_map(rec, p[who_field], key, p[name_field])
 
 
+register_event_column(EventColumn("elements", lambda chain, p, s: check_elements(p["elements"])))
+
+
 # ---------------- the built-in types ----------------
 for _t in (
     EntryType("genesis", lambda p: [p.get("god")], public=lambda p, c: {"god": p["god"], "broker": p["broker"], "recorder": p["recorder"],
@@ -366,9 +382,7 @@ for _t in (
               counters={"groups": 0}, contribute=_count("groups", "founder")),
     EntryType("event", lambda p: [p.get("issuer"), *p.get("approvers", [])], shape=_event_shape, rules=(_event_once,),
               public=lambda p, c: {**_rules_hash(p), **({"mode": p["mode"], "apps": p.get("apps", [])} if "mode" in p else {}),
-                                   **({"elements": p["elements"]} if p.get("elements") else {}),
-                                   **({"codebook": p["codebook"]} if p.get("codebook") else {}),
-                                   **({"schedule": p["schedule"]} if p.get("schedule") else {}),
+                                   **{c.name: p[c.name] for c in EVENT_COLUMNS.values() if c.public and p.get(c.name)},
                                    "issuer": p["issuer"], "kind": p.get("kind"), "approvers": list(p.get("approvers", []))},
               counters={"events": 0, "approvals": 0}, contribute=_event_contribute),
     EntryType("contract", lambda p: [p.get("issuer"), p.get("contractor")], event_ref="required", unique_nonce=True, rules=(_contract_rule,),

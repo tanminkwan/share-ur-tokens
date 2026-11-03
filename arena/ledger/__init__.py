@@ -7,4 +7,5 @@ from .envelope import body_of, hash_body, merged, private_hash, public_form, sto
 from .types import ENTRY_TYPES, EntryType, closed_events, events, groups, register_entry_type, split_payload  # noqa: F401
 from .purposes import PURPOSES, Purpose, register_purpose  # noqa: F401
 from . import builtin_elements  # noqa: F401,E402  (registers the built-in elements)
-from . import codebook  # noqa: F401,E402  (registers the codebook entry type)
+from . import schedule  # noqa: F401,E402  (registers the schedule column)
+from . import codebook  # noqa: F401,E402  (registers the codebook entry type and column)

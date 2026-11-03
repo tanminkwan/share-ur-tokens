@@ -20,3 +20,16 @@ def test_layers_platform_does_not_import_apps_or_demo():
     bad = [str(f.relative_to(ROOT)) for f in PLATFORM
            if re.search(r"^\s*(from|import)\s+(apps|demo)\b", f.read_text(encoding="utf-8"), re.M)]
     assert not bad, bad
+
+
+def test_layers_lower_layers_do_not_import_upper_ones():
+    """SOLID re-check (2026-11-03): the ledger, recorder and broker never depend on the peer layer or the bundled apps;
+    the peer core never depends on the bundled apps (dependencies point down)"""
+    upper = {"ledger": r"peer|bundled|peers", "recorder": r"peer|bundled|peers", "broker": r"peer|bundled|peers", "peer": r"bundled|peers"}
+    bad = []
+    for layer, forbidden in upper.items():
+        for f in sorted((ROOT / "arena" / layer).rglob("*.py")):
+            for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+                if re.match(rf"^\s*from\s+(\.\.+|arena\.)({forbidden})\b", line):
+                    bad.append(f"{f.relative_to(ROOT)}:{i}: {line.strip()}")
+    assert not bad, "\n".join(bad)

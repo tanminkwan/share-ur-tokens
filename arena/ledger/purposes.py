@@ -23,6 +23,11 @@ class Purpose:
 
 
 PURPOSES: dict[str, Purpose] = {}
+LOCAL_SOURCES: list = []  # (chain) -> {code: {types, description}}: where a branch chain's own codes come from (the codebook registers one)
+
+
+def register_local_source(fn) -> None:
+    LOCAL_SOURCES.append(fn)
 
 
 def register_purpose(p: Purpose) -> None:
@@ -36,8 +41,7 @@ def check_purpose(chain, e) -> str | None:
     if code is None:
         return None
     if isinstance(code, str) and code.startswith("x-"):  # a branch community's own code, declared in one of its editions
-        from .codebook import local_purposes
-        d = local_purposes(chain).get(code)
+        d = next((x for x in (src(chain).get(code) for src in LOCAL_SOURCES) if x), None)
         if d is None:
             return f"unknown purpose {code!r} (not declared in this chain's code table)"
         return None if e["type"] in d["types"] else f"purpose {code!r} is not for {e['type']} entries"

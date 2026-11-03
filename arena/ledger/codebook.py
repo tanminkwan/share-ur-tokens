@@ -12,9 +12,9 @@ import re
 
 from ..crypto import canon, h, verify
 from .elements import LEDGER_ELEMENTS
-from .purposes import PURPOSES
+from .purposes import PURPOSES, register_local_source
 from .schedule import TIME_CODES
-from .types import ENTRY_TYPES, EntryType, _inc, register_entry_type
+from .types import ENTRY_TYPES, EntryType, EventColumn, _inc, register_entry_type, register_event_column
 
 VERSION = re.compile(r"^\d+\.\d+$")
 LOCAL = re.compile(r"^x-[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9_-]*$")  # a branch community's own code: x-<community>.<code>
@@ -172,3 +172,6 @@ def _contribute(rec, p, index):
 
 register_entry_type(EntryType("codebook", _signers, shape=_shape, rules=(_rule,), public=_public,
                               counters={"codebooks": 0, "codebook_followers": 0}, contribute=_contribute))
+
+register_event_column(EventColumn("codebook", lambda chain, p, s: check_event_codebook(chain, p)))
+register_local_source(lambda chain: local_purposes(chain))  # a branch chain's own purpose codes come from its editions
