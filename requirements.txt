@@ -5,3 +5,4 @@ cryptography
 httpx
 starlette
 python-dotenv
+keyring

@@ -93,6 +93,9 @@ scripts/coverage.sh                              # 같은 테스트 + 커버리�
 .venv/bin/python -m arena.peers.search     # 고급 검색 peer: 임베딩 벡터 검색 (ARENA_SEARCH_PEER_*, ARENA_EMBED_URL)
 .venv/bin/python -m arena.peers.app_store  # 앱 배포 peer: 선택, 누구나 띄울 수 있다 (ARENA_APP_STORE_*)
 .venv/bin/python -m arena.peers.foundation # 재단 peer: 기본 코드표 판을 원장에 기록 (선택, ARENA_FOUNDATION_PEER_*)
+.venv/bin/python -m arena.peers.key_peer   # 키 peer: 암호화된 키 백업 보관, 미리 정한 복구에 서명 (선택, ARENA_KEY_PEER_*)
+.venv/bin/python -m arena.keys register --recorder <기록자 API> [--key-peer <주소> --key-peer-recovers]   # 내 peer의 다음 키 약속과 백업
+                                           # rotate(도난), recover(분실), restore(새 기기), where, status. 키는 언제나 peer가 스스로 만든다
 .venv/bin/python -m arena.peers.service --spec <서비스 설명.json>   # API만 내놓는 peer (ARENA_SERVICE_PEER_*)
 .venv/bin/python -m arena.peers.personal   # 견본 개인 peer(바깥으로는 a2a). ARENA_PERSONAL_MODE=agent: 대화 앱(내 비서와 대화)
                                            # ARENA_PERSONAL_MODE=human: 창구 화면 앱(사람이 운전). 화면 주소(#token=…)를 출력한다

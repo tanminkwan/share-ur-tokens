@@ -54,11 +54,15 @@ class Identity:
         me.save(path)
         return me
 
+    def private_hex(self) -> str:
+        """the private key as hex: only for a key store or an encrypted backup, never for a message or a log"""
+        return self._k.private_bytes_raw().hex()
+
     def save(self, path: str) -> None:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(self._k.private_bytes_raw().hex() + "\n")
+            f.write(self.private_hex() + "\n")
         os.chmod(path, 0o600)
 
     def sign(self, payload) -> str:

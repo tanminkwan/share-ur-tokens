@@ -94,5 +94,32 @@
       }
     },
     "hash": "4457af63a0b8f5d39b0728ad8190687d080133eacd80f21f46173b52d4c4d8a0"
+  },
+  "key_backup": {
+    "_note": "P6-K2: scrypt(passphrase UTF-8, salt, n, r, p, 32 bytes) -> AES-256-GCM key; associated data = canonical JSON of the backup without ciphertext; plaintext = canonical JSON {current, next} private keys hex",
+    "passphrase": "correct horse battery",
+    "next_private_key_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "backup": {
+      "format": "arena-key-backup",
+      "version": 1,
+      "pub": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+      "kdf": {
+        "name": "scrypt",
+        "n": 1024,
+        "r": 8,
+        "p": 1,
+        "salt": "000102030405060708090a0b0c0d0e0f"
+      },
+      "cipher": {
+        "name": "aes-256-gcm",
+        "nonce": "000102030405060708090a0b"
+      },
+      "ciphertext": "883b3c38b3b957f1d64f2c55b7f9dde9b07c7e57bc494105fe5054c68dc78a864eeebf74094b7606d61e9b03a2b4faf1907c35ff6bf0cae041f30bc827fc64f489a38393a3b96021fb864e34b634ff33dcdb5611021011341bb7c064961c8ccaaad91659aaa4e013268f2d52171e97e28cb6e231c62584689bcd728098655b027c2655212bc7fbfb7511a6a8fcc13c66f697507362eafe63260a4d41f987b60e75361754de80e4d1"
+    }
+  },
+  "key_commitment": {
+    "_note": "P6-K3: the promised next key = sha256 of the public key hex text (UTF-8)",
+    "pub": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+    "hash": "366283b1b946001eb03b73c3fcd3e6956d39427aef0a515e31624a6529c6b970"
   }
 }

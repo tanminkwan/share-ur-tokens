@@ -23,7 +23,9 @@ def make_env(tmp_path, **over):
         "ARENA_NEIGHBOR_TIMEOUT_SEC": "2",
         "ARENA_HTTP_TIMEOUT_SEC": "5",
         "ARENA_LABEL_AUTO": "false",  # unit tests opt in to capability labels explicitly
-        "ARENA_RECORDER_REQUIRE_GROUP": "false",  # unit tests about other rules skip group declarations; group tests turn it on
+        "ARENA_RECORDER_REQUIRE_GROUP": "false",
+        "ARENA_KEY_STORE": "file",  # tests never touch the machine's OS key store
+        "ARENA_KEY_BACKUP_SCRYPT_N": "1024",  # fast in tests; the real default is much larger  # unit tests about other rules skip group declarations; group tests turn it on
     }
     env.update({k: str(v) for k, v in over.items()})
     return env

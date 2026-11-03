@@ -81,3 +81,22 @@
 | 손으로 계약한 역할이 상태 줄에서 "아직 계약 없는 역할"로 남던 결함(아래 실제 프로세스 실행에서 발견) | `tests/test_service_peer.py::test_p6a9_a_role_contracted_by_hand_...` | 고친 뒤 통과 |
 
 **실제 프로세스로 확인(2026-11-03, LLM 없음)**: `python -m scripts.try_personal`로 제네시스와 사람 peer 둘을 실제 프로세스로 띄우고, Playwright headless로 사람처럼 움직였다. 사람 peer A가 창구 화면에서 이벤트를 열고 → B의 창구에 공지가 오고 → B가 버튼으로 참가 신청 → A의 창구에 참가 메시지가 오고 → A가 B와 `member` 계약(실제 원장에 기록). 사람과 사람의 소통이 두 peer의 `a2a`로 오갔다.
+
+## 7. 개인 키 (6-K)
+
+| 무엇 | 테스트 | 결과 |
+|---|---|---|
+| OS 키 보관소에 키를 두고 파일은 남기지 않음, 재시작해도 같은 키(대역 키 보관소로) | `tests/test_peer_keys.py::test_p6k1_the_os_key_store_...` | 통과 |
+| 파일은 0600, `auto`는 이미 있는 키 파일을 그대로 쓰고 새 키는 OS 보관소에, OS 보관소가 없으면 그렇다고 알림 | `test_p6k1_file_store_...` | 통과 |
+| 설정으로 보관소 고르기, OS 보관소가 없는데 `os`면 오류, 이상한 값은 오류, 개인 peer 홈이 보관소를 씀 | `test_p6k1_choosing_...` | 통과 |
+| 백업에는 암호문만 있고 암호문구로 열림. 틀린 암호문구, 바뀐 머리, 짧은 암호문구, 모르는 판, 지나친 scrypt 값, 깨진 백업은 거절 | `test_p6k2_...` | 통과 |
+| 시험 벡터: 백업과 다음 키 약속 해시를 바이트 단위로 | `tests/test_protocol_vectors.py::test_key_backup_and_commitment_vectors` | 통과 |
+| 약속한 키로만 이어받기(지금 키만 가진 도둑은 거절), 옛 키 서명 거절, 약속은 한 번, 키 상태, 실적은 신원을 따라감 | `test_p6k3_rotation_...` | 통과 |
+| 복구는 미리 정한 키 peer만, 그 키 peer의 서명이 꼭 필요 | `test_p6k3_recovery_...` | 통과 |
+| 키 기록의 모양 거절 | `test_p6k3_shapes` | 통과 |
+| 등록 → 키 peer에 맡김 → 도난 대비 이어받기(키 peer에서, 파일에서) | `test_p6k_register_then_...` | 통과 |
+| 기기와 백업을 잃은 뒤 키 peer로 복구, 새 기기에 되살리기, 다른 키가 있으면 거절 | `test_p6k_recovery_...` | 통과 |
+| 키 peer의 거절(다른 키의 백업, 오래된 서명, 서명 위조, 짧은 비밀, 없는 백업, 틀린 비밀 횟수 초과로 잠김, 복구 담당이 아닌 요청) | `test_p6k_the_key_peer_refuses` | 통과 |
+| 명령으로 백업 파일에서 되살리기, 암호문구와 비밀키를 찍지 않음 | `test_p6k_the_command_line_...` | 통과 |
+| **실제 프로세스**: 제네시스 위에서 키 peer 프로세스, `python -m arena.keys register`(키 peer에 맡기고 복구 담당으로 정함) → `rotate`(키 peer에서 백업을 받아) → 원장에서 옛 키가 물러남 → 이미 쓴 백업으로는 다시 못 옮김. 출력에 암호문구와 복구 비밀이 없음 | `tests/test_runner_processes.py` | 통과 |
+

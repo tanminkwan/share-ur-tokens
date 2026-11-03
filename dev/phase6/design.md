@@ -245,6 +245,53 @@ LLM이 없는 peer(`NoLLM`)는 언제나 수동이다. 사람이 화면에서 �
 
 `tests/ui/`: 메모리 안의 broker·recorder·peer 세계에 견본 peer의 소유자 API를 실제 포트로 띄우고, Playwright(비동기, headless Chromium)로 화면을 연다. LLM은 정해진 답을 내는 테스트용 대역이다. 브라우저가 설치되어 있지 않으면 건너뛴다.
 
+## 9-1. 6-K 개인 키: 스스로 만들고, 미리 약속하고, 맡긴다
+
+**원칙**: 키는 언제나 peer가 자기 기기의 보안 영역에서 스스로 만든다. 누구도(키 peer도) 남의 비밀키를 만들거나 보지 않는다. 플랫폼이 정하는 것은 키를 두는 곳의 인터페이스, 백업의 모양, 원장의 키 이어받기 규칙이다. 백업을 맡고 복구에 서명하는 일은 특수 목적 peer인 키 peer가 맡는다(선택).
+
+```mermaid
+flowchart LR
+    subgraph D["소유자의 기기"]
+        P["peer 프로그램"] --> S["KeyStore<br/>OS 키 보관소 또는 0600 파일"]
+        P --> B["암호화한 백업<br/>(지금 키 + 다음 키)"]
+    end
+    P -- "key_commit: 다음 키의 해시, 복구 담당" --> L["원장"]
+    B -- "암호문만" --> K["키 peer"]
+    K -. "복구 서명(미리 정해진 경우만)" .-> L
+```
+
+**왜 다음 키를 미리 약속하나**: 옛 키와 새 키의 서명만으로 이어받게 하면, 지금 키를 훔친 사람이 먼저 자기 키로 옮겨 신원을 가져간다. 다음 키를 해시로 미리 원장에 적어 두고 그 키는 기기에 두지 않으면(암호화한 백업에만 둔다), 지금 키만 가진 도둑은 이어받기를 할 수 없다. 소유자가 백업으로 먼저 옮기면 원장은 그 뒤 도둑이 가진 옛 키의 서명을 받지 않는다.
+
+```mermaid
+sequenceDiagram
+    participant O as 소유자의 peer
+    participant K as 키 peer
+    participant R as 기록자(원장)
+    O->>O: 다음 키를 스스로 만든다
+    O->>R: key_commit {pub, next: 다음 키의 해시, recovery: [키 peer]}
+    O->>K: key.backup.put {백업(암호문), 복구 비밀} (그 키로 서명)
+    Note over O: 키를 도난당함
+    O->>K: key.backup.get {pub, 복구 비밀}
+    K-->>O: 백업(암호문)
+    O->>O: 암호문구로 열기: 다음 키, 그다음 키를 새로 만든다
+    O->>R: peer_rotate {old, new, next, by: next} (새 키가 서명)
+    Note over R: 옛 키의 서명은 이제 받지 않는다
+```
+
+**복구(기기와 암호문구를 모두 잃음)**: 새 기기에서 새 키와 그다음 키를 만들고, 키 peer에 `key.recover {payload, 복구 비밀}`을 보낸다. 키 peer는 자기 방식으로 본인을 확인하고(견본: 복구 비밀) payload에 서명한다. 소유자가 새 키로도 서명해 `peer_rotate {by: recovery, recoverer}`를 기록한다. 원장은 그 키 peer가 그 신원의 `recovery` 목록에 있는지 본다. 미리 정해 두지 않은 신원은 복구할 수 없다(키 분실은 개인 책임).
+
+| 조각 | 한 가지 일 | 원본 |
+|---|---|---|
+| `KeyStore`(`FileKeyStore`, `OsKeyStore`, `AutoKeyStore`) | 키를 두고 꺼낸다 | `arena/keys/store.py` |
+| `seal_backup` / `open_backup` | 백업을 잠그고 연다 | `arena/keys/backup.py` |
+| `commit_entry`, `rotate_entry`, `recovery_entry` | 원장에 쓸 키 기록을 만든다 | `arena/keys/lineage.py` |
+| 원장 규칙 `key_commit`, `peer_rotate`, 물러난 키 거절 | 이어받기가 맞는지 본다 | `arena/ledger/peer_keys.py`, `arena/ledger/rules.py` |
+| `KeyFlows` | 소유자의 작업(등록, 이어받기, 복구, 되살리기). 기록자와 키 peer를 주입받는다 | `arena/keys/flows.py` |
+| `KeyRole` | 키 peer의 일(백업 보관, 복구 서명) | `arena/peer/key_role.py` |
+| 명령 | `python -m arena.keys` | `arena/keys/cli.py` |
+
+견본 개인 peer의 홈은 `PeerHome.key_store()`로 키를 둔다. god, broker, 기록자 같은 플랫폼 시설의 키는 지금처럼 파일이다(서버에서 돈다).
+
 ## 10. 설정 (모두 `.env`)
 
 | 키 | 뜻 |
@@ -253,3 +300,7 @@ LLM이 없는 peer(`NoLLM`)는 언제나 수동이다. 사람이 화면에서 �
 | `ARENA_APP_STORE_DISCOVER` | 앱 배포 peer를 broker에서 찾을지 |
 | `ARENA_INTAKE_MAX_CONTENT_BYTES` | 제출 내용 크기 상한 |
 | `ARENA_EVALUATION_MAX_ITEMS` | 한 번에 넘기는 평가 항목 수 상한 |
+| `ARENA_KEY_STORE`, `ARENA_KEY_STORE_SERVICE` | 키를 두는 곳(auto, os, file), OS 키 보관소의 서비스 이름 |
+| `ARENA_KEY_BACKUP_SCRYPT_N`·`_R`·`_P`, `ARENA_KEY_BACKUP_SCRYPT_N_MAX`, `ARENA_KEY_BACKUP_MIN_PASSPHRASE` | 백업 암호화의 세기, 열 때 받는 상한, 암호문구 최소 길이 |
+| `ARENA_KEY_RECOVERY_MAX` | 복구 담당으로 정할 수 있는 키 peer 수 |
+| `ARENA_KEY_PEER_*` | 키 peer 실행, 틀린 복구 비밀 허용 횟수, 복구 비밀 최소 길이 |

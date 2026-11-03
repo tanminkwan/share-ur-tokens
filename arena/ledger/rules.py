@@ -4,6 +4,7 @@ from __future__ import annotations
 from ..crypto import verify
 from .elements import element_rules
 from .purposes import check_purpose
+from .peer_keys import retired_signer
 from .types import ENTRY_TYPES, closed_events, events, groups, published, r_branch_linked
 
 
@@ -72,6 +73,11 @@ def r_signatures(chain, e, now, s):
             return f"missing/invalid signature of {str(who)[:8]}"
 
 
+def r_retired_key(chain, e, now, s):
+    """a key rotated away signs nothing more (P6-K3)"""
+    return retired_signer(chain, signers(e))
+
+
 def r_time(chain, e, now, s):
     if chain and e["ts"] < chain[-1]["ts"]:
         return "timestamp goes backwards"
@@ -98,7 +104,7 @@ def r_nonce(chain, e, now, s):
         return "replay (nonce already used)"
 
 
-GENERIC = (r_type, r_prev, r_group, r_branch_linked, r_ledger_id, r_shape, r_purpose, r_signatures, r_time, r_event_ref, r_known_content, r_nonce)
+GENERIC = (r_type, r_prev, r_group, r_branch_linked, r_ledger_id, r_shape, r_purpose, r_signatures, r_retired_key, r_time, r_event_ref, r_known_content, r_nonce)
 
 
 def check(chain: list[dict], e: dict, now: float, settings) -> str | None:
