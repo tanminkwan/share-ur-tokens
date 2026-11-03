@@ -41,8 +41,8 @@ async def test_r3_1_concurrent_records_are_serialized(svc, cast):
 
 
 def meta(v: dict) -> dict:
-    """the public view without where and when (seq, ts, ledger_id are checked in their own test)"""
-    return {k: x for k, x in v.items() if k not in ("seq", "ts", "ledger_id")}
+    """the public view without where, when and by whom (seq, ts, ledger_id, sealed_by are checked on their own)"""
+    return {k: x for k, x in v.items() if k not in ("seq", "ts", "ledger_id", "sealed_by")}
 
 
 async def test_pa7_verify_reveals_only_public_metadata(svc, cast):
@@ -57,6 +57,7 @@ async def test_pa7_verify_reveals_only_public_metadata(svc, cast):
     assert meta(svc.verify(shown["hash"]))["contractor"] == cast.keeper.pub
     assert meta(svc.verify(pb["hash"])) == {"ok": True, "exists": True, "type": "publish", "seal_ok": True, "event_id": cast.ev, "group_id": "g-test",
                                       "author": cast.author.pub, "content_hash": pb_hash(cast)}
+    assert svc.verify(pb["hash"])["sealed_by"] == svc.identity.pub  # who sealed it: a reader ties it to the proven recorder key
 
 
 def pb_hash(cast):

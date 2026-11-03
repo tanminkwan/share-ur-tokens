@@ -51,3 +51,11 @@ def test_key_backup_and_commitment_vectors(settings):
     keys = open_backup(b, x["passphrase"], settings)
     assert keys["current"].pub == me.pub and keys["next"].pub == nxt.pub
     assert key_commitment(V["key_commitment"]["pub"]) == V["key_commitment"]["hash"] and V["key_commitment"]["pub"] == nxt.pub
+
+
+def test_content_form_vector():
+    """CP-9: a text made into the bytes that are hashed, byte for byte (BOM, CRLF, CR, decomposed Hangul)"""
+    from arena.ledger.refs import content_hash_of, form_bytes
+    x = V["content_form"]
+    raw = bytes.fromhex(x["input_hex"])
+    assert form_bytes(x["form"], raw).hex() == x["bytes_hex"] and content_hash_of(raw, x["form"]) == x["hash"]

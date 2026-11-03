@@ -10,6 +10,7 @@ from typing import Callable
 from ..crypto import canon, commit_hash, h, verify
 from .elements import check_elements
 from .envelope import hash_body
+from .refs import form_error, ref_error
 from .run import valid_run
 
 POLICY_LISTS = ("roles", "conflict_roles", "hidden_roles", "reveal_values", "assigned_kinds", "attest_kinds")
@@ -171,6 +172,11 @@ def _publish_shape(chain, e, now, s):
     label = e["payload"].get("label")
     if label is not None and (not isinstance(label, str) or not label or len(label) > s.ledger_label_max):
         return f"label must be a non-empty string of at most {s.ledger_label_max} characters"
+    return form_error(e["payload"]) or ref_error(e["payload"], s)  # how the work became bytes (CP-9), where it is (CP-4)
+
+
+def _share_shape(chain, e, now, s):
+    return ref_error(e["payload"], s)  # where the handed-over content can be fetched (CP-4); it stays in the envelope
 
 
 def _publish_rule(chain, e, now, s):
@@ -454,11 +460,13 @@ for _t in (
               public=_contract_public, counters={"roles": defaultdict(int)}, contribute=_map_count("roles", "contractor", "role"),
               private_keys=lambda p, pol: {"contractor"} if p.get("role") in (pol or {}).get("hidden_roles", []) else set()),
     EntryType("publish", lambda p: [p.get("author")], event_ref="optional", shape=_publish_shape, rules=(_publish_rule,),
-              public=lambda p, c: {"author": p["author"], "content_hash": p["content_hash"], **({"label": p["label"]} if "label" in p else {})},
+              public=lambda p, c: {"author": p["author"], "content_hash": p["content_hash"], **({"label": p["label"]} if "label" in p else {}),
+                                   **({"form": p["form"]} if "form" in p else {})},
               counters={"published": 0},
               contribute=_count("published", "author"), index=_publish_index),
     EntryType("share", lambda p: [p.get("provider"), p.get("consumer")], event_ref="optional", needs_content=True, unique_nonce=True,
-              private_keys=lambda p, pol: {"provider", "consumer", "content_hash", "terms"},  # who handed what to whom stays private
+              shape=_share_shape,
+              private_keys=lambda p, pol: {"provider", "consumer", "content_hash", "terms", "ref"},  # who handed what to whom, and where it is, stay private
               counters={"received_by": set()}, contribute=_share_contribute),
     EntryType("feedback", lambda p: [p.get("evaluator")], event_ref="optional", needs_content=True, rules=(_feedback_rule,),
               public=lambda p, c: {k: p[k] for k in ("evaluator", "content_hash", "verdict", "score") if k in p},

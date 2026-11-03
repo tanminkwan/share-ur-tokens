@@ -7,6 +7,7 @@ from .connections import CONNECTION_KINDS
 from .crypto import canon, h
 from .ledger.codebook import implemented_codes
 from .ledger.purposes import PURPOSES
+from .ledger.refs import CONTENT_FORMS, PROOF_METHODS, STORAGE_KINDS
 from .ledger.schedule import TIME_CODES
 
 NAME, VERSION = "agent-arena", "1.0"
@@ -19,7 +20,10 @@ def builtin_document(name: str = NAME, version: str = VERSION) -> dict:
             "meanings": {"purposes": {c: {"types": list(p.types), "description": p.description} for c, p in sorted(PURPOSES.items())},
                          "time_codes": {c: {"description": t.description} for c, t in sorted(TIME_CODES.items())},
                          "connections": {k: {"label": c.label, "fields": list(c.fields), "automatic": c.automatic}
-                                         for k, c in sorted(CONNECTION_KINDS.items())}}}
+                                         for k, c in sorted(CONNECTION_KINDS.items())},
+                         **{kind: {c: {"description": x.description} for c, x in sorted(table.items())}
+                            for kind, table in (("storage_kinds", STORAGE_KINDS), ("proof_methods", PROOF_METHODS),
+                                                ("content_forms", CONTENT_FORMS))}}}
 
 
 def document_hash(doc: dict) -> str:

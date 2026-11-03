@@ -113,11 +113,22 @@ class RecorderService:
             return {"ok": True, "exists": False, "type": None, "seal_ok": False, "event_id": None, "group_id": None}
         p = e["payload"]
         out = {"ok": True, "exists": True, "type": e["type"], "seal_ok": verify(e["seal"]["pub"], e["hash"], e["seal"]["sig"]),
+               "sealed_by": e["seal"]["pub"],  # a reader ties the seal to the recorder key proven at this seq (CP-9)
                "event_id": p.get("event_id"), "group_id": p.get("group_id"),
                "seq": e["seq"], "ts": e["ts"], "ledger_id": self.ledger.chain[0]["hash"],
                **({"purpose": p["purpose"]} if "purpose" in p else {})}  # a coded column: public like the type  # where and when: a book citing this entry proves it existed by then
         out.update(public_view(e, self.ledger.chain))  # each entry type decides what may be shown
         return out
+
+    def content(self, content_hash: str) -> dict:
+        """public (CP-10): the registration of a body by its hash, for someone holding only a copy without the ledger
+        reference. A content hash is registered once (the first publisher wins), so there is at most one"""
+        if not self.settings.recorder_public_content:
+            return {"ok": False, "error": "content lookups are not public on this recorder"}
+        e = next((x for x in self.ledger.chain if x["type"] == "publish" and x["payload"].get("content_hash") == content_hash), None)
+        if e is None:
+            return {"ok": True, "content_hash": content_hash, "found": False}
+        return {"ok": True, "content_hash": content_hash, "found": True, "entry": e["hash"], **self.verify(e["hash"])}
 
     def event_entries(self, event_id: str) -> dict:
         """public: one event's entries in order, each in its public view only (the event's progress, open to anyone)"""

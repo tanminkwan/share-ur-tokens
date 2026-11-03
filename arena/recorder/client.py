@@ -22,6 +22,7 @@ class RecorderAPI(Protocol):
     async def trust(self) -> dict: ...
     async def link(self, child_ledger_id: str) -> dict: ...
     async def key(self, pub: str) -> dict: ...
+    async def content(self, content_hash: str) -> dict: ...
     async def codes(self) -> dict: ...
     async def codebooks(self) -> dict: ...
     async def read_chain(self, identity: Identity) -> dict: ...
@@ -72,6 +73,9 @@ class RecorderClient:
     async def key(self, pub):
         return await self._call("GET", f"/key/{pub}")
 
+    async def content(self, content_hash):
+        return await self._call("GET", f"/content/{content_hash}")
+
     async def codes(self):
         return await self._call("GET", "/codes")
 
@@ -120,6 +124,9 @@ class InMemoryRecorderClient:
 
     async def key(self, pub):
         return self.svc.key(pub)
+
+    async def content(self, content_hash):
+        return self.svc.content(content_hash)
 
     async def codes(self):
         return self.svc.codes()

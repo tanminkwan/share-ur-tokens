@@ -69,6 +69,8 @@ flowchart TB
 | `ledger_id` | 어느 원장의 기록인가(제네시스 해시). 서명을 이 원장에 묶는다 | 구현·테스트됨(0번 다음 모든 항목) |
 | `event_id` | 어느 이벤트의 기록인가 | 구현·테스트됨(종류에 따라 필수·선택) |
 | `purpose` | 무슨 목적의 기록인가(4절) | 구현·테스트됨(선택) |
+| `form` | `publish`의 본문을 어떤 방식으로 bytes로 만들어 hash했나(content form: `utf8-nfc-lf`, `bytes`) | 구현·테스트됨(선택, CP-9) |
+| `ref` | 원장 밖 content가 어디 있고 누가 밝혔나(storage kind, proof method). `share`면 언제나 봉투에 | 구현·테스트됨(선택, CP-4, `dev/protocol.md` 4.7절) |
 | `nonce` | 같은 기록을 다시 쓰지 못하게 하는 값 | 구현·테스트됨(종류에 따라) |
 
 ## 6. 자유 영역
