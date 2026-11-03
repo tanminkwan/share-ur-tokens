@@ -27,6 +27,22 @@ class Tool:
     participant_only: bool = False
     after_close: bool = False               # still usable once the event is closed
     element: str | None = None              # a built-in element's tool: offered only where the event switched it on
+    label: str = ""                         # the plain name a person sees on a screen (the LLM sees `name`)
+
+
+# plain names for people (screens): tools and their arguments. The LLM keeps the code names.
+LABELS = {"ask_owner": "소유자에게 묻기", "join_event": "참가 신청", "contract": "역할 계약", "send": "메시지 보내기",
+          "call_service": "서비스 부르기", "contact": "사람 연락처 보기", "solicit": "직접 요청 보내기", "publish_text": "글 먼저 등록",
+          "commit": "값 먼저 등록(숨김)", "reveal": "등록한 값 공개", "my_reveal": "내 공개값 보기", "check_reveal": "받은 공개값 확인",
+          "verify": "원장 항목 확인", "event_progress": "진행 현황 보기", "propose_attest": "공동 확인 제안", "cosign": "서명 요청에 서명",
+          "decline": "서명 요청 거절", "assign": "당사자 배정", "close_event": "이벤트 닫기", "note": "메모 남기기", "remind": "예약(그 시각에 알림)",
+          "wait": "기다리기"}
+ARG_LABELS = {"question": "물을 말", "role": "역할", "peer": "상대(필명)", "to": "받는 이(필명)", "text": "글", "data_json": "덧붙일 자료(JSON)",
+              "attach_reveals": "붙일 공개 이름표(JSON 목록)", "op": "기능 이름", "input_json": "입력(JSON)", "subject": "주제",
+              "targets": "받는 이들(필명, JSON 목록)", "label": "이름표", "value": "값", "publish_hash": "등록 기록 해시", "author": "작성자(필명)",
+              "salt": "비밀값", "hash": "기록 해시 또는 내용 해시", "kind": "종류", "value_json": "값(JSON)", "parties": "당사자들(필명, JSON 목록)",
+              "request_id": "요청 번호", "reason": "이유", "subjects_json": "배정(JSON: {\"주제\": [필명, …]})", "result_hash": "결과 기록 해시",
+              "when": "언제('+초' 또는 2026-11-03T18:00:00+09:00)", "note": "메모", "evaluator": "평가자(필명)"}
 
 
 # ---------------- implementations ----------------
@@ -328,6 +344,11 @@ async def wait(A, ctx, st):
 
 
 def default_tools() -> list[Tool]:
+    from dataclasses import replace
+    return [replace(t, label=t.label or LABELS.get(t.name, t.name)) for t in _default_tools()]
+
+
+def _default_tools() -> list[Tool]:
     return [
         Tool("ask_owner", "{question}: 소유자(사람)에게 예/아니오로 묻는다. 결과 yes, why", _obj(question=S), ask_owner),
         Tool("join_event", "{}: 이 이벤트에 참가 신청을 한다(개최자에게 메시지로 알림)", None, join_event, participant_only=True),

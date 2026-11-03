@@ -93,6 +93,6 @@ async def submissions(A, ctx, st):
 
 register_peer_element(PeerElement("intake", app=IntakeDesk, tools=(
     Tool("submit", "{text}: 이 이벤트에 글을 제출한다(코드가 먼저 등록하고, 받는 사람에게 보내고, 받은 쪽 서명 영수증을 보관한다)",
-         _obj(text=S), submit, participant_only=True, element="intake"),
-    Tool("submissions", "{}: 받은 제출 목록(작성자 필명, 내용)을 본다", None, submissions, host_only=True, element="intake"),
+         _obj(text=S), submit, participant_only=True, element="intake", label="제출하기"),
+    Tool("submissions", "{}: 받은 제출 목록(작성자 필명, 내용)을 본다", None, submissions, host_only=True, element="intake", label="받은 제출 보기"),
 )))

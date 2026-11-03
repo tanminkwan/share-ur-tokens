@@ -28,9 +28,9 @@ export class ToolForm {
       this.onRun(tool.name, args);
     };
     return h('details', { testid: `tool-${tool.name}` },
-      h('summary', {}, tool.name),
-      h('div', { class: 'body' }, tool.description),
-      ...fields.map(([n, , el]) => h('label', {}, n, el)),
+      h('summary', {}, tool.label || tool.name, ' ', h('span', { class: 'code' }, tool.name)),
+      h('div', { class: 'body' }, tool.help || tool.description),
+      ...fields.map(([n, s, el]) => h('label', {}, s.title || n, el)),
       h('div', { class: 'row' }, h('button', { class: 'primary', testid: `run-${tool.name}`, onclick: run }, '실행')));
   }
 }

@@ -28,3 +28,4 @@ details { margin-bottom: 6px; }
 #toast .msg { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--ok); padding: 6px 10px; margin-bottom: 6px; border-radius: 4px; white-space: pre-wrap; }
 #toast .msg.bad { border-left-color: var(--bad); }
 .empty { color: var(--muted); }
+.code { color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; }

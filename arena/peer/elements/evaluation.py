@@ -105,6 +105,6 @@ async def verdicts(A, ctx, st):
 
 register_peer_element(PeerElement("evaluation", app=EvaluationDesk, tools=(
     Tool("request_evaluation", "{evaluator}: 받은 제출 가운데 아직 넘기지 않은 것을 계약한 평가자(필명)에게 넘기고, 돌아온 서명된 판정을 원장에 기록한다",
-         _obj(evaluator=S), request_evaluation, host_only=True, element="evaluation"),
-    Tool("verdicts", "{}: 항목별 판정(평가자, 점수, 의견)을 본다", None, verdicts, host_only=True, element="evaluation"),
+         _obj(evaluator=S), request_evaluation, host_only=True, element="evaluation", label="평가 맡기기"),
+    Tool("verdicts", "{}: 항목별 판정(평가자, 점수, 의견)을 본다", None, verdicts, host_only=True, element="evaluation", label="판정 보기"),
 )))

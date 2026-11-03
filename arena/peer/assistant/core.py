@@ -506,7 +506,16 @@ class EventAssistant:
                 st.roster.append(p["pub"])
                 st.peers.setdefault(p["pub"], p.get("url"))
 
-    NOTIFY_IN_AUTO = ("notice", "timer")  # the owner hears of these even while the LLM drives
+    NOTIFY_IN_AUTO = ("notice", "timer")
+    TITLE_MAX = 120
+
+    def _title_body(self, ctx, st, text: str) -> tuple[str, str]:
+        """a desk item's title and body: the first line is the title; the body is the rest, or the whole text only when
+        the first line had to be cut (never the title said twice)"""
+        first, _, rest = self.shorten(ctx, st, text).partition("\n")
+        if len(first) > self.TITLE_MAX:
+            return first[:self.TITLE_MAX] + "…", self.shorten(ctx, st, text)
+        return first, rest.strip()  # the owner hears of these even while the LLM drives
 
     def _notifier(self, ctx):
         return ctx.owner if isinstance(ctx.owner, Notifier) else None
@@ -522,10 +531,10 @@ class EventAssistant:
             st.transcript.append(self.shorten(ctx, st, f"[입력] {text}"))
             self.save(ctx, st)
             if note and kind != "owner":
-                note.notify(kind, self.shorten(ctx, st, text.split("\n", 1)[0])[:120], self.shorten(ctx, st, text), event_id)
+                note.notify(kind, *self._title_body(ctx, st, text), event_id)
             return
         if note and kind in self.NOTIFY_IN_AUTO:
-            note.notify(kind, self.shorten(ctx, st, text.split("\n", 1)[0])[:120], self.shorten(ctx, st, text), event_id)
+            note.notify(kind, *self._title_body(ctx, st, text), event_id)
         await self.learn_keys(ctx, st, text)
         st.inbox.append(text)
         st.last_input_at = ctx.clock()
@@ -668,10 +677,23 @@ class EventAssistant:
         return await note.suggest(f"비서가 '{name}'을(를) 하려 합니다", self.shorten(ctx, st, f"{thought}\n인자: {json.dumps(args, ensure_ascii=False)}"),
                                   name, args, st.event_id)
 
+    HIDDEN_FROM_OWNER = ("wait", "ask_owner")  # the owner does not wait for themselves, nor ask themselves
+
     def tools_view(self, st) -> list[dict]:
-        """the tools the owner may run on this event, with their argument schemas (the screen draws forms from them)"""
-        return [{"name": n, "description": self.tools[n].description, "args": self.tools[n].args or {"type": "object", "properties": {}}}
-                for n in self._tools_for(st) if n != "wait"]
+        """the tools the owner may run on this event, in plain names, with argument schemas carrying plain titles (the screen
+        draws forms from them; the code names stay for the record)"""
+        from .tools import ARG_LABELS, LABELS
+        out = []
+        for n in self._tools_for(st):
+            if n in self.HIDDEN_FROM_OWNER:
+                continue
+            t = self.tools[n]
+            args = json.loads(json.dumps(t.args or {"type": "object", "properties": {}}))
+            for k, v in args.get("properties", {}).items():
+                v.setdefault("title", ARG_LABELS.get(k, k))
+            out.append({"name": n, "label": t.label or LABELS.get(n, n), "help": re.sub(r"^\{[^}]*\}:\s*", "", t.description),
+                        "description": t.description, "args": args})
+        return out
 
     async def owner_run(self, ctx, event_id: str, name: str, args: dict) -> dict:
         """the owner runs a tool by hand (any drive): the same code path as the LLM's, so the same checks hold"""
