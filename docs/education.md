@@ -155,10 +155,10 @@ classDiagram
 flowchart TB
     A["1. type이 등록됐나"] --> B["2. prev가 맞나"] --> C["3. group을 밝혔나"]
     C --> D["4. branch chain이면 parent_link가 먼저"] --> E["5. ledger_id가 이 원장 것인가"]
-    E --> F["6. type별 shape"] --> G["7. purpose code가 등록됐나"] --> H["8. signature가 맞나"]
-    H --> I["9. retired key가 아닌가"] --> J["10. 시각이 거꾸로 가지 않나"] --> K["11. event가 있고 열려 있나"]
-    K --> L["12. 가리키는 content가 등록됐나"] --> M["13. nonce를 되쓰지 않나"] --> N["14. type별 rule"]
-    N --> O["15. event가 켠 element rule"] --> P["seal하고 append"]
+    E --> S["6. 크기 상한 (entry 4096 B, free-form 256 B)"] --> F["7. type별 shape"] --> G["8. purpose code가 등록됐나"]
+    G --> H["9. signature가 맞나"] --> I["10. retired key가 아닌가"] --> J["11. 시각이 거꾸로 가지 않나"]
+    J --> K["12. event가 있고 열려 있나"] --> L["13. 가리키는 content가 등록됐나"] --> M["14. nonce를 되쓰지 않나"]
+    M --> N["15. type별 rule"] --> O["16. event가 켠 element rule"] --> P["seal하고 append"]
 ```
 
 어느 단계든 걸리면 그 자리에서 거절하고 이유를 돌려준다(`{ok: false, error}`).
@@ -178,6 +178,7 @@ flowchart TB
 - payload 밖: recorder가 정한다(`type`, `prev`, `ts`, seal).
 - payload 안 **code fields**: 원장이 확인한다(`group_id`, `ledger_id`, `event_id`, `purpose`, `nonce`, type별 field, `form`, `ref`).
 - payload 안 **free-form fields**: 원장이 읽지 않는다. 서명 범위 안이라 바꿀 수는 없다.
+- **크기 상한**(원장이 커지지 않게, 작게 고정): free-form fields 합계 256 bytes, entry 하나 4,096 bytes. 넘으면 거절하고 "content는 원장 밖에(hash, `ref`, link peer)"라고 알린다.
 
 **purpose codes**: `authorship`(작품과 그 시점의 증명), `commit`(나중에 공개할 값의 hash 등록), `delivery`(자료 전달), `submission`(event 제출), `evaluation`(평가 건넴).
 
@@ -578,6 +579,7 @@ sequenceDiagram
 | foundation peer | 기본 codebook edition을 원장에 기록하고 문서를 내준다(`codebook.get`) | `python -m arena.peers.foundation` |
 | key peer | 암호화된 key backup 보관, 미리 정해 둔 recovery에 서명. private key는 보지 않는다(`key.info`, `key.backup.put/get`, `key.recover`) | `python -m arena.peers.key_peer` |
 | app store peer | publisher signature가 맞는 app package를 보관하고 app id로 내준다(`app_get`, `app_list`, `app_publish`) | `python -m arena.peers.app_store` |
+| link peer | 원장이 가리키는 영구 link를 맡는다. 실제 위치는 게시자가 자기 key로 서명해 바꾸고, 원장은 그대로다(`link.info`, `link.set`, `link.get`, `link.history`) | `python -m arena.peers.link_peer` |
 | search peer | embedding(bge-m3) 벡터로 peer 찾기 | `python -m arena.peers.search` |
 | service peer template | spec 파일 하나로 API peer를 만든다(Python 함수나 기존 HTTP API, signed receipt, 결과를 원장에 남기는 op) | `python -m arena.peers.service --spec spec.json` |
 
@@ -666,6 +668,7 @@ sequenceDiagram
 | **content form** (CP-9) | 본문을 hash하기 전에 bytes로 만드는 방식. `utf8-nfc-lf`(UTF-8, BOM 제거, 줄바꿈 LF, Unicode NFC: 한글 조합형과 완성형을 하나로), `bytes`(파일 그대로). `publish.form`에 적는다 |
 | **ledger reference** (CP-9) | `{ledger_id, entry, seq, ts, content_hash, form, author, recorder_url, did?}`. 바뀌지 않는 것은 ledger_id · entry · content_hash · form · author, 바뀔 수 있는 것은 recorder_url. QR용 한 줄 주소 `arena-ref:<ledger_id>/<entry>?content=…&form=…&author=…&recorder=…` |
 | **`ref` block** (CP-4) | 원장 밖 content가 어디 있는지: `storage`(`https` · `peer` · `ipfs` · `git` · `place`), `size`, `media_type`, `proof`(`sha256`: hash 대조만, `ed25519`: 그 key가 {content_hash, storage}에 서명). 원장은 shape와 signature만 보고 content를 가져오지 않는다. 위치를 숨기려면 private envelope에 넣는다(공개 기본값은 CP-5, 미정). `share`의 `ref`는 언제나 envelope |
+| **link peer** (CP-20) | 위치가 바뀔 수 있으면 `ref`에 URL 대신 영구 link(`kind: link`, `<link peer>/<link id>`)만 적는다. 실제 위치는 link peer가 들고, 작가가 서명해 바꾼다(`relink`). 원장은 그대로다. link peer는 위치를 위조하지 못하고(작가 signature), 누구나 띄울 수 있다 |
 | **content lookup** (CP-10) | `GET /content/{hash}`: reference 없이 사본만 가진 사람도 등록 entry를 찾는다. content hash는 한 번만 등록되므로(먼저 등록한 사람이 이긴다) 결과는 하나다 |
 
 **사용**(`python -m arena.content`):
@@ -677,6 +680,9 @@ python -m arena.content register --home <author home> --recorder <recorder API> 
 python -m arena.content check    --file copy.txt --ref ref.json                 # 독자: 본문 · entry · 원장 확인 (root values는 .env)
 python -m arena.content check    --file copy.txt --uri "arena-ref:..."          # QR 주소로
 python -m arena.content find     --file copy.txt --recorder <recorder API>      # reference 없이 찾기
+python -m arena.content register ... --link-peer <link peer API>                # 원장에는 영구 link만
+python -m arena.content relink   --home <author home> --ref ref.json --storage https=https://new.example/novel.txt   # 위치 옮기기
+python -m arena.content resolve  --ref ref.json                                 # 지금 위치 (작가 signature 확인)
 ```
 
 ## 3.9 reference personal peer와 직접 써 보기
@@ -841,7 +847,7 @@ sequenceDiagram
 flowchart LR
     subgraph NOW["되어 있음"]
         N1["1~5단계: 플랫폼 완성"]
-        N2["6단계: elements, service peer, connection kinds, codebook, schedule, peer spec, desk · chat UI, private envelope, branch link, peer keys, works registry, slow answers as A2A tasks"]
+        N2["6단계: elements, service peer, connection kinds, codebook, schedule, peer spec, desk · chat UI, private envelope, branch link, peer keys, works registry, slow answers as A2A tasks, size caps, link peer"]
     end
     subgraph NEXT["다음 후보"]
         X2["6-N broker group without a ledger"]
@@ -855,7 +861,7 @@ flowchart LR
     NOW --> NEXT --> LATER
 ```
 
-**사용자 결정이 필요한 것**: 기준 네트워크 god private key 보관과 운영 위치, trunk chain이 믿는 recorder 목록을 내는 절차(CP-18), root values가 없는 peer의 기본 동작(CP-3), `ref` 위치를 공개 정보에 보일지(CP-5), ledger_id만으로 recorder 찾기(CP-11), identity certificate 모양(6-K4), free-form fields 크기 상한.
+**사용자 결정이 필요한 것**: 기준 네트워크 god private key 보관과 운영 위치, trunk chain이 믿는 recorder 목록을 내는 절차(CP-18), root values가 없는 peer의 기본 동작(CP-3), `ref` 위치를 공개 정보에 보일지(CP-5), ledger_id만으로 recorder 찾기(CP-11), identity certificate 모양(6-K4).
 
 ---
 
@@ -887,7 +893,8 @@ flowchart LR
 | pen name | public key에서 계산한 표시용 이름 |
 | drive | event를 누가 움직이나: auto, suggest, manual |
 | owner desk | 사람에게 묻고 알리는 항목을 모아 두는 곳. desk UI · chat UI가 이것을 보여 준다 |
-| special-purpose peer | 생태계를 튼튼하게 하려고 미리 정의해 둔 선택 peer(foundation, key, app store, search) |
+| special-purpose peer | 생태계를 튼튼하게 하려고 미리 정의해 둔 선택 peer(foundation, key, link, app store, search) |
+| link peer | 원장이 가리키는 영구 link를 맡고, 실제 위치는 게시자 서명으로만 바꾸는 API peer |
 | content form | 본문을 hash하기 전에 bytes로 만드는 방식 |
 | ledger reference | 책에 싣는 원장 정보(ledger_id, entry, content hash, form, author) |
 | reference implementation | protocol을 따르는 견본 구현. 이 저장소의 `arena/` |

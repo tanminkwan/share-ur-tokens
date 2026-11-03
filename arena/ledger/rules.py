@@ -1,11 +1,11 @@
 """Generic rules every entry passes, in order, then the entry type's own rules."""
 from __future__ import annotations
 
-from ..crypto import verify
+from ..crypto import canon, verify
 from .elements import element_rules
 from .purposes import check_purpose
 from .peer_keys import retired_signer
-from .types import ENTRY_TYPES, closed_events, events, groups, published, r_branch_linked
+from .types import COMMON_FIELDS, ENTRY_TYPES, closed_events, events, groups, published, r_branch_linked
 
 
 def signers(e: dict) -> list:
@@ -56,6 +56,23 @@ def r_ledger_id(chain, e, now, s):
         return "ledger_id missing or not this ledger's (the genesis hash)"
 
 
+def r_size(chain, e, now, s):
+    """the chain must not grow fat: one entry (body and envelope) is small, and its free-form fields (those the type does
+    not know) smaller still. Content stays off the ledger: its hash, a ref, a link peer (user 2026-11-03)"""
+    p = e["payload"]
+    n = len(canon(p))
+    if n > s.ledger_entry_max_bytes:
+        return f"entry too large ({n} > {s.ledger_entry_max_bytes} bytes): keep content off the ledger (its hash, a ref, a link peer)"
+    known = ENTRY_TYPES[e["type"]].fields
+    known = known() if callable(known) else known
+    if known is not None:
+        free = {k: v for k, v in p.items() if k not in known and k not in COMMON_FIELDS}
+        m = len(canon(free)) if free else 0
+        if m > s.ledger_free_max_bytes:
+            return (f"free-form fields too large ({', '.join(sorted(free))}: {m} > {s.ledger_free_max_bytes} bytes): "
+                    "keep content off the ledger (its hash, a ref, a link peer)")
+
+
 def r_shape(chain, e, now, s):
     t = ENTRY_TYPES[e["type"]]
     return t.shape(chain, e, now, s) if t.shape else None
@@ -104,7 +121,7 @@ def r_nonce(chain, e, now, s):
         return "replay (nonce already used)"
 
 
-GENERIC = (r_type, r_prev, r_group, r_branch_linked, r_ledger_id, r_shape, r_purpose, r_signatures, r_retired_key, r_time, r_event_ref, r_known_content, r_nonce)
+GENERIC = (r_type, r_prev, r_group, r_branch_linked, r_ledger_id, r_size, r_shape, r_purpose, r_signatures, r_retired_key, r_time, r_event_ref, r_known_content, r_nonce)
 
 
 def check(chain: list[dict], e: dict, now: float, settings) -> str | None:

@@ -168,7 +168,8 @@ def _contribute(rec, p, index):
         _inc(rec, p["publisher"], "codebooks")
 
 
-register_entry_type(EntryType("codebook", _signers, shape=_shape, rules=(_rule,), public=_public,
+register_entry_type(EntryType("codebook", fields=frozenset({"publisher", "name", "version", "content_hash", "codes", "supersedes", "local", "copier", "copied"}),
+                              signers=_signers, shape=_shape, rules=(_rule,), public=_public,
                               counters={"codebooks": 0, "codebook_followers": 0}, contribute=_contribute))
 
 register_event_column(EventColumn("codebook", lambda chain, p, s: check_event_codebook(chain, p)))
