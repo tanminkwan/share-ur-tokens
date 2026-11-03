@@ -1,4 +1,4 @@
-import { h } from './dom.js';
+import { h } from '/common/dom.js';
 
 // Toast: short messages about what just happened (results, errors).
 export class Toast {

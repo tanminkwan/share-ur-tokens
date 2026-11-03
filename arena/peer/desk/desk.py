@@ -10,7 +10,7 @@ from .model import ITEM_KINDS, DeskItem
 
 
 class OwnerDesk:
-    def __init__(self, clock, save=lambda items: None, keep: int = 500):
+    def __init__(self, clock, keep: int, save=lambda items: None):
         self.clock, self._save, self.keep = clock, save, keep
         self.items: dict[str, DeskItem] = {}
         self._waiting: dict[str, asyncio.Future] = {}

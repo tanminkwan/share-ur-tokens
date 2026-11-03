@@ -1,4 +1,4 @@
-import { h } from './dom.js';
+import { h } from '/common/dom.js';
 
 // Pending things from the desk shown inside the chat. One renderer per kind (a new kind = a new registration).
 const AWAITED = {

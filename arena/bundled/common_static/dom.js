@@ -1,4 +1,4 @@
-// Text always goes in as text, never as HTML: nothing a peer or an LLM writes can run in the person's window.
+// Small DOM builder shared by the windows: text goes in as text (never as HTML), so nothing a peer or an LLM writes can run there.
 export function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -6,8 +6,11 @@ export function h(tag, attrs = {}, ...children) {
     if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
     else if (k === 'testid') el.dataset.testid = v;
     else if (k === 'class') el.className = v;
+    else if (k === 'value') el.value = v;
     else el.setAttribute(k, v === true ? '' : v);
   }
   for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) el.append(c instanceof Node ? c : String(c));
   return el;
 }
+
+export function replace(root, ...children) { root.replaceChildren(...children.flat().filter(Boolean)); }

@@ -11,7 +11,7 @@ POL = {"roles": ["member"]}
 
 
 async def desk_peer(e, name, llm=True):
-    desk = OwnerDesk(lambda: 0.0)
+    desk = OwnerDesk(lambda: 0.0, keep=e.s.desk_keep_items)
     app = OwnerDeskApp(desk)
     p = e.peer(name, apps=[app], owner=DeskOwner(desk, e.s))
     if not llm:
@@ -40,7 +40,7 @@ async def test_p6p2_profiles_say_who_answers_and_the_broker_checks_it(eco):
 
 
 async def test_p6p3_the_desk_waits_for_answers_times_out_as_no_and_closes_awaited_items_on_restart(eco):
-    desk = OwnerDesk(lambda: 0.0)
+    desk = OwnerDesk(lambda: 0.0, keep=eco.s.desk_keep_items)
     owner = DeskOwner(desk, dataclasses.replace(eco.s, desk_question_timeout_sec=5.0))
     task = asyncio.create_task(owner.ask("참가할까요?", "규칙", event_id="ev-1"))
     await asyncio.sleep(0)
@@ -53,7 +53,7 @@ async def test_p6p3_the_desk_waits_for_answers_times_out_as_no_and_closes_awaite
     assert not (await quick.ask("빨리 답해")).yes  # no answer in time = no
     desk.add("question", "다시 시작하면?")
     kept = [it.to_dict() for it in desk.items.values()]
-    again = OwnerDesk(lambda: 0.0)
+    again = OwnerDesk(lambda: 0.0, keep=eco.s.desk_keep_items)
     again.load(kept)
     assert again.list() == [] and len(again.list("all")) == 3  # the open question was closed as no
 

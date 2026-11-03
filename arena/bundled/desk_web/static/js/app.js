@@ -3,7 +3,7 @@ import { Actions } from './actions.js';
 import { ApiClient } from './api.js';
 import { Poller } from './poller.js';
 import { Store } from './store.js';
-import { readToken } from './token.js';
+import { readToken } from '/common/token.js';
 import { defaultCards } from './views/cards.js';
 import { EventView } from './views/event.js';
 import { EventsView } from './views/events.js';

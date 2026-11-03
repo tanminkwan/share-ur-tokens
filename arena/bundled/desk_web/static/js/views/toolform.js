@@ -1,4 +1,4 @@
-import { h } from './dom.js';
+import { h } from '/common/dom.js';
 
 // ToolForm: a form drawn from a tool's argument schema, so new tools need no screen code. Strings are text fields,
 // numbers number fields, booleans checkboxes, anything else JSON.

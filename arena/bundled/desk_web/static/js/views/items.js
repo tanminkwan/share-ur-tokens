@@ -1,4 +1,4 @@
-import { h, replace } from './dom.js';
+import { h, replace } from '/common/dom.js';
 
 // ItemsView: the open things on the desk, newest first, each drawn by its kind's card.
 export class ItemsView {

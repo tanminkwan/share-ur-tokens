@@ -507,14 +507,12 @@ class EventAssistant:
                 st.peers.setdefault(p["pub"], p.get("url"))
 
     NOTIFY_IN_AUTO = ("notice", "timer")
-    TITLE_MAX = 120
-
     def _title_body(self, ctx, st, text: str) -> tuple[str, str]:
         """a desk item's title and body: the first line is the title; the body is the rest, or the whole text only when
         the first line had to be cut (never the title said twice)"""
         first, _, rest = self.shorten(ctx, st, text).partition("\n")
-        if len(first) > self.TITLE_MAX:
-            return first[:self.TITLE_MAX] + "…", self.shorten(ctx, st, text)
+        if len(first) > self.s.desk_title_chars:
+            return first[:self.s.desk_title_chars] + "…", self.shorten(ctx, st, text)
         return first, rest.strip()  # the owner hears of these even while the LLM drives
 
     def _notifier(self, ctx):
@@ -605,8 +603,8 @@ class EventAssistant:
                                messages=[{"role": "user", "content": f"[지금까지]\n{recent}\n\n다음에 쓸 도구는?"}])
             name = d.get("tool", "wait")
             if name == "wait":
-                st.transcript.append(f"[기다림] {d.get('thought', '')[:120]}")
-                ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] 기다림: {d.get('thought', '')[:100]}")
+                st.transcript.append(f"[기다림] {d.get('thought', '')[:self.s.text_thought_chars]}")
+                ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] 기다림: {d.get('thought', '')[:self.s.text_log_chars]}")
                 self.save(ctx, st)
                 return
             tool, args = self.tools.get(name), {}
@@ -620,7 +618,8 @@ class EventAssistant:
                 args = inner
             key = [name, json.dumps(args, ensure_ascii=False, sort_keys=True)]
             if st.drive == "suggest" and name not in self.READ_ONLY and not await self._approved(ctx, st, name, args, d.get("thought", "")):
-                st.transcript.append(self.shorten(ctx, st, f"[소유자 거절] {name} {json.dumps(args, ensure_ascii=False)[:300]}: 소유자가 이 행동을 승인하지 않았다"))
+                st.transcript.append(self.shorten(ctx, st, f"[소유자 거절] {name} {json.dumps(args, ensure_ascii=False)[:self.s.text_args_chars]}: "
+                                                           "소유자가 이 행동을 승인하지 않았다"))
                 ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] {name} 제안 → 소유자 거절")
                 self.save(ctx, st)
                 break
@@ -632,10 +631,15 @@ class EventAssistant:
                 # before the assignment could never be retried, and the round stalled)
                 failed = isinstance(result, dict) and (result.get("ok") is False or bool(result.get("error")))
                 st.last_action = [] if failed else key
-            st.transcript.append(self.shorten(ctx, st, f"[행동] {name} {json.dumps(args, ensure_ascii=False)[:400]}"))
-            st.transcript.append(self.shorten(ctx, st, f"{name} 결과: {json.dumps(result, ensure_ascii=False)[:1500]}"))
-            ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] {name} → {json.dumps(result, ensure_ascii=False)[:120]}")
-            self.save(ctx, st)
+            self._note_action(ctx, st, "행동", name, args, result)
+        self.save(ctx, st)
+
+    def _note_action(self, ctx, st, who: str, name: str, args: dict, result) -> None:
+        """one action and its result in the event's record and the log (the LLM's turn and the owner's hand alike)"""
+        st.transcript.append(self.shorten(ctx, st, f"[{who}] {name} {json.dumps(args, ensure_ascii=False)[:self.s.text_args_chars]}"))
+        st.transcript.append(self.shorten(ctx, st, f"{name} 결과: {json.dumps(result, ensure_ascii=False)[:self.s.text_result_chars]}"))
+        ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] {'' if who == '행동' else who + ': '}{name} → "
+                                           f"{json.dumps(result, ensure_ascii=False)[:self.s.text_log_chars]}")
         self.save(ctx, st)
 
     # ---------------- drives (P6-P4) ----------------
@@ -704,10 +708,7 @@ class EventAssistant:
             return {"ok": False, "error": f"이 이벤트에서 쓸 수 없는 도구: {name}"}
         args = {k: self.expand(st, v) if isinstance(v, str) else v for k, v in (args or {}).items()}
         result = await self._run_tool(ctx, st, name, dict(args))
-        st.transcript.append(self.shorten(ctx, st, f"[소유자 행동] {name} {json.dumps(args, ensure_ascii=False)[:400]}"))
-        st.transcript.append(self.shorten(ctx, st, f"{name} 결과: {json.dumps(result, ensure_ascii=False)[:1500]}"))
-        ctx.log.emit("assistant", ctx.pen, f"[{event_id}] 소유자가 {name} → {json.dumps(result, ensure_ascii=False)[:120]}")
-        self.save(ctx, st)
+        self._note_action(ctx, st, "소유자 행동", name, args, result)
         return result
 
     async def _run_tool(self, ctx, st, name, args):

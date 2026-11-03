@@ -2,7 +2,7 @@
 import { Actions } from './actions.js';
 import { ChatApi } from './api.js';
 import { Store } from './store.js';
-import { readToken } from './token.js';
+import { readToken } from '/common/token.js';
 import { ComposerView, HeaderView, TimelineView } from './views.js';
 
 const $ = id => document.getElementById(id);
