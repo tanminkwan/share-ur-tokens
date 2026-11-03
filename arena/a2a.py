@@ -15,7 +15,8 @@ from a2a.server.agent_execution import AgentExecutor
 from a2a.server.request_handlers.default_request_handler_v2 import DefaultRequestHandlerV2
 from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill, Role, SendMessageConfiguration, SendMessageRequest
+from a2a.types import (AgentCapabilities, AgentCard, AgentInterface, AgentSkill, GetTaskRequest, Role, SendMessageConfiguration,
+                       SendMessageRequest)
 from starlette.applications import Starlette
 
 from .a2a_tasks import SlowAnswer, TaskFollower
@@ -28,6 +29,7 @@ H_GROUP, H_EVENT = "X-Arena-Group", "X-Arena-Event"
 
 class Transport(Protocol):
     async def call(self, url: str, msg: dict, timeout: float | None = None, meta: dict | None = None) -> dict: ...
+    async def check_task(self, url: str, task_id: str, wait: float | None = None) -> dict: ...
 
 
 def _wants_meta(handler) -> bool:
@@ -61,14 +63,15 @@ class _JsonExecutor(AgentExecutor):
 
 
 def build_a2a_app(name: str, description: str, url: str, skills: list[str], handler: Handler, version: str = "1.0",
-                  answer_wait: float = 5.0) -> Starlette:
+                  answer_wait: float = 5.0, task_store=None) -> Starlette:
+    """task_store: where slow answers' tasks are kept (a FileTaskStore in the peer's home survives a restart)"""
     card = AgentCard(
         name=name, description=description, version=version,
         supported_interfaces=[AgentInterface(url=url.rstrip("/") + RPC_PATH, protocol_binding="JSONRPC", protocol_version="1.0")],
         capabilities=AgentCapabilities(streaming=False),
         default_input_modes=["application/json"], default_output_modes=["application/json"],
         skills=[AgentSkill(id=s, name=s, description=s, tags=[s]) for s in skills])
-    rh = DefaultRequestHandlerV2(agent_executor=_JsonExecutor(handler, answer_wait), task_store=InMemoryTaskStore(), agent_card=card)
+    rh = DefaultRequestHandlerV2(agent_executor=_JsonExecutor(handler, answer_wait), task_store=task_store or InMemoryTaskStore(), agent_card=card)
     return Starlette(routes=create_agent_card_routes(card) + create_jsonrpc_routes(rh, rpc_url=RPC_PATH))
 
 
@@ -97,7 +100,22 @@ class A2ATransport:
                 return {"ok": False, "error": "no response"}
             if last.HasField("message"):
                 return json.loads(get_message_text(last.message))
-            return await self.follower.follow(client, last.task, meta.get("wait") or self.wait)
+            return _with_url(await self.follower.follow(client, last.task, meta.get("wait") or self.wait), url)
+
+    async def check_task(self, url, task_id, wait=None):
+        """look again at a task a call gave back as pending (wait: how long to follow it now; 0 = just look)"""
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as hc:
+                client = await create_client(url, ClientConfig(streaming=False, httpx_client=hc))
+                task = await client.get_task(GetTaskRequest(id=task_id))
+                return _with_url(await self.follower.follow(client, task, wait or 0), url)
+        except Exception as e:  # noqa: BLE001  (an unknown task, or the peer is gone)
+            return {"ok": False, "error": f"cannot look at task {task_id}: {type(e).__name__}: {e}", "task_id": task_id}
+
+
+def _with_url(r: dict, url: str) -> dict:
+    """a pending answer names where to look again"""
+    return dict(r, url=url) if r.get("pending") else r
 
 
 class LocalTransport:
@@ -114,6 +132,9 @@ class LocalTransport:
             raise ConnectionError(f"{url} unreachable")
         m = {"group_id": None, "event_id": None, **(meta or {})}
         return json.loads(json.dumps(await _dispatch(self.handlers[url], json.loads(json.dumps(msg)), m)))
+
+    async def check_task(self, url, task_id, wait=None):
+        return {"ok": False, "error": "no tasks here: this transport answers at once", "task_id": task_id}
 
 
 async def ask_agent(url: str, text: str, timeout: float = 60.0, context_id: str | None = None) -> str:

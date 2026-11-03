@@ -8,6 +8,7 @@ from typing import Awaitable, Callable, Protocol
 from ...ledger import split_payload
 from ...crypto import h
 from .state import commit_hash, nonce
+from .waiting_calls import WaitingCalls, finisher
 
 
 def _obj(**props):
@@ -33,6 +34,7 @@ class ToolHost(Protocol):
     async def offers_role(self, ctx, pub: str, role: str) -> bool: ...
     async def offering_op(self, ctx, op: str) -> list: ...
     def reveal_records(self, obj) -> list: ...
+    waiting: WaitingCalls  # calls that came back pending
     async def fill_reveals(self, ctx, st, obj) -> tuple: ...
     async def verify_reveals(self, ctx, st, obj) -> list: ...
 
@@ -55,14 +57,14 @@ LABELS = {"ask_owner": "소유자에게 묻기", "join_event": "참가 신청", 
           "call_service": "서비스 부르기", "contact": "사람 연락처 보기", "solicit": "직접 요청 보내기", "publish_text": "글 먼저 등록",
           "commit": "값 먼저 등록(숨김)", "reveal": "등록한 값 공개", "my_reveal": "내 공개값 보기", "check_reveal": "받은 공개값 확인",
           "verify": "원장 항목 확인", "event_progress": "진행 현황 보기", "propose_attest": "공동 확인 제안", "cosign": "서명 요청에 서명",
-          "decline": "서명 요청 거절", "assign": "당사자 배정", "close_event": "이벤트 닫기", "note": "메모 남기기", "remind": "예약(그 시각에 알림)",
+          "decline": "서명 요청 거절", "assign": "당사자 배정", "close_event": "이벤트 닫기", "note": "메모 남기기", "remind": "예약(그 시각에 알림)", "check_pending": "기다리던 답 확인",
           "wait": "기다리기"}
 ARG_LABELS = {"question": "물을 말", "role": "역할", "peer": "상대(필명)", "to": "받는 이(필명)", "text": "글", "data_json": "덧붙일 자료(JSON)",
               "attach_reveals": "붙일 공개 이름표(JSON 목록)", "op": "기능 이름", "input_json": "입력(JSON)", "subject": "주제",
               "targets": "받는 이들(필명, JSON 목록)", "label": "이름표", "value": "값", "publish_hash": "등록 기록 해시", "author": "작성자(필명)",
               "salt": "비밀값", "hash": "기록 해시 또는 내용 해시", "kind": "종류", "value_json": "값(JSON)", "parties": "당사자들(필명, JSON 목록)",
               "request_id": "요청 번호", "reason": "이유", "subjects_json": "배정(JSON: {\"주제\": [필명, …]})", "result_hash": "결과 기록 해시",
-              "when": "언제('+초' 또는 2026-11-03T18:00:00+09:00)", "note": "메모", "evaluator": "평가자(필명)"}
+              "when": "언제('+초' 또는 2026-11-03T18:00:00+09:00)", "note": "메모", "evaluator": "평가자(필명)", "task_id": "기다리는 일 번호"}
 
 
 # ---------------- implementations ----------------
@@ -110,12 +112,22 @@ async def contract(A, ctx, st, role, peer):
     eng = await ctx.call_peer(peer_pub, {"op": "engage", "role": role, "contract": c, "body": body,
                                          "request": {"event_id": st.event_id, "rules_hash": st.rules_hash}},
                               group=st.group_id, event=st.event_id, url=peer_url)
+    data = {"role": role, "peer_pub": peer_pub, "peer_url": peer_url, "body": body, "private": private}
+    if eng.get("pending"):  # the peer's owner is still deciding: finished when the answer arrives (WaitingCalls)
+        return A.waiting.hold(ctx, st, eng, "contract", data)
     if not eng.get("ok"):
         return {"ok": False, "error": eng.get("error")}
-    r = await ctx.recorder(st.recorder_url).record("contract", body, {ctx.pub: ctx.sign(body), peer_pub: eng["sig"]}, private)
+    return await finish_contract(A, ctx, st, eng, data)
+
+
+@finisher("contract")
+async def finish_contract(A, ctx, st, eng, data):
+    """the contractor signed: record the contract with both signatures"""
+    body, peer_pub = data["body"], data["peer_pub"]
+    r = await ctx.recorder(st.recorder_url).record("contract", body, {ctx.pub: ctx.sign(body), peer_pub: eng["sig"]}, data["private"])
     if r.get("ok"):
-        st.peers[peer_pub] = peer_url
-        st.contracts.append([role, peer_pub])
+        st.peers[peer_pub] = data["peer_url"]
+        st.contracts.append([data["role"], peer_pub])
     return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error"), "contracts_so_far": len(st.contracts)}
 
 
@@ -361,6 +373,12 @@ async def remind(A, ctx, st, when, note):
     return {"ok": True, "id": tid, "at": fmt_time(at), "note": "그 시각에 코드가 깨운다. 그때까지 확인하러 깨어날 필요가 없다"}
 
 
+async def check_pending(A, ctx, st, task_id=None):
+    """look again at calls that came back pending; those whose answer arrived are finished by code"""
+    results = await A.waiting.check(A, ctx, st, task_id)
+    return {"ok": True, "results": results, "still_waiting": len(st.waiting_calls)}
+
+
 async def wait(A, ctx, st):
     return {"ok": True}
 
@@ -409,5 +427,7 @@ def _default_tools() -> list[Tool]:
         Tool("close_event", "{result_hash}: 이 이벤트를 원장에서 닫고 공지를 마감한다", _obj(result_hash=S), close_event, host_only=True),
         Tool("note", "{text}: 나중을 위해 메모를 남긴다", _obj(text=S), note, after_close=True),
         Tool("remind", "{when, note}: 그 시각에 나를 깨운다(when: '+초' 또는 ISO 8601 시각). 시각이 정해진 일을 기다릴 때 쓴다", _obj(when=S, note=S), remind),
+        Tool("check_pending", "{task_id?}: pending으로 돌아온 호출(상대가 아직 답하지 않은 계약 등)을 지금 다시 확인한다. 답이 왔으면 코드가 마저 처리한다. "
+             "코드도 정해진 간격으로 확인하므로 꼭 부를 필요는 없다", {"type": "object", "properties": {"task_id": S}}, check_pending),
         Tool("wait", "{}: 이번 입력에 대해 할 일을 다 했다. 다음 입력을 기다린다", None, wait, after_close=True),
     ]

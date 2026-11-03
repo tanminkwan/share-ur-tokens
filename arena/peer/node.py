@@ -217,8 +217,10 @@ class Peer:
         return list(self.last_profile["labels"]) if self.last_profile else list(self.config.labels)
 
     def a2a_app(self):
+        from ..a2a_tasks import FileTaskStore
+        store = FileTaskStore(self.home.path("a2a-tasks.json"), self.settings.a2a_task_keep) if self.home else None
         return build_a2a_app(f"peer-{self.pen}", f"peer {self.pen}", self.config.url, self.skills(), self.handle,
-                             answer_wait=self.settings.a2a_answer_wait_sec)
+                             answer_wait=self.settings.a2a_answer_wait_sec, task_store=store)
 
     async def start(self) -> None:
         """start the event router (built-in) and every app that has a start"""
@@ -258,6 +260,11 @@ class Peer:
         follow a slow answer (an A2A task) before giving back pending"""
         meta = {k: v for k, v in (("group_id", group), ("event_id", event), ("wait", wait)) if v} or None
         return await self.transport.call(url, msg, timeout, meta) if meta else await self.transport.call(url, msg, timeout)
+
+    async def check_task(self, url: str, task_id: str, wait: float | None = None) -> dict:
+        """look again at a call that came back pending (an A2A task of a slow answer)"""
+        check = getattr(self.transport, "check_task", None)
+        return await check(url, task_id, wait) if check else {"ok": False, "error": "this transport has no tasks", "task_id": task_id}
 
     async def solicit(self, targets: list[str], request: dict) -> dict:
         """sign a request and send it to the chosen peers at once (the platform's direct-request app)"""

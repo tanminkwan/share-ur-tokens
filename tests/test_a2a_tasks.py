@@ -171,3 +171,59 @@ async def test_a_human_peer_asked_to_engage_answers_through_a_task(tmp_path, set
         assert r["ok"] and r["reason"] == "좋아요" and r["sig"]
     finally:
         srv.should_exit = True
+
+
+# ---------------- looking again, and the answering peer restarting ----------------
+async def test_a_pending_call_is_looked_at_again_and_a_restart_closes_it_with_a_reason(tmp_path, settings):
+    from arena.a2a_tasks import FileTaskStore
+    release = asyncio.Event()
+
+    async def handler(msg):
+        waiting_for("waiting for the owner (a person) to answer")
+        await release.wait()
+        return {"ok": True, "op": msg["op"]}
+    path = str(tmp_path / "home" / "a2a-tasks.json")
+    srv, url = await serve(lambda u: build_a2a_app("t", "t", u, ["x"], handler, answer_wait=0.05, task_store=FileTaskStore(path, keep=50)))
+    t = A2ATransport(fast(settings))
+    try:
+        first = await t.call(url, {"op": "engage"}, meta={"wait": 0.2})
+        assert first["pending"] and first["url"] == url  # where to look again
+        again = await t.check_task(url, first["task_id"])
+        assert again["pending"] and "waiting for the owner" in again["error"]
+        release.set()
+        done = await t.check_task(url, first["task_id"], wait=2)
+        assert done == {"ok": True, "op": "engage"}
+        release.clear()
+        second = await t.call(url, {"op": "engage"}, meta={"wait": 0.2})
+        assert second["pending"]
+    finally:
+        srv.should_exit = True
+        await asyncio.sleep(0.2)
+    # the answering peer restarts: the task that was still working is closed with a reason, the finished one kept
+    srv, url2 = await serve(lambda u: build_a2a_app("t", "t", u, ["x"], handler, answer_wait=0.05, task_store=FileTaskStore(path, keep=50)))
+    try:
+        gone = await t.check_task(url2, second["task_id"])
+        assert gone["ok"] is False and "restarted" in gone["error"]
+        assert (await t.check_task(url2, first["task_id"])) == {"ok": True, "op": "engage"}
+        assert "cannot look at task" in (await t.check_task(url2, "no-such-task"))["error"]
+    finally:
+        release.set()
+        srv.should_exit = True
+
+
+async def test_the_task_store_keeps_the_newest_and_lists_by_context(tmp_path):
+    from a2a.types import ListTasksRequest, Task, TaskStatus
+    from arena.a2a_tasks import FileTaskStore
+    store = FileTaskStore(str(tmp_path / "t.json"), keep=2)
+    for i in range(3):
+        await store.save(Task(id=f"t{i}", context_id="c" if i else "d", status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED)))
+    assert set(store.tasks) == {"t1", "t2"} and (await store.get("t0")) is None
+    listed = await store.list(ListTasksRequest(context_id="c"))
+    assert [x.id for x in listed.tasks] == ["t2", "t1"]
+    await store.delete("t1")
+    assert set(FileTaskStore(str(tmp_path / "t.json"), keep=2).tasks) == {"t2"}  # kept on disk
+
+
+async def test_a_transport_without_tasks_says_so(settings, tmp_path):
+    from arena.a2a import LocalTransport
+    assert "no tasks here" in (await LocalTransport().check_task("mem://x", "t"))["error"]

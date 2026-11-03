@@ -108,6 +108,10 @@ class AppContext:
         """reach a peer by a connection method its profile lists (a2a, else api)"""
         return await self._peer.call_peer(pub, msg, timeout, group=group, event=event, url=url)
 
+    async def check_task(self, url: str, task_id: str, wait: float | None = None) -> dict:
+        """look again at a call that came back pending: {ok, ...} when it ended, or pending again"""
+        return await self._peer.check_task(url, task_id, wait)
+
     async def submissions(self, event_id: str) -> list:
         """what this peer's submission desk received for an event (the intake element)"""
         # a capability, not a particular element: the dependency points to the interface

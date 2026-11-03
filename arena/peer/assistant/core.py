@@ -21,6 +21,7 @@ from ..plugin import ASSISTANT_APP_ID, Decision, MessageHead
 from ..scheduler import fmt_time
 from .directory import Directory
 from .drives import Drives
+from .waiting_calls import TIMER as WAITING_TIMER, WaitingCalls
 from .handles import HEX64, Handles  # noqa: F401  (HEX64 kept importable from here)
 from .ledger_view import LedgerView
 from .messenger import Messenger
@@ -48,6 +49,7 @@ class EventAssistant:
         self.messenger = Messenger()
         self.prompt = Prompt(self.handles)
         self.drives = Drives(settings)
+        self.waiting = WaitingCalls(settings)
         self.toolbox = Toolbox(self.handles, tools if tools is not None else default_tools() + element_tools())
         self.tools = self.toolbox.tools
 
@@ -237,59 +239,12 @@ class EventAssistant:
         if st is None or st.closed:
             return
         d, when = timer.get("data", {}), fmt_time(timer["at"])
-        if timer["kind"] == "remind":
-            text = f"[내 예약] {when}: {d.get('note', '')} (내가 remind로 걸어 둔 시각이 되었다)"
-        else:
-            what = " ".join(x for x in (d.get("code", ""), d.get("subject", "")) if x)
-            text = (f"[일정 시각] {when} {what}{': ' + d['note'] if d.get('note') else ''}. 원장에 공증된 이 이벤트의 일정 시각이 되었다(코드가 깨움). "
-                    "규칙에 따라 지금 할 일을 하라")
-        await self.feed(ctx, st.event_id, text, kind="timer")
-
-    # ---------------- holding an event ----------------
-    async def host_event(self, ctx, *, title, kind, rules, policy, instruction, audience=None, recorder=None, elements=None, codebook=None,
-                         schedule=None):
-        """open an event run in the primordial way: natural-language rules, app = the basic assistant"""
-        out = await announce_event(ctx, group=self.group, title=title, kind=kind, rules=rules, policy=policy,
-                                   mode="assistant", apps=[], audience=audience, recorder=recorder, elements=elements, codebook=codebook,
-                                   schedule=schedule)
-        ev, rec = out["event_id"], out["recorder"]
-        st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url,
-                                          policy=dict(policy), elements=dict(elements or {}))
-        st.instruction = instruction
-        st.drive = self.initial_drive(ctx)
-        st.schedule = event_times(out["notice"])
-        schedule_event_times(ctx, out["notice"])  # the host wakes at its own event's times too
-        self.save(ctx, st)
-        ctx.log.emit("assistant", ctx.pen, f"이벤트 개최 {ev} '{title}' (규칙 해시 {out['rules_hash'][:10]}, 방식 assistant)")
-        await self.feed(ctx, ev, f"[소유자의 지시] {instruction}", kind="owner")
-        return ev
-
-    # ---------------- events handed over by the platform's event router ----------------
-    async def on_event(self, ctx, notice, change):
-        ev = notice["notice_id"]
-        st = self.events.get(ev)
-        if change == "new" and st is None:
-            st = self.events[ev] = EventState(ev, "participant", notice.get("title", ""), notice["rules"], h(notice["rules"].encode()),
-                                              notice["group_id"], notice["recorder_url"], notice["recorder_pub"], notice["issuer_pub"],
-                                              notice["issuer_url"], offer_roles=list(notice.get("policy", {}).get("roles", [])), policy=dict(notice.get("policy", {})),
-                                              elements=dict(notice.get("elements") or {}), schedule=event_times(notice), drive=self.initial_drive(ctx),
-                                              notice_ver=notice.get("ver", 1))
-            st.peers[notice["issuer_pub"]] = notice["issuer_url"]
+        if timer["kind"] == WAITING_TIMER:  # look again at calls that came back pending; tell only what was finished
+            done = [r for r in await self.waiting.check(self, ctx, st) if not r.get("pending")]
             self.save(ctx, st)
-            await self.feed(ctx, ev, f"[새 공지] '{notice.get('title', '')}' (개최자 pub={notice['issuer_pub']}). 규칙과 실행 방식이 원장에 공증된 것과 같음을 확인했다.", kind="notice")
-        elif st is not None and change == "updated":
-            st.notice_ver = notice.get("ver", st.notice_ver)
-            await self.feed(ctx, ev, f"[공지 수정] 버전 {st.notice_ver}: {notice.get('text', '')}", kind="notice")
-        elif st is not None and change == "closed" and not st.notice_closed:
-            st.notice_closed = True
-            await self.feed(ctx, ev, "[공지 마감] 개최자가 이 이벤트의 공지를 마감했다.", kind="notice")
-
-    async def on_timer(self, ctx, timer):
-        """the scheduler woke me at a time (P6-S3): the event's notarized schedule, or a reminder I set myself"""
-        st = self.events.get(timer.get("event_id"))
-        if st is None or st.closed:
+            if done:
+                await self.feed(ctx, st.event_id, "[기다리던 답] 상대가 답해 코드가 마저 처리했다: " + json.dumps(done, ensure_ascii=False), kind="timer")
             return
-        d, when = timer.get("data", {}), fmt_time(timer["at"])
         if timer["kind"] == "remind":
             text = f"[내 예약] {when}: {d.get('note', '')} (내가 remind로 걸어 둔 시각이 되었다)"
         else:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..scheduler import fmt_time
 from .handles import Handles
+from .waiting_calls import WaitingCalls
 
 
 class Prompt:
@@ -26,7 +27,7 @@ class Prompt:
                 if st.schedule else "")
         mine_t = [t for t in ctx.timers(st.event_id) if t["kind"] == "remind"]
         reminders = ("내 예약: " + "; ".join(f"{fmt_time(t['at'])} {t['data'].get('note', '')}" for t in mine_t) + " / ") if mine_t else ""
-        return now + plan + reminders + assigned + sealed + (
+        return now + plan + reminders + WaitingCalls.line(st) + assigned + sealed + (
             f"내 먼저 등록 라벨: {', '.join(st.secrets) or '없음'} / 원장에 공개한 내 라벨: {', '.join(revealed) or '없음'} / "
             f"내가 보낸 공개값: {', '.join(sent) or '없음'} / 내가 받은 서명 요청: {', '.join(st.pending) or '없음'} / "
             f"내가 제안한 공동 확인: {', '.join(st.proposals) or '없음'} / 참가 신청: {'함' if st.joined else '안 함'} / 닫힘: {st.closed} / "
