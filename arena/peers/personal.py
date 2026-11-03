@@ -14,7 +14,7 @@ from ..a2a import A2ATransport
 from ..broker.failover import FailoverBrokerClient
 from ..config import ConfigError, Settings
 from ..events import EventLog
-from ..llm import build_llm
+from ..llm import NoLLM, build_llm
 from ..peer.assistant import EventAssistant
 from ..peer.desk import DeskOwner, OwnerDesk, OwnerDeskApp
 from ..peer.desk.api import build_owner_api
@@ -42,9 +42,14 @@ def build(s: Settings) -> tuple[Peer, OwnerService, str]:
     if not groups:
         raise ConfigError(f"{s.key_of('personal_peer_brokers')}가 비어 있습니다")
     home = PeerHome(s.personal_peer_home, s)
-    llm = build_llm(s)  # ARENA_LLM_BACKEND=none: a human peer, the owner drives; a misconfigured LLM is an error, not a silent fallback
+    if s.personal_mode not in ("agent", "human"):
+        raise ConfigError(f"{s.key_of('personal_mode')}는 agent 또는 human이어야 합니다: {s.personal_mode!r}")
+    llm = build_llm(s)  # a misconfigured LLM is an error, not a silent fallback; ARENA_LLM_BACKEND=none: no LLM at all
+    if s.personal_mode == "agent" and isinstance(llm, NoLLM):
+        raise ConfigError("agent 모드에는 LLM이 필요합니다(ARENA_LLM_*). LLM 없이 쓰려면 ARENA_PERSONAL_MODE=human")
     desk = OwnerDesk(clock=lambda: __import__("time").time(), keep=s.desk_keep_items)
-    peer = Peer(home.identity(), s, PeerConfig(url=f"http://{s.host}:{s.personal_peer_port}", labels=list(s.personal_peer_labels)),
+    peer = Peer(home.identity(), s, PeerConfig(url=f"http://{s.host}:{s.personal_peer_port}", labels=list(s.personal_peer_labels),
+                                               operator=s.personal_mode),
                 home.area(), DeskOwner(desk, s), llm, A2ATransport(s), EventLog(keep=s.event_log_size),
                 brokers={g: FailoverBrokerClient.from_urls(urls, s) for g, urls in groups.items()},
                 apps=[OwnerDeskApp(desk), EventAssistant(s)], home=home)

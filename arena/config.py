@@ -165,6 +165,7 @@ class Settings(EnvSettings):
     service_peer_api_port: int = F("ARENA_SERVICE_PEER_API_PORT", 9161, int, "서비스 peer의 api 연결(REST) 포트")
     service_peer_connections: list[str] = F("ARENA_SERVICE_PEER_CONNECTIONS", ["a2a", "api"], _list, "서비스 peer가 여는 연결 방식(a2a, api 중에서, 쉼표). api만이면 API 전용 peer")
     evaluation_max_items: int = F("ARENA_EVALUATION_MAX_ITEMS", 20, int, "평가 요소: 한 번에 평가자에게 넘기는 항목 수 상한")
+    personal_mode: str = F("ARENA_PERSONAL_MODE", "agent", str, "견본 개인 peer의 모드: agent(에이전트가 운전, 사람은 대화 화면으로 끼어듦) · human(사람이 창구 화면에서 운전, LLM은 있으면 제안만). 둘 다 바깥으로는 a2a")
     personal_peer_home: str = F("ARENA_PERSONAL_PEER_HOME", "data/personal", str, "견본 개인 peer의 홈 폴더(키, 공개 영역, 상태, 이벤트)")
     personal_peer_port: int = F("ARENA_PERSONAL_PEER_PORT", 9180, int, "견본 개인 peer의 A2A 포트")
     personal_peer_labels: list[str] = F("ARENA_PERSONAL_PEER_LABELS", [], _list, "견본 개인 peer의 라벨")

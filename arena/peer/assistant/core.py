@@ -631,10 +631,20 @@ class EventAssistant:
     READ_ONLY = ("note", "event_progress", "verify", "my_reveal", "check_reveal", "contact", "submissions", "verdicts", "ask_owner")
     DRIVES = ("auto", "suggest", "manual")
 
-    def initial_drive(self, ctx) -> str:
+    def allowed_drives(self, ctx) -> tuple:
+        """no LLM: only the owner drives. A human peer (dev/peer-spec.md 1.2): the person drives; an LLM plugin may only
+        suggest, never act on its own"""
         if isinstance(ctx.llm, NoLLM):
-            return "manual"  # no LLM: the owner drives
-        return self.s.peer_default_drive if self.s.peer_default_drive in self.DRIVES else "auto"
+            return ("manual",)
+        if ctx.operator == "human":
+            return ("manual", "suggest")
+        return self.DRIVES
+
+    def initial_drive(self, ctx) -> str:
+        allowed = self.allowed_drives(ctx)
+        if self.s.peer_default_drive in allowed:
+            return self.s.peer_default_drive
+        return allowed[0]
 
     def set_drive(self, ctx, event_id: str, drive: str) -> dict:
         st = self.events.get(event_id)
@@ -642,8 +652,9 @@ class EventAssistant:
             return {"ok": False, "error": "모르는 이벤트"}
         if drive not in self.DRIVES:
             return {"ok": False, "error": f"운전석은 {', '.join(self.DRIVES)} 가운데 하나"}
-        if drive != "manual" and isinstance(ctx.llm, NoLLM):
-            return {"ok": False, "error": "LLM이 없는 peer는 수동(manual)만 된다"}
+        if drive not in self.allowed_drives(ctx):
+            why = "LLM이 없는 peer는 수동(manual)만 된다" if isinstance(ctx.llm, NoLLM) else "사람 peer는 수동(manual)이나 제안(suggest)만 된다"
+            return {"ok": False, "error": why}
         st.drive = drive
         self.save(ctx, st)
         return {"ok": True, "drive": drive}

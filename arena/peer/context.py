@@ -39,6 +39,11 @@ class AppContext:
         return self._peer.config.url
 
     @property
+    def operator(self) -> str:
+        """who decides and answers for this peer: service, agent or human (dev/peer-spec.md 1.2)"""
+        return self._peer.operator()
+
+    @property
     def labels(self) -> list[str]:
         return self._peer.current_labels()
 

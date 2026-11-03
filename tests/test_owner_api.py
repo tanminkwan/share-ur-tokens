@@ -70,18 +70,28 @@ async def test_p6p5_the_owner_hosts_an_event_and_answers_a_question(eco):
     await hc.aclose()
 
 
-def test_p6p6_the_personal_peer_is_a_human_peer_without_an_llm_and_an_agent_with_one(tmp_path, settings):
+def test_p6p6_the_personal_peer_mode_sets_who_drives_and_both_modes_speak_a2a(tmp_path, settings):
+    """the mode, not the LLM, says who drives (dev/peer-spec.md 1.2): human = the person drives (an LLM plugin may only
+    suggest), agent = the agent drives and needs an LLM. Both face other peers with a2a"""
     from arena.config import ConfigError
     from arena.peers import personal
-    base = dict(personal_peer_home=str(tmp_path / "home"), personal_peer_brokers=["public=http://127.0.0.1:1"])
-    peer, service, token = personal.build(dataclasses.replace(settings, llm_backend="none", **base))
-    assert peer.operator() == "human" and token and service.state()["me"]["operator"] == "human"
-    again, _, token2 = personal.build(dataclasses.replace(settings, llm_backend="none", **base))
+    llm = dict(llm_base_url="http://llm", llm_api_key="k", llm_model_agent="m")
+    base = dict(personal_peer_brokers=["public=http://127.0.0.1:1"])
+    home = lambda n: dict(base, personal_peer_home=str(tmp_path / n))
+    peer, service, token = personal.build(dataclasses.replace(settings, personal_mode="human", llm_backend="none", **home("h1")))
+    assert peer.operator() == "human" and service.config()["drives"] == ["manual"] and token
+    assert [c["kind"] for c in peer.connections()] == ["a2a"]
+    again, _, token2 = personal.build(dataclasses.replace(settings, personal_mode="human", llm_backend="none", **home("h1")))
     assert again.identity.pub == peer.identity.pub and token2 == token  # the same peer and token after a restart
-    with pytest.raises(ConfigError):  # an LLM asked for but not set up is an error, not a silent human peer
-        personal.build(dataclasses.replace(settings, llm_backend="compat", llm_base_url="", **dict(base, personal_peer_home=str(tmp_path / "h2"))))
-    agent, _, _ = personal.build(dataclasses.replace(settings, llm_backend="compat", llm_base_url="http://llm", llm_api_key="k", llm_model_agent="m",
-                                                     **dict(base, personal_peer_home=str(tmp_path / "h2"))))
-    assert agent.operator() == "agent"
+    helped, hs, _ = personal.build(dataclasses.replace(settings, personal_mode="human", llm_backend="compat", **llm, **home("h2")))
+    assert helped.operator() == "human" and hs.config()["drives"] == ["manual", "suggest"]  # an LLM plugin only suggests
+    agent, ags, _ = personal.build(dataclasses.replace(settings, personal_mode="agent", llm_backend="compat", **llm, **home("h3")))
+    assert agent.operator() == "agent" and ags.config()["drives"] == ["auto", "suggest", "manual"]
+    with pytest.raises(ConfigError):  # the agent mode needs an LLM
+        personal.build(dataclasses.replace(settings, personal_mode="agent", llm_backend="none", **home("h4")))
+    with pytest.raises(ConfigError):  # an LLM asked for but not set up is an error, not a silent fallback
+        personal.build(dataclasses.replace(settings, personal_mode="agent", llm_backend="compat", llm_base_url="", **home("h5")))
     with pytest.raises(ConfigError):
-        personal.build(dataclasses.replace(settings, llm_backend="none", personal_peer_home=str(tmp_path / "h3")))
+        personal.build(dataclasses.replace(settings, personal_mode="robot", llm_backend="none", **home("h6")))
+    with pytest.raises(ConfigError):
+        personal.build(dataclasses.replace(settings, personal_mode="human", llm_backend="none", personal_peer_home=str(tmp_path / "h7")))
