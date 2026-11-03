@@ -82,7 +82,7 @@ async def register_work(me: Identity, data: bytes, recorder, recorder_url: str, 
         if not made.get("ok"):
             return {"ok": False, "error": f"link peer: {made.get('error')}"}
         link = {"peer": info["pub"], "id": made["id"], **({"via": link_via} if link_via else {})}
-        storage = [{"kind": "link", "location": f"{info['pub']}/{made['id']}", **({"via": link_via} if link_via else {})}]
+        storage = [{"kind": "link", "peer": info["pub"], "link_id": made["id"], **({"via": link_via} if link_via else {})}]
     t = await recorder.trust()
     lid = t.get("ledger_id") if t.get("ok") else None
     p = {"author": me.pub, "content_hash": ch, "purpose": "authorship", "form": form, "group_id": group_id, **({"ledger_id": lid} if lid else {})}

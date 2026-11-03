@@ -146,7 +146,8 @@ scripts/coverage.sh                                     # 같은 테스트 + 커
 | link peer의 버전 (`tests/test_link_peer.py`) | ver는 마지막 + 1, 남이 서명한 것·바뀐 서명·owner/name/content hash 변경·link 안의 link·빈 목록·모르는 kind·틀린 id 거절, 이력, `link.info`, 프로필 |
 | key rotation 뒤 | 물러난 처음 key는 link를 못 바꾸고 지금 key는 바꿈, 읽는 쪽도 기록자를 물어 확인(묻지 않으면 처음 key만 인정) |
 | 작품과 link | 원장 `ref`에는 link만(URL 없음), colophon과 주소에 link, resolve·relink 뒤 새 위치, **원장은 그대로**, 다른 작가 거절, link peer가 위치를 바꿔치기하면 서명으로 잡힘 |
-| 원장의 link 위치 확인 | `<공개키>/<id>` 모양, `via` 모양 |
+| 원장의 link 위치 확인 | link는 전용 field(`peer` hex 64, `link_id` hex 32), 한 문자열로 묶은 `location`은 거절, kind마다 자기 field만, `via` 모양 |
+| free-form은 글만 | 코드가 쓸 값(객체)을 free-form에 넣으면 거절하고 "전용 field로"를 알림 |
 | 명령 | register `--link-peer`, relink(참조 파일), resolve(참조 파일, id와 owner), link peer 주소가 없을 때 |
 
 실제 프로세스 테스트(`tests/test_runner_processes.py`)에 link peer 프로세스(api만)와 `python -m arena.content register --link-peer`·`relink`·`resolve`를 더했다. service peer와 link peer가 연결 방식(a2a, api)을 여는 부분은 `arena/peers/common.py`의 `open_connections`·`run_with_connections`로 합쳤다.

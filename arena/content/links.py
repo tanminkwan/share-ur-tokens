@@ -4,7 +4,7 @@ changes it: every version is signed by the owner (or the owner's current key, fo
 so a link peer cannot change a link either, only keep it or lose it. Anyone may run a link peer; it earns standing by
 being used, and a work may name several.
 
-    link record: {id, owner, name, ver, targets: [{kind, location, via?}], content_hash?, ts, signer, sig}
+    link record: {id, owner, name, ver, targets: [places, as in a ref: {kind, <that kind's fields>, via?}], content_hash?, ts, signer, sig}
     id  = SHA-256(canonical JSON {"owner", "name"})[:32]      (computable before the link exists)
     sig = signer's signature over canonical JSON {"op": "link.set", id, owner, name, ver, targets, content_hash?, ts}"""
 from __future__ import annotations
@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Awaitable, Callable
 
 from ..crypto import canon, h, verify
-from ..ledger.refs import STORAGE_KINDS
+from ..ledger.refs import place_error
 
 KeyOf = Callable[[str], Awaitable[dict]]  # a recorder's key status (GET /key/{pub})
 
@@ -37,13 +37,9 @@ def targets_error(targets, settings) -> str | None:
     if not isinstance(targets, list) or not targets or len(targets) > settings.ref_storage_max:
         return f"a link needs 1 to {settings.ref_storage_max} targets"
     for t in targets:
-        if not isinstance(t, dict) or t.get("kind") not in STORAGE_KINDS or t["kind"] == "link":
-            return "each target needs a registered storage kind other than link"
-        if not isinstance(t.get("location"), str) or not t["location"] or len(t["location"]) > settings.ref_location_max:
-            return f"each target needs a location of at most {settings.ref_location_max} characters"
-        check = STORAGE_KINDS[t["kind"]].check
-        if check and check(t["location"]):
-            return check(t["location"])
+        bad = place_error(t, settings, allow=lambda kind: kind != "link")  # a link points at places, not at another link
+        if bad:
+            return bad
     return None
 
 

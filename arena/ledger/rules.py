@@ -67,6 +67,9 @@ def r_size(chain, e, now, s):
     known = known() if callable(known) else known
     if known is not None:
         free = {k: v for k, v in p.items() if k not in known and k not in COMMON_FIELDS}
+        coded = sorted(k for k, v in free.items() if not isinstance(v, str))
+        if coded:  # free-form is a short natural-language note; what code acts on gets its own field
+            return f"free-form fields hold short text only ({', '.join(coded)} is not text): give a value code uses its own field"
         m = len(canon(free)) if free else 0
         if m > s.ledger_free_max_bytes:
             return (f"free-form fields too large ({', '.join(sorted(free))}: {m} > {s.ledger_free_max_bytes} bytes): "

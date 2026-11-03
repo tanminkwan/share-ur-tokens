@@ -177,7 +177,7 @@ flowchart TB
 **field가 놓이는 세 곳**(`entry-columns.md`)
 - payload 밖: recorder가 정한다(`type`, `prev`, `ts`, seal).
 - payload 안 **code fields**: 원장이 확인한다(`group_id`, `ledger_id`, `event_id`, `purpose`, `nonce`, type별 field, `form`, `ref`).
-- payload 안 **free-form fields**: 원장이 읽지 않는다. 서명 범위 안이라 바꿀 수는 없다.
+- payload 안 **free-form fields**: 원장이 읽지 않는다. 서명 범위 안이라 바꿀 수는 없다. **짧은 자연어(글)만** 들어간다. 코드가 읽어 움직이는 값(식별자, 구조)은 전용 field를 둔다(LLM이 글에서 꺼내지 않게).
 - **크기 상한**(원장이 커지지 않게, 작게 고정): free-form fields 합계 256 bytes, entry 하나 4,096 bytes. 넘으면 거절하고 "content는 원장 밖에(hash, `ref`, link peer)"라고 알린다.
 
 **purpose codes**: `authorship`(작품과 그 시점의 증명), `commit`(나중에 공개할 값의 hash 등록), `delivery`(자료 전달), `submission`(event 제출), `evaluation`(평가 건넴).
@@ -668,7 +668,7 @@ sequenceDiagram
 | **content form** (CP-9) | 본문을 hash하기 전에 bytes로 만드는 방식. `utf8-nfc-lf`(UTF-8, BOM 제거, 줄바꿈 LF, Unicode NFC: 한글 조합형과 완성형을 하나로), `bytes`(파일 그대로). `publish.form`에 적는다 |
 | **ledger reference** (CP-9) | `{ledger_id, entry, seq, ts, content_hash, form, author, recorder_url, did?}`. 바뀌지 않는 것은 ledger_id · entry · content_hash · form · author, 바뀔 수 있는 것은 recorder_url. QR용 한 줄 주소 `arena-ref:<ledger_id>/<entry>?content=…&form=…&author=…&recorder=…` |
 | **`ref` block** (CP-4) | 원장 밖 content가 어디 있는지: `storage`(`https` · `peer` · `ipfs` · `git` · `place`), `size`, `media_type`, `proof`(`sha256`: hash 대조만, `ed25519`: 그 key가 {content_hash, storage}에 서명). 원장은 shape와 signature만 보고 content를 가져오지 않는다. 위치를 숨기려면 private envelope에 넣는다(공개 기본값은 CP-5, 미정). `share`의 `ref`는 언제나 envelope |
-| **link peer** (CP-20) | 위치가 바뀔 수 있으면 `ref`에 URL 대신 영구 link(`kind: link`, `<link peer>/<link id>`)만 적는다. 실제 위치는 link peer가 들고, 작가가 서명해 바꾼다(`relink`). 원장은 그대로다. link peer는 위치를 위조하지 못하고(작가 signature), 누구나 띄울 수 있다 |
+| **link peer** (CP-20) | 위치가 바뀔 수 있으면 `ref`에 URL 대신 영구 link만 적는다: `{kind: link, peer: <link peer 공개키>, link_id}`(전용 field라 코드가 그대로 link peer에 넘긴다). 실제 위치는 link peer가 들고, 작가가 서명해 바꾼다(`relink`). 원장은 그대로다. link peer는 위치를 위조하지 못하고(작가 signature), 누구나 띄울 수 있다 |
 | **content lookup** (CP-10) | `GET /content/{hash}`: reference 없이 사본만 가진 사람도 등록 entry를 찾는다. content hash는 한 번만 등록되므로(먼저 등록한 사람이 이긴다) 결과는 하나다 |
 
 **사용**(`python -m arena.content`):

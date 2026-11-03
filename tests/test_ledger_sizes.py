@@ -22,6 +22,9 @@ async def test_free_form_fields_are_capped_tightly(net, settings):
     assert r["ok"]  # a little free-form is fine
     big = await _publish(net, Identity.generate(), note="가" * 100, extra="x")  # 300 bytes of Korean
     assert "free-form fields too large (extra, note" in big["error"] and "off the ledger" in big["error"]
+    # free-form is a short natural-language note: a value code would act on gets its own field
+    coded = await _publish(net, Identity.generate(), extra={"link": "a" * 64})
+    assert "short text only (extra is not text)" in coded["error"] and "its own field" in coded["error"]
     # the fields the type knows are not free-form: a long label is the label's own rule, not this cap
     known = await _publish(net, Identity.generate(), label="L" * settings.ledger_label_max)
     assert known["ok"]
