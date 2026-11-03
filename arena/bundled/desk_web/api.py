@@ -11,7 +11,7 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from .service import OwnerService
+from ..owner_service import OwnerService
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 

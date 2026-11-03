@@ -1,0 +1,20 @@
+:root { --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --bg: #f6f8fa; --accent: #0969da; --bad: #cf222e; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.55 system-ui, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif; color: var(--fg); }
+header { padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg); display: flex; gap: 12px; align-items: baseline; }
+header .pen { font-weight: 600; }
+main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; height: calc(100vh - 46px); }
+#timeline { flex: 1; overflow: auto; padding: 16px; }
+.msg { max-width: 80%; padding: 8px 12px; border-radius: 12px; margin: 6px 0; white-space: pre-wrap; }
+.msg.owner { margin-left: auto; background: var(--accent); color: #fff; }
+.msg.agent { background: var(--bg); border: 1px solid var(--line); }
+.ask { border: 1px solid var(--accent); border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
+.ask .kind { font-size: 12px; color: var(--muted); }
+.note { color: var(--muted); font-size: 13px; margin: 4px 0; }
+.row { display: flex; gap: 6px; margin-top: 6px; }
+button { font: inherit; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); cursor: pointer; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.bad { color: var(--bad); }
+#composer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+#composer input { flex: 1; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+#toast { position: fixed; right: 16px; top: 56px; color: var(--bad); }

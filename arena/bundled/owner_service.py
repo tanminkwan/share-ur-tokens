@@ -2,10 +2,10 @@
 assistant; it does not know HTTP. Every check (signatures, the ledger, handles) stays in the peer's code."""
 from __future__ import annotations
 
-from ...llm import NoLLM
-from ..assistant import EventAssistant
-from ..scheduler import fmt_time
-from .desk import OwnerDesk
+from ..llm import NoLLM
+from ..peer.assistant import EventAssistant
+from ..peer.desk import OwnerDesk
+from ..peer.scheduler import fmt_time
 
 
 class OwnerService:
@@ -22,8 +22,8 @@ class OwnerService:
 
     def config(self) -> dict:
         """what the screen needs to know in advance (no constants in the screen's code)"""
-        from ...ledger.schedule import TIME_CODES
-        from .model import ITEM_KINDS
+        from ..ledger.schedule import TIME_CODES
+        from ..peer.desk.model import ITEM_KINDS
         return {"poll_ms": self.peer.settings.desk_poll_ms, "drives": list(self._asst.allowed_drives(self._ctx)),
                 "time_codes": {c: t.description for c, t in TIME_CODES.items()},
                 "item_kinds": {k: v.label for k, v in ITEM_KINDS.items()}}
@@ -56,6 +56,19 @@ class OwnerService:
                 "state_line": a.state_line(ctx, st), "transcript": st.transcript[-n:], "tools": a.tools_view(st),
                 "schedule": [dict(x, when=fmt_time(x["at"])) for x in st.schedule],
                 "timers": [dict(t, when=fmt_time(t["at"])) for t in ctx.timers(event_id)]}
+
+    async def tell(self, event_id: str, text: str) -> dict:
+        """pass the owner's words to the assistant of one event (it acts on them in its drive)"""
+        if event_id not in self._asst.events:
+            return {"ok": False, "error": "모르는 이벤트"}
+        await self._asst.feed(self._ctx, event_id, f"[소유자의 지시] {text}", kind="owner")
+        return {"ok": True}
+
+    def find_event(self, ref: str) -> str | None:
+        """an event named by its id or its exact title"""
+        if ref in self._asst.events:
+            return ref
+        return next((st.event_id for st in self._asst.events.values() if st.title == ref), None)
 
     def set_drive(self, event_id: str, drive: str) -> dict:
         return self._asst.set_drive(self._ctx, event_id, drive)

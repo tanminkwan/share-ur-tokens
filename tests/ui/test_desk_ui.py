@@ -6,8 +6,8 @@ import dataclasses
 
 import pytest
 
-from arena.peer.desk.api import build_owner_api
-from arena.peer.desk.service import OwnerService
+from arena.bundled.desk_web.api import build_owner_api
+from arena.bundled.owner_service import OwnerService
 from arena.serve import serve_background
 from tests.test_assistant import RULES, asst, ctx, eco, settle  # noqa: F401  (eco is a fixture)
 from tests.test_desk import desk_peer, hosted

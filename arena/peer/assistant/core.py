@@ -551,6 +551,8 @@ class EventAssistant:
         assigned = (f"배정(원장): {'; '.join(f'{k}=' + '·'.join(h(p) for p in v) for k, v in st.assignments.items())} / "
                     f"내 배정: {', '.join(mine) or '없음'} / ") if st.assignments else ""
         sealed = (" / ".join(st.sealed_view) + " / ") if st.sealed_view else ""
+        held = {c[0] for c in st.contracts}
+        open_roles = {r: v for r, v in st.role_offers.items() if r not in held}  # a role contracted since the last look is not open
         now = f"지금 시각: {fmt_time(ctx.clock())} / "
         plan = ("일정(원장): " + "; ".join(f"{fmt_time(x['at'])} {x['code']}{' ' + x['subject'] if x.get('subject') else ''}" for x in st.schedule) + " / "
                 if st.schedule else "")
@@ -564,7 +566,7 @@ class EventAssistant:
                  + ((f" / 참가 신청자(코드 확인) {len(st.applicants)}명: {', '.join(h(p) for p in st.applicants) or '없음'}"
                      f" / 아직 계약하지 않은 신청자: {', '.join(h(p) for p in st.applicants if p not in {c[1] for c in st.contracts}) or '없음'}"
                      + (" / 아직 계약 없는 역할: " + "; ".join(f"{r}(프로필에 내건 peer: {', '.join(h(p) for p in v) or '없음'})"
-                                                         for r, v in st.role_offers.items()) if st.role_offers else "")
+                                                         for r, v in open_roles.items()) if open_roles else "")
                      + " / 나는 개최자다(참가 신청은 참가자가 하는 일이고, 개최자는 신청자와 계약한다)") if st.role == "host" else ""))
         return state
 

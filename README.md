@@ -93,8 +93,9 @@ cp .env.example .env          # 설정은 모두 .env에 (키 설명은 .env.exa
 .venv/bin/python -m arena.peers.app_store  # 앱 배포 peer: 선택, 누구나 띄울 수 있다 (ARENA_APP_STORE_*)
 .venv/bin/python -m arena.peers.foundation # 재단 peer: 기본 코드표 판을 원장에 기록 (선택, ARENA_FOUNDATION_PEER_*)
 .venv/bin/python -m arena.peers.service --spec <서비스 설명.json>   # API만 내놓는 peer (ARENA_SERVICE_PEER_*)
-.venv/bin/python -m arena.peers.personal   # 견본 개인 peer: A2A + 소유자 화면(http://127.0.0.1:9181/#token=…)
-                                           # LLM이 있으면 agent peer, ARENA_LLM_BACKEND=none이면 사람이 직접 움직이는 human peer
+.venv/bin/python -m arena.peers.personal   # 견본 개인 peer(바깥으로는 a2a). ARENA_PERSONAL_MODE=agent: 대화 앱(내 비서와 대화)
+                                           # ARENA_PERSONAL_MODE=human: 창구 화면 앱(사람이 운전). 화면 주소(#token=…)를 출력한다
+.venv/bin/python -m scripts.try_personal   # 직접 써 보기: 제네시스 + 사람 peer 둘(LLM 없음). --agent면 agent peer 하나 더(.env의 LLM)
 ```
 
 peer가 진짜 원장만 믿게 하려면 `.env`에 뿌리 값을 둔다: `ARENA_TRUST_GENESIS_HASH`, `ARENA_TRUST_GOD_PUB`.

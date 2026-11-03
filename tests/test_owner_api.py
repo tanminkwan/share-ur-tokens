@@ -4,8 +4,8 @@ import dataclasses
 import httpx
 import pytest
 
-from arena.peer.desk.api import build_owner_api
-from arena.peer.desk.service import OwnerService
+from arena.bundled.desk_web.api import build_owner_api
+from arena.bundled.owner_service import OwnerService
 from tests.test_assistant import RULES, asst, ctx, eco, settle  # noqa: F401  (eco is a fixture)
 from tests.test_desk import desk_peer, hosted
 
@@ -93,5 +93,13 @@ def test_p6p6_the_personal_peer_mode_sets_who_drives_and_both_modes_speak_a2a(tm
         personal.build(dataclasses.replace(settings, personal_mode="agent", llm_backend="compat", llm_base_url="", **home("h5")))
     with pytest.raises(ConfigError):
         personal.build(dataclasses.replace(settings, personal_mode="robot", llm_backend="none", **home("h6")))
+    # the screens are bundled apps, chosen by mode (human: desk, agent: chat) or by ARENA_PERSONAL_APPS
+    names = lambda p: [a.name for a in p.apps]
+    assert "bundled.desk_web" in names(peer) and "bundled.chat" not in names(peer)
+    assert "bundled.chat" in names(agent) and "bundled.desk_web" not in names(agent)
+    both, _, _ = personal.build(dataclasses.replace(settings, personal_mode="agent", llm_backend="compat", personal_apps=["desk", "chat"], **llm, **home("h8")))
+    assert {"bundled.desk_web", "bundled.chat"} <= set(names(both))
+    with pytest.raises(ConfigError):  # a chat needs an LLM to talk with
+        personal.build(dataclasses.replace(settings, personal_mode="human", llm_backend="none", personal_apps=["chat"], **home("h9")))
     with pytest.raises(ConfigError):
         personal.build(dataclasses.replace(settings, personal_mode="human", llm_backend="none", personal_peer_home=str(tmp_path / "h7")))
