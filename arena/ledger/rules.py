@@ -68,7 +68,7 @@ def r_purpose(chain, e, now, s):
 def r_signatures(chain, e, now, s):
     for who in signers(e):
         sig = e["sigs"].get(who) if who else None
-        if not who or not sig or not verify(who, e["payload"], sig):
+        if not who or not sig or not verify(who, e.get("signed_payload", e["payload"]), sig):  # signatures are on the public body
             return f"missing/invalid signature of {str(who)[:8]}"
 
 

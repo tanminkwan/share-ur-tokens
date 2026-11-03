@@ -5,6 +5,7 @@ many reviewers per item. What to adopt from the verdicts is not decided here (th
 import time
 
 from arena.crypto import h
+from arena.ledger import split_payload
 from arena.peer.plugin import BaseApp
 from tests.test_assistant import RULES, asst, ctx, eco, settle  # noqa: F401  (eco is a fixture)
 
@@ -75,9 +76,10 @@ async def test_p6c2_the_ledger_checks_who_hands_over_who_judges_and_how_many(eco
     ch = h("짝꿍 제도".encode())
 
     async def hand(provider, consumer, nonce):
-        p = {"provider": provider.identity.pub, "consumer": consumer.identity.pub, "content_hash": ch, "purpose": "evaluation", "nonce": nonce,
-             "event_id": ev, "group_id": "public", "ledger_id": lid}
-        return await eco.svc.record("share", p, {provider.identity.pub: provider.identity.sign(p), consumer.identity.pub: consumer.identity.sign(p)})
+        full = {"provider": provider.identity.pub, "consumer": consumer.identity.pub, "content_hash": ch, "purpose": "evaluation", "nonce": nonce,
+                "event_id": ev, "group_id": "public", "ledger_id": lid}
+        p, private = split_payload("share", full)
+        return await eco.svc.record("share", p, {provider.identity.pub: provider.identity.sign(p), consumer.identity.pub: consumer.identity.sign(p)}, private)
     assert "issuer" in (await hand(eco.a, rv, "n1"))["error"]          # only the host hands items over
     assert "reviewer" in (await hand(eco.host, eco.b, "n2"))["error"]  # only to the contracted reviewer
     assert (await hand(eco.host, rv, "n3"))["ok"]

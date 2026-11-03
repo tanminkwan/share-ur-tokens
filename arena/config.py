@@ -211,6 +211,7 @@ class Settings(EnvSettings):
     area_http_timeout_sec: float = F("ARENA_AREA_HTTP_TIMEOUT_SEC", 10.0, float, "URL 공개 영역 가져오기 제한 시간(초)")
     area_local_notes_dir: str = F("ARENA_AREA_LOCAL_NOTES_DIR", "data/area-notes", str, "URL 공개 영역의 경험 노트·소유자 메모를 쓰는 로컬 폴더")
     solicit_inbox_size: int = F("ARENA_SOLICIT_INBOX_SIZE", 200, int, "직접 요청 받은 편지함 크기")
+    recorder_log_page: int = F("ARENA_RECORDER_LOG_PAGE", 500, int, "기록자가 공개 기록 흐름(GET /log)에서 한 번에 내주는 기록 수")
     recorder_public_track: bool = F("ARENA_RECORDER_PUBLIC_TRACK", True, _bool, "recorder가 공개키별 실적 집계를 공개할지(GET /track/{pub})")
     recorder_require_ledger_id: bool = F("ARENA_RECORDER_REQUIRE_LEDGER_ID", True, _bool, "제네시스가 있는 원장에서 0번 다음 모든 항목의 payload에 원장 식별자(ledger_id = 제네시스 해시)를 요구할지(서명을 이 원장에 묶음)")
     trust_genesis_hash: str = F("ARENA_TRUST_GENESIS_HASH", "", str, "뿌리 신뢰: 이 커뮤니티 원장의 제네시스 항목 해시(원장 밖에 공개된 값). 비면 기록자를 뿌리 값으로 검증하지 않는다")

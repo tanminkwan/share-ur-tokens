@@ -12,7 +12,8 @@ from .service import RecorderService
 
 
 class RecorderAPI(Protocol):
-    async def record(self, kind: str, payload: dict, sigs: dict) -> dict: ...
+    async def record(self, kind: str, payload: dict, sigs: dict, private: dict | None = None) -> dict: ...
+    async def log(self, start: int = 0, limit: int | None = None) -> dict: ...
     async def verify(self, hash_: str) -> dict: ...
     async def audit(self) -> dict: ...
     async def health(self) -> dict: ...
@@ -40,8 +41,11 @@ class RecorderClient:
                 r = await hc.request(method, self.base_url + path, json=json, headers=headers)
         return r.json()
 
-    async def record(self, kind, payload, sigs):
-        return await self._call("POST", "/entries", json={"type": kind, "payload": payload, "sigs": sigs})
+    async def record(self, kind, payload, sigs, private=None):
+        return await self._call("POST", "/entries", json={"type": kind, "payload": payload, "sigs": sigs, **({"private": private} if private else {})})
+
+    async def log(self, start=0, limit=None):
+        return await self._call("GET", f"/log?from={int(start)}" + (f"&limit={int(limit)}" if limit else ""))
 
     async def verify(self, hash_):
         return await self._call("GET", f"/entries/{hash_}")
@@ -83,8 +87,11 @@ class InMemoryRecorderClient:
     def __init__(self, svc: RecorderService):
         self.svc = svc
 
-    async def record(self, kind, payload, sigs):
-        return await self.svc.record(kind, payload, sigs)
+    async def record(self, kind, payload, sigs, private=None):
+        return await self.svc.record(kind, payload, sigs, private)
+
+    async def log(self, start=0, limit=None):
+        return self.svc.log(start, limit)
 
     async def verify(self, hash_):
         return self.svc.verify(hash_)

@@ -6,6 +6,7 @@ import re
 from collections import deque
 
 from ..crypto import verify
+from ..ledger.envelope import body_of
 from .plugin import BaseApp, EventApprover, MessageHead, RequestReceiver, RoleAcceptor
 
 
@@ -20,7 +21,11 @@ class RoleContracts(BaseApp):
         return {"engage": self._engage}
 
     async def _engage(self, ctx, msg, head: MessageHead):
-        role, contract = msg.get("role"), msg.get("contract", {})
+        role, contract, body = msg.get("role"), msg.get("contract", {}), msg.get("body")
+        if body is None:
+            body = contract  # nothing private
+        if body_of(contract, body) is None:  # protocol 3: sign only a body that commits to the full contract I was shown
+            return {"ok": False, "error": "the body to sign does not match the contract"}
         if role not in ctx.offers() or contract.get("role") != role:
             return {"ok": False, "error": f"role {role} not offered"}
         if contract.get("contractor") != ctx.pub:
@@ -31,7 +36,7 @@ class RoleContracts(BaseApp):
             d = await app.accept_role(actx, role, msg.get("request", {}))
             if d is not None:
                 ctx.log.emit("contract", ctx.pen, f"'{role}' 역할 계약 {'수락' if d.accept else '거절'}: {d.reason[:80]}")
-                return {"ok": True, "sig": ctx.sign(contract), "reason": d.reason} if d.accept else {"ok": False, "error": d.reason}
+                return {"ok": True, "sig": ctx.sign(body), "reason": d.reason} if d.accept else {"ok": False, "error": d.reason}
         return {"ok": False, "error": f"no app decides about role {role}"}
 
 

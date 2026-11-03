@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Awaitable, Callable
 
+from ...ledger import split_payload
 from ...crypto import h
 from .state import commit_hash, nonce
 
@@ -86,11 +87,13 @@ async def contract(A, ctx, st, role, peer):
         return {"ok": False, "error": f"참가 신청한 peer나 그 역할을 프로필에 내건 peer만 계약할 수 있다(신청자: {len(st.applicants)}명)"}
     c = {"event_id": st.event_id, "role": role, "issuer": ctx.pub, "contractor": peer_pub, "nonce": nonce(peer_pub, role),
          "group_id": st.group_id, "rules_hash": st.rules_hash, **(await ledger_tag(ctx, st))}
-    eng = await ctx.call_peer(peer_pub, {"op": "engage", "role": role, "contract": c, "request": {"event_id": st.event_id, "rules_hash": st.rules_hash}},
+    body, private = split_payload("contract", c, st.policy)  # a hidden role's contractor goes in the private envelope
+    eng = await ctx.call_peer(peer_pub, {"op": "engage", "role": role, "contract": c, "body": body,
+                                         "request": {"event_id": st.event_id, "rules_hash": st.rules_hash}},
                               group=st.group_id, event=st.event_id, url=peer_url)
     if not eng.get("ok"):
         return {"ok": False, "error": eng.get("error")}
-    r = await ctx.recorder(st.recorder_url).record("contract", c, {ctx.pub: ctx.sign(c), peer_pub: eng["sig"]})
+    r = await ctx.recorder(st.recorder_url).record("contract", body, {ctx.pub: ctx.sign(body), peer_pub: eng["sig"]}, private)
     if r.get("ok"):
         st.peers[peer_pub] = peer_url
         st.contracts.append([role, peer_pub])

@@ -15,7 +15,7 @@ def build_recorder_app(svc: RecorderService) -> Starlette:
 
     async def post_entry(r: Request):
         b = await read_json(r, "type", "payload", "sigs")
-        return reply(await svc.record(b["type"], b["payload"], b["sigs"]))
+        return reply(await svc.record(b["type"], b["payload"], b["sigs"], b.get("private")))
 
     async def get_entry(r: Request):
         return JSONResponse(svc.verify(r.path_params["hash"]))
@@ -41,6 +41,14 @@ def build_recorder_app(svc: RecorderService) -> Starlette:
     async def link(r: Request):
         return reply(svc.link(r.path_params["ledger_id"]), fail_status=404)
 
+    async def log(r: Request):
+        try:
+            start, limit = int(r.query_params.get("from", 0)), r.query_params.get("limit")
+            limit = int(limit) if limit else None
+        except ValueError:
+            return JSONResponse({"ok": False, "error": "from and limit are numbers"}, status_code=400)
+        return JSONResponse(svc.log(start, limit))
+
     async def codes(_):
         return JSONResponse(svc.codes())
 
@@ -61,6 +69,7 @@ def build_recorder_app(svc: RecorderService) -> Starlette:
         Route("/trust", guarded(trust), methods=["GET"]),
         Route("/links/{ledger_id}", guarded(link), methods=["GET"]),
         Route("/codes", guarded(codes), methods=["GET"]),
+        Route("/log", guarded(log), methods=["GET"]),
         Route("/codebooks", guarded(codebooks), methods=["GET"]),
         Route("/health", guarded(health), methods=["GET"]),
     ])

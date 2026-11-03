@@ -46,7 +46,7 @@ def _signers(p):
     return [p.get("copier")] if "copied" in p else [p.get("publisher")]
 
 
-BODY = ("type", "payload", "sigs", "prev", "ts")
+from .envelope import BODY, hash_body  # noqa: E402
 
 
 def _copied_ok(chain, p) -> str | None:
@@ -58,7 +58,7 @@ def _copied_ok(chain, p) -> str | None:
         return "copied must be a whole codebook entry of the trunk"
     if not is_branch(chain):
         return "only a branch chain copies the trunk's editions"
-    if a["hash"] != h(canon({k: a[k] for k in BODY})):
+    if a["hash"] != h(canon(hash_body(a))):
         return "the copied edition does not hash to its hash"
     ap = a["payload"]
     if "copied" in ap or "local" in ap:

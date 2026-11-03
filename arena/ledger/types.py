@@ -32,6 +32,7 @@ class EntryType:
     counters: dict = field(default_factory=dict)          # contribution fields this type adds, with their empty values
     contribute: Callable[[dict, dict, dict], None] | None = None    # (records, payload, index) -> update records
     index: Callable[[dict, dict], None] | None = None     # (payload, index) -> first pass for contributions (e.g. authors)
+    private_keys: Callable[[dict, dict], set] | None = None  # (full payload, its event's policy) -> fields that must go in the envelope
 
 
 ENTRY_TYPES: dict[str, EntryType] = {}
@@ -371,12 +372,14 @@ for _t in (
                                    "issuer": p["issuer"], "kind": p.get("kind"), "approvers": list(p.get("approvers", []))},
               counters={"events": 0, "approvals": 0}, contribute=_event_contribute),
     EntryType("contract", lambda p: [p.get("issuer"), p.get("contractor")], event_ref="required", unique_nonce=True, rules=(_contract_rule,),
-              public=_contract_public, counters={"roles": defaultdict(int)}, contribute=_map_count("roles", "contractor", "role")),
+              public=_contract_public, counters={"roles": defaultdict(int)}, contribute=_map_count("roles", "contractor", "role"),
+              private_keys=lambda p, pol: {"contractor"} if p.get("role") in (pol or {}).get("hidden_roles", []) else set()),
     EntryType("publish", lambda p: [p.get("author")], event_ref="optional", shape=_publish_shape, rules=(_publish_rule,),
               public=lambda p, c: {"author": p["author"], "content_hash": p["content_hash"], **({"label": p["label"]} if "label" in p else {})},
               counters={"published": 0},
               contribute=_count("published", "author"), index=_publish_index),
     EntryType("share", lambda p: [p.get("provider"), p.get("consumer")], event_ref="optional", needs_content=True, unique_nonce=True,
+              private_keys=lambda p, pol: {"provider", "consumer", "content_hash", "terms"},  # who handed what to whom stays private
               counters={"received_by": set()}, contribute=_share_contribute),
     EntryType("feedback", lambda p: [p.get("evaluator")], event_ref="optional", needs_content=True, rules=(_feedback_rule,),
               public=lambda p, c: {k: p[k] for k in ("evaluator", "content_hash", "verdict", "score") if k in p},
@@ -400,3 +403,13 @@ for _t in (
               contribute=_count("closed", "issuer")),
 ):
     register_entry_type(_t)
+
+
+def split_payload(kind: str, full: dict, policy: dict | None = None) -> tuple[dict, dict | None]:
+    """a full payload -> (the public body to sign, the private fields or None), by the type's rule for what must stay
+    private (protocol 3). `policy` is the policy of the event the entry belongs to (from its notarized notice)"""
+    from .envelope import with_private
+    t = ENTRY_TYPES[kind]
+    keys = t.private_keys(full, policy or {}) if t.private_keys else set()
+    fields = {k: full[k] for k in keys if k in full}
+    return with_private({k: v for k, v in full.items() if k not in fields}, fields), (fields or None)
