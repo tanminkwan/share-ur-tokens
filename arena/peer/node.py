@@ -31,6 +31,7 @@ from .reach import PeerReach
 from .receipts import Receipts
 from .scheduler import Scheduler
 from .trust_check import RecorderTrust
+from .groups import GroupModes
 
 
 @dataclass
@@ -67,6 +68,8 @@ class Peer:
         self.watch = TaskWatch(settings.a2a_watch_keep)  # my calls waiting for a webhook (arena/a2a_push.py)  # broker groups that did not answer the last profile post (Presence tries again)
         self._group_ids: dict[str, str] = {}
         self.trust = RecorderTrust(lambda: self.settings, self.recorder)  # proving recorders from the root of trust (P5-G6)
+        self.groups = GroupModes(brokers, self.group_id, self.recorder, self.recorder_trust, self.ledger_id, lambda: self.settings,
+                                 lambda: self.clock())  # does a broker group of mine keep a ledger? (P6-N)
         self._trust = self.trust.cache
         self.rest = RestTransport(settings)
         self.reach = PeerReach(identity, brokers, self.call, lambda: self.rest, lambda: self.settings.a2a_human_wait_sec)  # reaching peers by their listed connections (P6-A8, Q1)
@@ -208,6 +211,10 @@ class Peer:
                 raise RuntimeError(f"broker group {group!r} has no group_id")
             self._group_ids[group] = gid
         return self._group_ids[group]
+
+    async def group_mode(self, group: str, fresh: bool = False) -> dict:
+        """does this broker group keep a ledger? read from its founder's declaration at the broker (see GroupModes)"""
+        return await self.groups.mode(group, fresh)
 
     async def my_group_ids(self) -> set[str]:
         out = set()

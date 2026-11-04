@@ -9,6 +9,7 @@ from typing import Callable, Iterable
 from ..connections import check_connections, check_operator
 from ..config import ConfigError, Settings
 from ..crypto import Identity, pen_name, verify
+from ..groups.decl import declaration_error, next_error
 from ..search import BM25Searcher, Searcher
 from .neighbors import Caller, HttpNeighbors, NeighborGateway
 from .store import BrokerStore, FileBrokerStore, MemoryBrokerStore
@@ -30,12 +31,14 @@ class BrokerService:
         self.notices: dict[str, dict] = {}
         self.notice_meta: dict[str, dict] = {}  # notice_id -> {"updated_at", "closed"}: kept outside the signed notice
         self.grants: dict[str, float] = {}
+        self.declaration: dict | None = None  # the group's declaration, signed by its founder (P6-N1): {"decl", "sig"}
         self.store = store or MemoryBrokerStore()
         saved = self.store.load() or {}
         self.profiles.update(saved.get("profiles", {}))
         self.notices.update(saved.get("notices", {}))
         self.notice_meta.update(saved.get("notice_meta", {}))
         self.grants.update(saved.get("grants", {}))
+        self.declaration = saved.get("declaration")
         if self.group_id == settings.genesis_group_id and self.owner_pub is not None:
             raise ConfigError(f"the genesis group {self.group_id!r} is open to everyone and cannot have an owner")
 
@@ -46,7 +49,8 @@ class BrokerService:
                    store=FileBrokerStore(settings.broker_state_file))
 
     def _persist(self) -> None:
-        self.store.save({"profiles": self.profiles, "notices": self.notices, "notice_meta": self.notice_meta, "grants": self.grants})
+        self.store.save({"profiles": self.profiles, "notices": self.notices, "notice_meta": self.notice_meta, "grants": self.grants,
+                         "declaration": self.declaration})
 
     # ---- membership (closed peer group) ----
     @property
@@ -65,6 +69,54 @@ class BrokerService:
         self.grants[grant["pub"]] = float(grant["until"])
         self._persist()
         return {"ok": True}
+
+    # ---- the group's declaration (P6-N1, N3) ----
+    @property
+    def genesis(self) -> bool:
+        return self.group_id == self.settings.genesis_group_id
+
+    @property
+    def founder_pub(self) -> str | None:
+        """who signs this group's declaration: the owner of a closed group, the configured founder of an open one"""
+        return self.owner_pub if self.closed else self.settings.broker_founder_pub
+
+    async def declare(self, decl: dict, sig: str, shared: bool = False) -> dict:
+        """keep the founder's declaration of this group (a newer version replaces it) and share it with the neighbors"""
+        if self.genesis:
+            return {"ok": False, "error": "the genesis group has its ledger from the beginning and takes no declaration"}
+        bad = declaration_error(decl)
+        if bad:
+            return {"ok": False, "error": bad}
+        if decl["group_id"] != self.group_id:
+            return {"ok": False, "error": "declaration of another group"}
+        if not self.founder_pub or decl["founder"] != self.founder_pub or not verify(self.founder_pub, decl, sig or ""):
+            return {"ok": False, "error": "a group declaration is signed by the group's founder"}
+        if decl["closed"] != self.closed:
+            return {"ok": False, "error": "closed must say what this group is"}
+        if self.identity.pub not in decl["brokers"]:
+            return {"ok": False, "error": "this broker is not one of the group's brokers"}
+        old = (self.declaration or {}).get("decl")
+        if old == decl:
+            return {"ok": True, "unchanged": True}
+        bad = next_error(old, decl)
+        if bad:
+            return {"ok": False, "error": bad}
+        self.declaration = {"decl": dict(decl), "sig": sig}
+        self._persist()
+        log.info("%s: group %s declared v%s (%s)", self.name, self.group_id, decl["ver"], "ledger" if decl["ledger"] else "no ledger")
+        if not shared:
+            for url in self.neighbors:
+                try:
+                    await self.gw.share_group(url, decl, sig)
+                except Exception as e:
+                    log.warning("%s: sharing the declaration to %s failed (%s)", self.name, url, e)
+        return {"ok": True}
+
+    def group(self) -> dict:
+        """the group's declaration as its founder signed it (anyone may read it: it says whether the group keeps a ledger)"""
+        d = self.declaration or {}
+        return {"ok": True, "group_id": self.group_id, "genesis": self.genesis, "closed": self.closed, "founder": self.founder_pub,
+                "declaration": d.get("decl"), "sig": d.get("sig")}
 
     # ---- profiles ----
     def _active(self, coll: dict) -> list[dict]:

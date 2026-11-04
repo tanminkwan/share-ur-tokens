@@ -23,7 +23,7 @@ class EventState:
     rules: str
     rules_hash: str
     group_id: str
-    recorder_url: str
+    recorder_url: str                                # "" in a broker group without a ledger (P6-N2)
     recorder_pub: str
     issuer_pub: str
     issuer_url: str
@@ -68,6 +68,11 @@ class EventState:
     KEEP = ("event_id", "role", "title", "rules", "rules_hash", "group_id", "recorder_url", "recorder_pub", "issuer_pub", "issuer_url",
             "offer_roles", "transcript", "timeline", "pending", "waiting_calls", "proposals", "peers", "contracts", "applicants", "drive", "schedule", "instruction", "role_offers", "sealed_view", "evaluations", "service_receipts", "elements", "policy", "assignments", "ledger_seen", "sent_reveals", "reveals", "roster", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed", "event_hash", "notice", "endorsements",
             "last_input_at", "idle_checks")
+
+    @property
+    def on_ledger(self) -> bool:
+        """this event was declared on a ledger (False in a broker group without one, P6-N2: nothing is recorded)"""
+        return bool(self.recorder_url)
 
     def to_dict(self) -> dict:
         return {k: getattr(self, k) for k in self.KEEP}

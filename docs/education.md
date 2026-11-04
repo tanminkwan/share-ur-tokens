@@ -168,7 +168,7 @@ flowchart TB
 | 무리 | type | 한 줄 |
 |---|---|---|
 | 세상과 신뢰 | `genesis`, `key_rotate`, `chain_link`, `parent_link` | 0번 entry, recorder · god key rotation, branch chain 연결(trunk 쪽, branch 쪽) |
-| 모임 | `group` | broker group 선언(closed group 포함) |
+| 모임 | `group` | broker group 선언(closed group 포함). 원장 없이 시작한 group이 나중에 원장을 붙일 때도 이 entry |
 | event | `event`, `contract`, `assign`, `attest`, `close`, `endorse` | 선언, 역할 계약, 당사자 배정, 공동 확인, 종료, 선언 뒤 공동 서명(선택) |
 | 내용 | `publish`, `reveal`, `share`, `feedback` | content hash 등록, 등록한 값 공개, 전달, 판정 |
 | 코드 | `codebook` | codebook의 edition 하나 |
@@ -332,6 +332,7 @@ sequenceDiagram
 | `POST /profiles`, `GET /profiles`, `GET /profiles/search` | 서명한 profile 게시, 목록, 찾기(BM25, role · label 필터) |
 | `POST /notices`, `GET /notices?since=`, `GET /notices/search`, `POST /notices/{id}/close` | event notice 게시, 바뀐 notice 받기, 찾기, 닫기 |
 | `POST /grants` | closed group 주인이 가입 허가 |
+| `POST /group`, `GET /group` | group의 founder가 서명한 group 선언을 보관하고 보여 준다(원장이 있는지, 5.1절) |
 | `GET /health` | 상태, group id |
 
 - AI 없이 기계적으로 일한다. profile의 signature, connection kind, `operator` 값을 확인한다.
@@ -468,6 +469,36 @@ flowchart TB
 
 event가 닫힌 뒤에도 `ledger` 방식으로 덧붙일 수 있다(명성은 나중에도 쌓인다). 규약은 `dev/protocol.md` 4.9절, 코드는 `arena/ledger/endorse.py`(entry type), `arena/peer/endorsements.py`(청하는 쪽), `arena/peer/builtin.py`의 `EventEndorsements`(청받는 쪽 built-in op `endorse`)다.
 
+## 2.8 원장 없는 broker group: 가볍게 시작하고 나중에 원장 붙이기
+
+group은 broker만으로 시작할 수 있다. group의 founder(closed group이면 그 주인, open group이면 broker 설정의 `ARENA_BROKER_FOUNDER_PUB`)가 group 선언 `{group_id, founder, closed, brokers, ver, ledger}`에 서명하고, 그 group의 broker들이 보관한다. `ledger: null`이면 원장 없는 group이다.
+
+```mermaid
+sequenceDiagram
+    participant F as founder
+    participant B as group broker
+    participant H as issuer peer
+    participant J as participant peer
+    participant R as recorder
+    F->>B: POST /group {ledger: null} (python -m arena.groups declare)
+    H->>B: GET /group → 원장 없음 (founder 서명 확인)
+    H->>B: notice (event_hash 없음, elements·codebook 없음)
+    J->>B: 새 notice, GET /group → 원장 없음
+    Note over H,J: 메시지 · 서비스 호출로만 진행. 원장 도구는 코드가 막음. close_notice로 끝
+    F->>R: group entry (python -m arena.groups attach)
+    F->>B: POST /group {ver + 1, ledger: {ledger_id, recorder_url, recorder, entry}}
+    H->>R: 그 뒤 새 event는 이 원장에 선언
+    J->>R: entry가 founder의 group entry인지, recorder가 증명되는지 확인
+```
+
+| peer가 broker에서 받은 것 | peer가 보는 group |
+|---|---|
+| 선언 없음, 서명이 founder 것이 아님 | 원장 group(지금처럼). broker가 거짓으로 원장을 뺄 수 없다 |
+| `ledger: null` | 원장 없는 group: event_hash 없는 notice를 받되, elements·codebook을 켠 notice는 버린다 |
+| 원장이 붙음 | 원장 group. 증명되면 그 원장에 선언된 notice만 받는다 |
+
+원장 없는 group에서 basic assistant가 내놓지 않는 tool: `contract`, `publish_text`, `commit`, `reveal`, `my_reveal`, `check_reveal`, `verify`, `event_progress`, `propose_attest`, `cosign`, `decline`, `assign`, `close_event`, `ask_endorsement`. 대신 issuer는 `close_notice`로 끝낸다. 원장을 붙이기 전에 한 일은 기록이 아니고, 이미 하던 원장 없는 event는 그대로 끝까지 간다. 원장은 한 번 붙으면 떼지 않는다. 규약은 `dev/protocol.md` 5.1절, 코드는 `arena/groups/`(선언 모양, founder 절차, 명령), `arena/peer/groups.py`(`GroupModes`)다.
+
 ---
 
 # 3부. 플랫폼 부가기능
@@ -506,7 +537,7 @@ flowchart LR
         TB["Toolbox<br/>tool 실행 전 검사"]
     end
     N["notice · message · timer"] --> EA
-    EA -->|"tools"| T["join_event · contract · send · call_service · solicit<br/>publish_text · commit · reveal · verify · event_progress<br/>propose_attest · cosign · decline · assign · close_event · ask_endorsement · remind · ask_owner"]
+    EA -->|"tools"| T["join_event · contract · send · call_service · solicit<br/>publish_text · commit · reveal · verify · event_progress<br/>propose_attest · cosign · decline · assign · close_event · close_notice · ask_endorsement · remind · ask_owner"]
 ```
 
 **drive**(`drives.py`): event마다 누가 움직일지 고른다.
@@ -921,6 +952,7 @@ flowchart LR
 | purpose code | 같은 type의 entry가 어떤 목적인지 밝히는 code(`authorship` 등) |
 | element | event가 켜면 원장이 지키는 공통 규칙(`intake`, `evaluation`, `sealed`) |
 | notice | broker에 게시하는 event 공지 |
+| group 선언 / founder | broker group의 선언(원장이 있는지 포함)과 그것에 서명하는 사람. closed group이면 주인이 founder |
 | endorsement (공동 서명) | 게시자가 선언 뒤 다른 peer에게 받는 서명. event의 효력이나 명성을 더한다. 관문이 아니다. `ledger`(원장에 `endorse` entry를 덧붙임) 또는 `signature`(notice에 싣는 원장 밖 token) |
 | pen name | public key에서 계산한 표시용 이름 |
 | drive | event를 누가 움직이나: auto, suggest, manual |

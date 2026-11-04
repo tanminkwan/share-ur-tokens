@@ -29,7 +29,8 @@ class Toolbox:
     def offered(self, st) -> list[str]:
         """the tools this event offers to whoever drives it (role, closed or not, the event's elements)"""
         return [n for n, t in self.tools.items() if (st.role == "host" or not t.host_only) and (st.role != "host" or not t.participant_only)
-                and (not st.closed or t.after_close) and (t.element is None or t.element in st.elements)]
+                and (not st.closed or t.after_close) and (t.element is None or t.element in st.elements)
+                and (t.ledger is None or t.ledger == st.on_ledger)]
 
     def lines(self, st) -> str:
         return "\n".join(f"- {n} {self.tools[n].description}" for n in self.offered(st))
@@ -58,6 +59,10 @@ class Toolbox:
             return {"error": "개최자만 쓸 수 있는 도구"}
         if st.closed and not tool.after_close:
             return {"error": "닫힌 이벤트"}
+        if tool.ledger is True and not st.on_ledger:  # P6-N2: enforced by code, whoever asks
+            return {"error": "이 broker 그룹에는 원장이 없어 쓸 수 없는 도구(원장에 기록하거나 원장을 읽는다)"}
+        if tool.ledger is False and st.on_ledger:
+            return {"error": "원장이 있는 이벤트에서는 쓰지 않는 도구"}
         missing = [k for k in (tool.args or {"required": []})["required"] if k not in args]
         if missing:
             return {"error": f"인자가 맞지 않음: {', '.join(missing)} 없음"}

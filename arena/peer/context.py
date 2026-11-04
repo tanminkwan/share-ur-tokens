@@ -126,6 +126,10 @@ class AppContext:
     async def group_id(self, group: str) -> str:
         return await self._peer.group_id(group)
 
+    async def group_mode(self, group: str, fresh: bool = False) -> dict:
+        """does this broker group keep a ledger? {ledger, why, declaration, attached, proven} (P6-N)"""
+        return await self._peer.group_mode(group, fresh)
+
     async def recorder_trust(self, url: str) -> dict:
         """is the recorder at url proven by this peer's root of trust? {ok, anchored, recorder, ledger_id, why}"""
         return await self._peer.recorder_trust(url)

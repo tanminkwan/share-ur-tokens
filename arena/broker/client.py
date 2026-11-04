@@ -36,11 +36,17 @@ class GroupAdmin(Protocol):
     async def grant(self, owner: Identity, pub: str, until: float) -> dict: ...
 
 
+class GroupBoard(Protocol):
+    """the group's declaration (P6-N1): the founder posts it, anyone reads it"""
+    async def declare_group(self, founder: Identity, decl: dict) -> dict: ...
+    async def group(self) -> dict: ...
+
+
 class Health(Protocol):
     async def health(self) -> dict: ...
 
 
-class BrokerAPI(ProfileBoard, NoticeBoard, GroupAdmin, Health, Protocol):
+class BrokerAPI(ProfileBoard, NoticeBoard, GroupAdmin, GroupBoard, Health, Protocol):
     """the whole broker; each user should depend on the smallest part it needs"""
 
 
@@ -92,6 +98,12 @@ class BrokerClient:
         g = {"pub": pub, "until": until}
         return await self._call("POST", "/grants", json={"grant": g, "sig": owner.sign(g)})
 
+    async def declare_group(self, founder, decl):
+        return await self._call("POST", "/group", json={"declaration": decl, "sig": founder.sign(decl)})
+
+    async def group(self):
+        return await self._call("GET", "/group")
+
     async def health(self):
         return await self._call("GET", "/health")
 
@@ -138,6 +150,12 @@ class InMemoryBrokerClient:
     async def grant(self, owner, pub, until):
         g = {"pub": pub, "until": until}
         return await self.svc.grant(g, owner.sign(g))
+
+    async def declare_group(self, founder, decl):
+        return await self.svc.declare(decl, founder.sign(decl))
+
+    async def group(self):
+        return self.svc.group()
 
     async def health(self):
         return self.svc.health()

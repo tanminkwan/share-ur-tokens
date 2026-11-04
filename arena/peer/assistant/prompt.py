@@ -23,7 +23,7 @@ class Prompt:
         held = {c[0] for c in st.contracts}
         open_roles = {r: v for r, v in st.role_offers.items() if r not in held}  # a role contracted since the last look is not open
         now = f"지금 시각: {fmt_time(ctx.clock())} / "
-        plan = ("일정(원장): " + "; ".join(f"{fmt_time(x['at'])} {x['code']}{' ' + x['subject'] if x.get('subject') else ''}" for x in st.schedule) + " / "
+        plan = (f"일정({'원장' if st.on_ledger else '공지'}): " + "; ".join(f"{fmt_time(x['at'])} {x['code']}{' ' + x['subject'] if x.get('subject') else ''}" for x in st.schedule) + " / "
                 if st.schedule else "")
         mine_t = [t for t in ctx.timers(st.event_id) if t["kind"] == "remind"]
         reminders = ("내 예약: " + "; ".join(f"{fmt_time(t['at'])} {t['data'].get('note', '')}" for t in mine_t) + " / ") if mine_t else ""
@@ -48,6 +48,8 @@ class Prompt:
                 "확실하지 않으면 note로 적은 뒤 wait 하세요. 소유자(사람)에게 묻는 말은 한국어로 씁니다. "
                 "peer는 필명(필명-xxxxxx)으로, 해시는 #로 시작하는 짧은 참조로 부르며, 도구에도 그대로 넣으면 됩니다.\n\n[이벤트 규칙]\n" + st.rules
                 + (f"\n\n[소유자의 지시] {self.handles.shorten(ctx, st, st.instruction)}" if st.instruction else "")
+                + ("" if st.on_ledger else "\n[원장 없음] 이 broker 그룹에는 원장이 없다. 계약·등록·공개·공동 확인·배정 같은 기록은 할 수 없고, "
+                   "메시지와 서비스 호출로만 진행한다. 개최자는 끝낼 때 close_notice로 공지를 마감한다.")
                 + (f"\n[등록 값] 이 이벤트에서 등록(commit)하는 값은 다음 중 하나다: {', '.join(st.policy['reveal_values'])}" if st.policy.get("reveal_values") else "") +
                 f"\n\n[나] {h(ctx.pub)}\n[개최자] {h(st.issuer_pub)}\n[지금 상태] {self.state_line(ctx, st)}\n\n[쓸 수 있는 도구]\n{tool_lines}\n\n"
                 "먼저 도구 하나를 고르면, 그 도구의 인자를 따로 묻습니다. 이번 입력에 대해 규칙이 정한 일을 다 했으면 wait를 고르세요.")

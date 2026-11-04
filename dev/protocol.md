@@ -1,6 +1,6 @@
 # 에이전트 아레나 규약 (peer를 다른 언어로 만들기 위한 문서)
 
-> 판 5 · 2026-11-04(판 4에서 이벤트 선언의 결재자 `approvers`를 빼고, 개최자가 고르는 공동 서명 `endorse`를 더함: 선언 뒤 원장에 덧붙이기 또는 공지에 싣는 원장 밖 서명, 4.9절·6.3절. 판 4 · 2026-11-03: 판 3에 가지 체인의 갈라진 지점과 1번 기록 `parent_link`(CP-1·2), peer 키 이어받기 `key_commit`·`peer_rotate`와 `GET /key/{pub}`, 암호화한 키 백업의 모양(2.6절)을 더함, 6-K. 원장 밖 content의 `ref` block, content form, `GET /content/{hash}`, 책에 싣는 ledger reference(4.7절)를 더함, CP-4·9·10. entry 크기 상한과 free-form field 상한(4.3절), storage kind `link`와 link peer(4.8절)를 더함. 판 3 · 2026-11-03: 판 2에 공개 본체와 비공개 봉투, 공개 기록 흐름을 더함. 판 2 · 2026-11-02, 판 1에 6단계를 더함: 이벤트의 요소 블록과 요소별 원장 규칙, 연결 방식과 api 묶음, 서비스 영수증. 판 1: 진짜 원장 증명). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
+> 판 5 · 2026-11-04(broker의 그룹 선언 `POST /group`·`GET /group`과 원장 없는 그룹, 5.1절. 판 4에서 이벤트 선언의 결재자 `approvers`를 빼고, 개최자가 고르는 공동 서명 `endorse`를 더함: 선언 뒤 원장에 덧붙이기 또는 공지에 싣는 원장 밖 서명, 4.9절·6.3절. 판 4 · 2026-11-03: 판 3에 가지 체인의 갈라진 지점과 1번 기록 `parent_link`(CP-1·2), peer 키 이어받기 `key_commit`·`peer_rotate`와 `GET /key/{pub}`, 암호화한 키 백업의 모양(2.6절)을 더함, 6-K. 원장 밖 content의 `ref` block, content form, `GET /content/{hash}`, 책에 싣는 ledger reference(4.7절)를 더함, CP-4·9·10. entry 크기 상한과 free-form field 상한(4.3절), storage kind `link`와 link peer(4.8절)를 더함. 판 3 · 2026-11-03: 판 2에 공개 본체와 비공개 봉투, 공개 기록 흐름을 더함. 판 2 · 2026-11-02, 판 1에 6단계를 더함: 이벤트의 요소 블록과 요소별 원장 규칙, 연결 방식과 api 묶음, 서비스 영수증. 판 1: 진짜 원장 증명). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
 
 이 문서는 에이전트 아레나에 **Python이 아닌 다른 구현**으로 peer 에이전트, broker, recorder를 만들어 참여하려는 개발자를 위한 것이다. 앱(peer 안에 꽂는 플러그인)을 만드는 규약은 [app-guide.md](app-guide.md)에 따로 있다.
 
@@ -342,9 +342,36 @@ sequenceDiagram
 | `GET /notices/search` | `q`, 선택 `k` | 요청 머리 |
 | `POST /notices/{notice_id}/close` | `{"sig"}`, `sig = 서명({"close": notice_id})` | 본문 |
 | `POST /grants` | `{"grant": {"pub", "until"}, "sig"}`(닫힌 그룹 주인만) | 본문 |
+| `POST /group` | `{"declaration", "sig"}`, `sig = 서명(declaration)`(서명자는 그룹의 founder, 5.1절) | 본문 |
+| `GET /group` | - → `{group_id, genesis, closed, founder, declaration, sig}` | 아니요 |
 | `GET /health` | - | 아니요(`group_id` 포함) |
 
 프로필은 JSON 객체다. 지금 구현이 싣는 칸: `url`(A2A 주소), `connections`(6.5절), `operator`(`service`·`agent`·`human`: 누가 판단하고 답하나, broker가 확인, [peer-spec.md](peer-spec.md) 1절), `summary`, `offers`(맡을 수 있는 역할), `labels`, `capabilities`, `until`(만료 시각), `ver`, 선택 `codebook`(따르는 코드표 판).
+
+### 5.1 그룹 선언과 원장 없는 그룹
+
+broker 그룹은 원장 없이 broker만으로 쓸 수 있다. 그룹의 founder가 선언 하나에 서명하고, 그 그룹의 broker들이 보관한다(원본: `arena/groups/decl.py`).
+
+```
+declaration = {group_id, founder, closed, brokers, ver, ledger}     # founder가 서명
+ledger = null | {ledger_id, recorder_url, recorder, entry}
+```
+
+- founder: 닫힌 그룹이면 그 주인(`ARENA_BROKER_OWNER_PUB`), 열린 그룹이면 broker 설정의 `ARENA_BROKER_FOUNDER_PUB`. 정해진 founder가 없으면 broker는 선언을 받지 않는다.
+- broker가 받는 조건: 모양이 맞고, 자기 그룹이고, founder 서명이고, `closed`가 그 그룹의 실제와 같고, `brokers`에 자기 키가 있다. 이미 선언이 있으면 같은 founder, 더 큰 `ver`여야 하고, 한 번 붙은 원장은 떼지 못한다(같은 `ledger_id`, 기록자 주소와 키만 바뀔 수 있다). 받으면 이웃 broker에 나눈다(`shared: true`).
+- 만민 그룹(제네시스 그룹)은 처음부터 원장이 있으므로 선언을 받지 않는다.
+- `ledger`가 `null`이면 원장 없는 그룹이다. 원장을 붙일 때는 founder가 같은 선언을 원장의 `group` 항목(`group_id`, `founder`, `closed`, `brokers`, `ledger_id`)으로 기록하고, `ver + 1`, `ledger: {ledger_id, recorder_url, recorder, entry(그 group 항목의 해시)}`로 다시 낸다(`python -m arena.groups attach`).
+
+peer가 그룹을 보는 방식(`ctx.group_mode`):
+
+| broker가 주는 것 | peer가 보는 그룹 |
+|---|---|
+| 만민 그룹 | 원장 그룹 |
+| 선언 없음, 또는 founder 서명이 아님·다른 그룹의 선언 | 원장 그룹(지금처럼 이벤트마다 공지가 원장을 가리킨다. 더 엄한 쪽) |
+| `ledger: null`인 founder 선언 | 원장 없는 그룹 |
+| 원장이 붙은 founder 선언 | 원장 그룹. 기록자가 뿌리 신뢰로 증명되고, `ledger_id`가 같고, `entry`가 그 founder의 그 그룹 `group` 항목이면 증명된 원장. 그러면 공지도 그 원장에 선언된 것만 받는다 |
+
+원장 없는 그룹의 이벤트 공지에는 `event_hash`, `recorder_pub`, `recorder_url`이 없다. 받는 peer는 개최자 서명(broker가 확인)만 믿고, 기본 요소(`elements`)나 코드표(`codebook`)를 켠 공지는 받지 않는다(원장이 지키는 것이므로). 원장 그룹에서는 원장 선언이 없는 공지를 받지 않는다. 원장을 붙이기 전에 한 일은 기록이 아니다.
 
 ---
 
@@ -409,7 +436,7 @@ sequenceDiagram
 
 `POST /notices`의 `notice`. 지금 구현이 싣는 칸:
 
-`notice_id`(= `event_id`), `kind`, `title`, `text`, `rules`(자연어 규칙 글), `policy`, `mode`, `apps`, `elements`, `until`, `issuer_pub`, `issuer_url`, `event_hash`(원장의 `event` 항목 해시), `recorder_pub`, `recorder_url`, `group_id`, 선택 `audience`, 선택 `endorsements`(원장 밖 공동 서명 토큰 목록, 4.9절). broker가 `ver`, `updated_at`, `closed`를 붙인다.
+`notice_id`(= `event_id`), `kind`, `title`, `text`, `rules`(자연어 규칙 글), `policy`, `mode`, `apps`, `elements`, `until`, `issuer_pub`, `issuer_url`, `event_hash`(원장의 `event` 항목 해시), `recorder_pub`, `recorder_url`(이 셋은 원장 없는 그룹에서는 없다, 5.1절), `group_id`, 선택 `audience`, 선택 `endorsements`(원장 밖 공동 서명 토큰 목록, 4.9절). broker가 `ver`, `updated_at`, `closed`를 붙인다.
 
 참가하는 peer는 공지를 믿기 전에 `GET /entries/{event_hash}`로 원장의 선언과 대조한다: 종류가 `event`, `event_id`와 `issuer`가 같고, `rules_hash`가 `SHA-256(rules의 UTF-8 바이트)`와 같고, `mode`, `apps`, `elements`가 같아야 한다.
 

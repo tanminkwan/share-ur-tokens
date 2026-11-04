@@ -73,6 +73,13 @@ def build_broker_app(svc: BrokerService) -> Starlette:
         b = await read_json(r, "grant", "sig")
         return reply(await svc.grant(b["grant"], b["sig"]), fail_status=403)
 
+    async def post_group(r: Request):
+        b = await read_json(r, "declaration", "sig")
+        return reply(await svc.declare(b["declaration"], b["sig"], shared=bool(b.get("shared"))), fail_status=403)
+
+    async def get_group(_):
+        return JSONResponse(svc.group())
+
     async def health(_):
         return JSONResponse(svc.health())
 
@@ -85,5 +92,7 @@ def build_broker_app(svc: BrokerService) -> Starlette:
         Route("/notices/search", guarded(search_notices), methods=["GET"]),
         Route("/notices/{notice_id}/close", guarded(close_notice), methods=["POST"]),
         Route("/grants", guarded(post_grant), methods=["POST"]),
+        Route("/group", guarded(post_group), methods=["POST"]),
+        Route("/group", guarded(get_group), methods=["GET"]),
         Route("/health", guarded(health), methods=["GET"]),
     ])

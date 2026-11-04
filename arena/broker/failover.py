@@ -93,5 +93,11 @@ class FailoverBrokerClient:
     async def grant(self, owner, pub, until):
         return await self._call("grant", owner, pub, until)
 
+    async def declare_group(self, founder, decl):
+        return await self._call("declare_group", founder, decl)
+
+    async def group(self):
+        return await self._call("group")
+
     async def health(self):
         return await self._call("health")
