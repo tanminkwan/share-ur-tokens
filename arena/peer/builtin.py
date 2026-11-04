@@ -7,7 +7,7 @@ from collections import deque
 
 from ..crypto import verify
 from ..ledger.envelope import body_of
-from .plugin import BaseApp, EventApprover, MessageHead, RequestReceiver, RoleAcceptor
+from .plugin import BaseApp, EventEndorser, MessageHead, RequestReceiver, RoleAcceptor
 
 
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -40,23 +40,33 @@ class RoleContracts(BaseApp):
         return {"ok": False, "error": f"no app decides about role {role}"}
 
 
-class EventApprovals(BaseApp):
-    """op approve: sign an event declaration if I am listed as an approver and an approving app agrees"""
-    name, version, app_id = "platform.approvals", "1.0", "2de7bd30-f595-426d-a073-6dd3f9400c1f"
+class EventEndorsements(BaseApp):
+    """op endorse: another peer asks me to co-sign its event (user 2026-11-04: weight for an event, never a gate). I check
+    the body names me and an event really declared by that issuer, an app of mine decides, and I sign the body. The
+    issuer then appends it to the ledger or keeps it with the notice (arena/ledger/endorse.py)"""
+    name, version, app_id = "platform.endorsements", "1.0", "2de7bd30-f595-426d-a073-6dd3f9400c1f"
 
     def ops(self):
-        return {"approve": self._approve}
+        return {"endorse": self._endorse}
 
-    async def _approve(self, ctx, msg, head: MessageHead):
-        event = msg.get("event", {})
-        if ctx.pub not in event.get("approvers", []):
-            return {"ok": False, "error": "I am not an approver of this event"}
-        for app, actx in ctx.apps_with(EventApprover):
-            d = await app.approve_event(actx, event, msg.get("request", {}))
+    async def _endorse(self, ctx, msg, head: MessageHead):
+        from ..ledger.endorse import HOWS, body_error
+        body = msg.get("body")
+        bad = body_error(body) or (None if msg.get("how", "ledger") in HOWS else f"how must be one of {', '.join(HOWS)}")
+        if bad:
+            return {"ok": False, "error": bad}
+        if body["endorser"] != ctx.pub:
+            return {"ok": False, "error": "the endorsement names another endorser"}
+        if msg.get("recorder_url"):  # never co-sign an event that is not there
+            v = await ctx.recorder(msg["recorder_url"]).verify(body["event_hash"])
+            if not (v.get("exists") and v.get("type") == "event" and v.get("event_id") == body["event_id"] and v.get("issuer") == body["issuer"]):
+                return {"ok": False, "error": "the ledger has no such event by that issuer"}
+        for app, actx in ctx.apps_with(EventEndorser):
+            d = await app.endorse_event(actx, body, msg.get("request", {}))
             if d is not None:
-                ctx.log.emit("approve", ctx.pen, f"이벤트 {event.get('event_id')} 결재 {'승인' if d.accept else '반려'}: {d.reason[:80]}")
-                return {"ok": True, "sig": ctx.sign(event), "reason": d.reason} if d.accept else {"ok": False, "error": d.reason}
-        return {"ok": False, "error": "no app approves events here"}
+                ctx.log.emit("endorse", ctx.pen, f"이벤트 {body['event_id']} 공동 서명 {'함' if d.accept else '안 함'}: {d.reason[:80]}")
+                return {"ok": True, "sig": ctx.sign(body), "reason": d.reason} if d.accept else {"ok": False, "error": d.reason}
+        return {"ok": False, "error": "no app here decides about endorsements"}
 
 
 class DirectRequests(BaseApp):
@@ -113,4 +123,4 @@ class DirectRequests(BaseApp):
         return {"ok": True, "received": True}
 
 
-RESERVED_OPS = {"engage", "approve", "solicit"}
+RESERVED_OPS = {"engage", "endorse", "solicit"}

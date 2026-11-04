@@ -46,12 +46,15 @@ def meta(v: dict) -> dict:
 
 
 async def test_pa7_verify_reveals_only_public_metadata(svc, cast):
-    ev = await svc.record(*cast.event(approvers=[cast.approver]))
+    ev = await svc.record(*cast.event())
     hidden = await svc.record(*cast.contract(role="judge"))
     shown = await svc.record(*cast.contract(role="keeper", contractor=cast.keeper, nonce="c2"))
     pb = await svc.record(*cast.publish())
     assert meta(svc.verify(ev["hash"])) == {"ok": True, "exists": True, "type": "event", "seal_ok": True, "event_id": cast.ev, "group_id": "g-test",
-                                      "issuer": cast.issuer.pub, "kind": "test", "approvers": [cast.approver.pub]}
+                                      "issuer": cast.issuer.pub, "kind": "test"}
+    en = await svc.record(*cast.endorse(ev["hash"]))
+    assert meta(svc.verify(en["hash"])) == {"ok": True, "exists": True, "type": "endorse", "seal_ok": True, "event_id": cast.ev, "group_id": "g-test",
+                                      "issuer": cast.issuer.pub, "endorser": cast.endorser.pub, "event_hash": ev["hash"]}
     assert meta(svc.verify(hidden["hash"])) == {"ok": True, "exists": True, "type": "contract", "seal_ok": True, "event_id": cast.ev, "group_id": "g-test",
                                           "role": "judge", "issuer": cast.issuer.pub, "contractor": None}  # hidden by policy
     assert meta(svc.verify(shown["hash"]))["contractor"] == cast.keeper.pub

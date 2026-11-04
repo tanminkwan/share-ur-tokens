@@ -122,7 +122,7 @@ async def test_p5e2_p5e6_mode_and_app_list_are_separate_notarized_blocks(w):
         await announce(w.host, "sometimes", apps)
     with pytest.raises(ValueError):
         await announce(w.host, "app", [])  # an app mode needs a non-empty app list
-    bad = {"event_id": "x", "issuer": w.host.identity.pub, "kind": "k", "policy": {}, "approvers": [], "group_id": "public",
+    bad = {"event_id": "x", "issuer": w.host.identity.pub, "kind": "k", "policy": {}, "group_id": "public",
            "mode": "app", "apps": [{"id": "nope", "version": "1"}], "ledger_id": w.svc.ledger.chain[0]["hash"]}
     r = await w.svc.record("event", bad, {w.host.identity.pub: w.host.sign(bad)})
     assert r["error"] == "bad mode or app list"

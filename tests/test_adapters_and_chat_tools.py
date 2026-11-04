@@ -17,7 +17,7 @@ async def test_function_app_has_only_the_capabilities_given(eco):
         return Decision(True, "좋다")
 
     async def approve(ctx, event, request):
-        calls.append(("approve", event))
+        calls.append(("endorse", event))
         return Decision(False, "아니다")
 
     async def on_request(ctx, request, sender):
@@ -26,12 +26,12 @@ async def test_function_app_has_only_the_capabilities_given(eco):
     async def start(ctx):
         calls.append(("start",))
     app = function_app("fx", "1.0", app_id=APP_ID, ops={"hi": lambda ctx, msg, head: None}, offers=["x"], accept_role=accept,
-                       approve_event=approve, on_request=on_request, profile_extra={"k": 1}, start=start)
+                       endorse_event=approve, on_request=on_request, profile_extra={"k": 1}, start=start)
     assert app.offers() == ["x"] and "hi" in app.ops() and app.profile_extra() == {"k": 1}
-    assert (await app.accept_role(None, "r", {})).accept and not (await app.approve_event(None, {"e": 1}, {})).accept
+    assert (await app.accept_role(None, "r", {})).accept and not (await app.endorse_event(None, {"e": 1}, {})).accept
     await app.on_request(None, {}, "s")
     await app.start(None)
-    assert [c[0] for c in calls] == ["accept", "approve", "request", "start"]
+    assert [c[0] for c in calls] == ["accept", "endorse", "request", "start"]
     bare = function_app("bare", "1.0", app_id=APP_ID)
     assert not hasattr(bare, "ops") and not hasattr(bare, "start")
 

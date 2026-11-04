@@ -128,14 +128,6 @@ def register_event_column(c: EventColumn) -> None:
     EVENT_COLUMNS[c.name] = c
 
 
-def _event_shape(chain, e, now, s):
-    p = e["payload"]
-    if not isinstance(p.get("approvers", []), list):
-        return "bad approvers"
-    if p.get("issuer") in p.get("approvers", []):
-        return "approver must differ from the issuer"
-
-
 def _event_once(chain, e, now, s):
     if e["payload"].get("event_id") in events(chain):
         return "event already declared"
@@ -155,8 +147,6 @@ def _event_contribute(rec, p, index):
     _inc(rec, p["issuer"], "events")
     if isinstance(p.get("codebook"), dict) and p["codebook"].get("publisher"):  # standing comes from being followed
         _inc(rec, p["codebook"]["publisher"], "codebook_followers")
-    for a in p.get("approvers", []):
-        _inc(rec, a, "approvals")
 
 
 # ---------------- contract ----------------
@@ -459,11 +449,11 @@ for _t in (
                                                                          **({"parent": p["parent"]} if "parent" in p else {})}),
     EntryType("group", fields=_f("founder closed brokers"), signers=lambda p: [p.get("founder")], public=lambda p, c: {"founder": p["founder"], "closed": p["closed"], "brokers": list(p.get("brokers", []))},
               counters={"groups": 0}, contribute=_count("groups", "founder")),
-    EntryType("event", fields=lambda: _f("issuer kind policy approvers rules_hash mode apps") | frozenset(EVENT_COLUMNS), signers=lambda p: [p.get("issuer"), *p.get("approvers", [])], shape=_event_shape, rules=(_event_once,),
+    EntryType("event", fields=lambda: _f("issuer kind policy rules_hash mode apps") | frozenset(EVENT_COLUMNS), signers=lambda p: [p.get("issuer")], rules=(_event_once,),  # declared alone; weight comes from endorse
               public=lambda p, c: {**_rules_hash(p), **({"mode": p["mode"], "apps": p.get("apps", [])} if "mode" in p else {}),
                                    **{c.name: p[c.name] for c in EVENT_COLUMNS.values() if c.public and p.get(c.name)},
-                                   "issuer": p["issuer"], "kind": p.get("kind"), "approvers": list(p.get("approvers", []))},
-              counters={"events": 0, "approvals": 0}, contribute=_event_contribute),
+                                   "issuer": p["issuer"], "kind": p.get("kind")},
+              counters={"events": 0}, contribute=_event_contribute),
     EntryType("contract", fields=_f("role issuer contractor rules_hash"), signers=lambda p: [p.get("issuer"), p.get("contractor")], event_ref="required", unique_nonce=True, rules=(_contract_rule,),
               public=_contract_public, counters={"roles": defaultdict(int)}, contribute=_map_count("roles", "contractor", "role"),
               private_keys=lambda p, pol: {"contractor"} if p.get("role") in (pol or {}).get("hidden_roles", []) else set()),

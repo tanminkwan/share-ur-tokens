@@ -1,7 +1,7 @@
 """Track records across recorders, and a mechanical check against a requirement (e.g. before a role contract)."""
 from __future__ import annotations
 
-NUMBERS = ("published", "received_by", "events", "approvals", "closed", "groups")
+NUMBERS = ("published", "received_by", "events", "endorsements", "endorsed", "closed", "groups")
 MAPS = ("verdicts_received", "verdicts_given", "roles", "attested")
 
 
@@ -37,7 +37,7 @@ async def track_of(peer, pub: str, recorder_urls) -> dict:
 
 
 def meets(track: dict, need: dict) -> tuple[bool, list[str]]:
-    """need: {"roles": {"judge": 1}, "approvals": 1, ...} -> (ok, ["roles.judge 0/1", ...])"""
+    """need: {"roles": {"judge": 1}, "endorsements": 1, ...} -> (ok, ["roles.judge 0/1", ...])"""
     missing = []
     for k, want in need.items():
         if isinstance(want, dict):

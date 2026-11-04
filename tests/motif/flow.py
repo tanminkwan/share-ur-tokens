@@ -5,7 +5,8 @@ import time
 
 from arena.crypto import canon, h
 from arena.ledger import split_payload
-from tests.motif.doubles import APPROVER_LABEL, AUDIENCE, KIND, OPEN, POLICY, REVIEW
+from arena.ledger.endorse import endorsement_body
+from tests.motif.doubles import AUDIENCE, ENDORSER_LABEL, KIND, OPEN, POLICY, REVIEW
 
 
 def ELEMENTS() -> dict:
@@ -36,9 +37,10 @@ def nonce(*parts):
 
 
 async def open_event(w, text=CALL, reviewer=None, post=True):
-    """organizer: recorder contract -> CEO approval -> event declaration -> reviewer contract -> notice.
+    """organizer: event declaration -> the CEO's endorsement (the org opens the contest only if the CEO puts the company's
+    name on it: the org's own choice) -> recorder and reviewer contracts -> notice.
     reviewer: a pre-checked candidate (else the broker's top review hit); post=False builds the notice but does not post it"""
-    org, out = w.org, {"approved": False}
+    org, out = w.org, {"endorsed": False}
     g_open, g_rev = await org.group_id(OPEN), await org.group_id(REVIEW)  # every entry names the group it happened in
     rec_hit = (await org.brokers[OPEN].find("원장 기록 보관 열람 통제", role="record", identity=org.identity))["peers"][0]
     R = org.recorder(rec_hit["recorder_url"])
@@ -47,14 +49,17 @@ async def open_event(w, text=CALL, reviewer=None, post=True):
     c_rec = {"event_id": ev_id, "role": "record", "issuer": org.identity.pub, "contractor": rec_hit["pub"], "nonce": nonce("rec"), "group_id": g_open, **L}
     eng = await org.call(rec_hit["url"], {"op": "engage", "role": "record", "contract": c_rec, "request": {"text": text}})
     assert eng["ok"], eng
-    ceo_hit = (await org.brokers[OPEN].find("대표이사 결재", labels=[APPROVER_LABEL], identity=org.identity))["peers"][0]
-    event = {"event_id": ev_id, "issuer": org.identity.pub, "kind": KIND, "policy": POLICY, "approvers": [ceo_hit["pub"]], "group_id": g_open,
-             "elements": ELEMENTS(), **L}
-    apr = await org.call(ceo_hit["url"], {"op": "approve", "event": event, "request": {"title": text[:30], "text": text}})
-    out.update(event_id=ev_id, approval=apr, recorder=rec_hit, ceo=ceo_hit, R=R)
-    if not apr.get("ok"):
-        return out
-    ev_rec = await R.record("event", event, {org.identity.pub: org.sign(event), ceo_hit["pub"]: apr["sig"]})
+    ceo_hit = (await org.brokers[OPEN].find("대표이사 공동 서명", labels=[ENDORSER_LABEL], identity=org.identity))["peers"][0]
+    event = {"event_id": ev_id, "issuer": org.identity.pub, "kind": KIND, "policy": POLICY, "group_id": g_open, "elements": ELEMENTS(), **L}
+    ev_rec = await R.record("event", event, {org.identity.pub: org.sign(event)})  # declared by the org alone
+    assert ev_rec["ok"], ev_rec
+    body = endorsement_body(ev_id, ev_rec["hash"], org.identity.pub, ceo_hit["pub"], g_open, L.get("ledger_id"))
+    end = await org.call(ceo_hit["url"], {"op": "endorse", "body": body, "how": "ledger", "recorder_url": rec_hit["recorder_url"],
+                                          "request": {"title": text[:30], "text": text}})
+    out.update(event_id=ev_id, endorsement=end, recorder=rec_hit, ceo=ceo_hit, R=R, event_hash=ev_rec["hash"])
+    if not end.get("ok"):
+        return out  # no endorsement: the org chooses not to open the contest
+    en_rec = await R.record("endorse", body, {org.identity.pub: org.sign(body), ceo_hit["pub"]: end["sig"]})
     cr = await R.record("contract", c_rec, {org.identity.pub: org.sign(c_rec), rec_hit["pub"]: eng["sig"]})
     rev_hit = reviewer or (await org.brokers[REVIEW].find("공모 심사 평가 기준", role="review", identity=org.identity))["peers"][0]
     c_rev = {"event_id": ev_id, "role": "review", "issuer": org.identity.pub, "contractor": rev_hit["pub"], "nonce": nonce("rev"), "group_id": g_rev, **L}
@@ -62,27 +67,29 @@ async def open_event(w, text=CALL, reviewer=None, post=True):
     eng2 = await org.call(rev_hit["url"], {"op": "engage", "role": "review", "contract": c_rev, "body": rev_body, "request": {"text": text}})
     assert eng2["ok"], eng2
     cv = await R.record("contract", rev_body, {org.identity.pub: org.sign(rev_body), rev_hit["pub"]: eng2["sig"]}, rev_private)
-    assert ev_rec["ok"] and cr["ok"] and cv["ok"], (ev_rec, cr, cv)
+    assert en_rec["ok"] and cr["ok"] and cv["ok"], (en_rec, cr, cv)
     notice = {"notice_id": ev_id, "kind": KIND, "title": text[:30], "text": text, "audience": AUDIENCE,
               "until": time.time() + 600, "issuer_pub": org.identity.pub, "issuer_url": org.config.url,
-              "event_hash": ev_rec["hash"], "approver_pub": ceo_hit["pub"],
+              "event_hash": ev_rec["hash"], "endorser_pub": ceo_hit["pub"], "endorsement_hash": en_rec["hash"],
               "recorder_pub": rec_hit["pub"], "recorder_url": rec_hit["recorder_url"],
               "contracts": [{"role": "record", "hash": cr["hash"]}, {"role": "review", "hash": cv["hash"]}], "group_id": g_open,
               "elements": event["elements"]}
     posted = await org.brokers[OPEN].post_notice(org.identity, notice) if post else None
-    out.update(approved=True, event_hash=ev_rec["hash"], reviewer=rev_hit, notice=notice, posted=posted, groups=(g_open, g_rev))
+    out.update(endorsed=True, endorsement_hash=en_rec["hash"], reviewer=rev_hit, notice=notice, posted=posted, groups=(g_open, g_rev))
     return out
 
 
 async def check_notice(p, n):
-    """applicant: is the event declared and approved by someone holding the approver label? are the contracts real?"""
+    """applicant: is the event declared, and endorsed (on the ledger) by someone holding the CEO label? are the contracts real?"""
     R = p.recorder(n["recorder_url"])
-    ev = await R.verify(n["event_hash"])
-    approver = next((x for x in (await p.brokers[OPEN].list_profiles(p.identity))["profiles"] if x["pub"] == n["approver_pub"]), None)
+    ev, en = await R.verify(n["event_hash"]), await R.verify(n["endorsement_hash"])
+    endorser = next((x for x in (await p.brokers[OPEN].list_profiles(p.identity))["profiles"] if x["pub"] == n["endorser_pub"]), None)
     contracts = [await R.verify(c["hash"]) for c in n["contracts"]]
     return {"event_ok": ev["exists"] and ev["seal_ok"] and ev["type"] == "event" and ev["event_id"] == n["notice_id"]
-                        and ev["issuer"] == n["issuer_pub"] and n["approver_pub"] in ev["approvers"],
-            "approver_label_ok": bool(approver and APPROVER_LABEL in approver.get("labels", [])),
+                        and ev["issuer"] == n["issuer_pub"],
+            "endorsed_ok": en["exists"] and en["seal_ok"] and en["type"] == "endorse" and en["endorser"] == n["endorser_pub"]
+                           and en["event_hash"] == n["event_hash"] and en["issuer"] == n["issuer_pub"],
+            "endorser_label_ok": bool(endorser and ENDORSER_LABEL in endorser.get("labels", [])),
             "contracts_ok": all(c["exists"] and c["seal_ok"] and c["event_id"] == n["notice_id"] for c in contracts),
             "contracts": contracts}
 

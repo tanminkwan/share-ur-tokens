@@ -14,12 +14,13 @@ The convention book is dev/app-guide.md.
 """
 from ..peer.assistant.tools import Tool, default_tools  # noqa: F401  (extend the basic assistant)
 from ..peer.plugin import (  # noqa: F401
-    CAPABILITIES, SDK_VERSION, App, BaseApp, Decision, EventApprover, Lifecycle, MessageHead, OfferProvider, OpHandler, OpProvider,
+    CAPABILITIES, SDK_VERSION, App, BaseApp, Decision, EventEndorser, Lifecycle, MessageHead, OfferProvider, OpHandler, OpProvider,
     ProfileContributor, RequestReceiver, RoleAcceptor, capabilities_of)
 from ..peer.plugin import (  # noqa: F401
     ASSISTANT_APP_ID, ASSISTANT_RUN, MODES, EventHandler, TimerHandler, app_fingerprint, app_ref, valid_app_ref, valid_run, version_ok)
 from ..peer.plugins import load_app, load_apps  # noqa: F401
 from ..peer.events import announce_event, event_times  # noqa: F401
+from ..peer.endorsements import ask_endorsement, finish_endorsement, tokens_of  # noqa: F401  (weight for an event)
 from ..peer.scheduler import fmt_time, parse_when  # noqa: F401  (times on the peer's scheduler)
 from .adapters import A2AAgentAdapter, HttpServiceAdapter, function_app  # noqa: F401
 from .context import (  # noqa: F401  (small interfaces: an app depends only on what it uses)

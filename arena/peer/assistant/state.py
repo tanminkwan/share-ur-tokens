@@ -57,13 +57,16 @@ class EventState:
     closed: bool = False
     notice_ver: int = 1
     notice_closed: bool = False
+    event_hash: str = ""                             # the event's declaration entry (what endorsements name)
+    notice: dict = field(default_factory=dict)       # host: the notice as posted (re-posted with endorsement tokens)
+    endorsements: list = field(default_factory=list)  # [{endorser, how, hash | token}]: weight for this event (endorse)
     last_input_at: float = 0.0
     idle_checks: int = 0
     inbox: list = field(default_factory=list)
     task: asyncio.Task | None = None
 
     KEEP = ("event_id", "role", "title", "rules", "rules_hash", "group_id", "recorder_url", "recorder_pub", "issuer_pub", "issuer_url",
-            "offer_roles", "transcript", "timeline", "pending", "waiting_calls", "proposals", "peers", "contracts", "applicants", "drive", "schedule", "instruction", "role_offers", "sealed_view", "evaluations", "service_receipts", "elements", "policy", "assignments", "ledger_seen", "sent_reveals", "reveals", "roster", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed",
+            "offer_roles", "transcript", "timeline", "pending", "waiting_calls", "proposals", "peers", "contracts", "applicants", "drive", "schedule", "instruction", "role_offers", "sealed_view", "evaluations", "service_receipts", "elements", "policy", "assignments", "ledger_seen", "sent_reveals", "reveals", "roster", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed", "event_hash", "notice", "endorsements",
             "last_input_at", "idle_checks")
 
     def to_dict(self) -> dict:

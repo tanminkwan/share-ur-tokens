@@ -8,7 +8,7 @@ from arena.peer.owner import Answer
 KIND = "아이디어 공모"
 POLICY = {"roles": ["record", "review"], "conflict_roles": ["record", "review"],
           "verdict_roles": {"review": "review", "adopt": "issuer"}, "hidden_roles": ["review"]}
-APPROVER_LABEL = "직책:대표이사"
+ENDORSER_LABEL = "직책:대표이사"
 AUDIENCE = {"소속": "삼성SDS"}
 OPEN, REVIEW = "applicants", "reviewers"
 CONTENT_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["title", "idea"],
@@ -18,15 +18,16 @@ SCORES_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["
                                "properties": {"id": {"type": "string"}, "score": {"type": "number"}, "comment": {"type": "string"}}}}}}
 
 
-class ApproveByOwner(PeerApp):
-    """approve_event: ask the owner (the CEO) whether to sign the event"""
-    name = "approve-by-owner"
+class EndorseByOwner(PeerApp):
+    """endorse_event: ask the owner (the CEO) whether to put the company's name on the event (an endorsement after the
+    event is declared: weight for it, the publisher's own choice; user 2026-11-04)"""
+    name = "endorse-by-owner"
 
     def offers(self):
-        return ["approve"]
+        return ["endorse"]
 
-    async def approve_event(self, ctx, event, request):
-        a = await ctx.owner.ask("다음 이벤트를 회사 이름으로 열어도 되는지 결재를 요청받았습니다. 결재할까요?", f"이벤트 내용: {request.get('text', '')}")
+    async def endorse_event(self, ctx, body, request):
+        a = await ctx.owner.ask("다음 이벤트에 회사 이름으로 공동 서명해 달라는 요청을 받았습니다. 공동 서명할까요?", f"이벤트 내용: {request.get('text', '')}")
         return Decision(a.yes, a.why)
 
 

@@ -159,11 +159,13 @@ async def test_p4e3_recorder_process_serves_track_records(tmp_path, procs):
     env = make_env(tmp_path, ARENA_RECORDER_PORT=port)
     start(procs, "arena.recorder", env, tmp_path, url)
     R, cast = RecorderClient(url, Settings.load(env=env, dotenv_path=None)), Cast()
-    for e in (cast.event(approvers=[cast.approver]), cast.contract(), cast.contract(role="keeper", contractor=cast.keeper, nonce="k")):
+    ev = await R.record(*cast.event())
+    assert ev["ok"] and (await R.record(*cast.endorse(ev["hash"])))["ok"]
+    for e in (cast.contract(), cast.contract(role="keeper", contractor=cast.keeper, nonce="k")):
         assert (await R.record(*e))["ok"]
     t = await R.track(cast.judge.pub)
     assert t["ok"] and t["track"]["roles"] == {"judge": 1}
-    assert (await R.track(cast.approver.pub))["track"]["approvals"] == 1
+    assert (await R.track(cast.endorser.pub))["track"]["endorsements"] == 1
 
 
 async def test_p5a18_genesis_process_god_creates_broker_and_recorder(tmp_path, procs):

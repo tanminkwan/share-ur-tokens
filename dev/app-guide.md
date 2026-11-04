@@ -11,7 +11,7 @@
 flowchart TB
     subgraph peer["peer (플랫폼)"]
         CORE["peer 본체<br/>머리 확인 · op 전달 · 지속성 · 프로필"]
-        BUILTIN["내장 앱<br/>역할 계약 · 결재 · 직접 요청"]
+        BUILTIN["내장 앱<br/>역할 계약 · 공동 서명 · 직접 요청"]
         ASSIST["기본 비서<br/>자연어 규칙 + 범용 도구"]
     end
     subgraph apps["외부 앱 (생태계)"]
@@ -51,7 +51,7 @@ def make_app(settings):          # 팩토리: 설정을 받아 앱을 돌려준�
 | 능력 인터페이스를 **하나 이상** 구현한다 | 조립 시 오류 |
 | `sdk`를 밝히면 SDK 주 버전이 같아야 한다 | 조립 시 오류 |
 | op 이름이 다른 앱과 겹치지 않는다 | 조립 시 오류 |
-| 예약 op(`engage`, `approve`, `solicit`)를 쓰지 않는다 | 조립 시 오류 |
+| 예약 op(`engage`, `endorse`, `solicit`)를 쓰지 않는다 | 조립 시 오류 |
 
 ## 4. 능력 인터페이스 (필요한 것만 구현)
 
@@ -60,7 +60,7 @@ def make_app(settings):          # 팩토리: 설정을 받아 앱을 돌려준�
 | `OpProvider` | `ops() -> {op: handler}` | 다른 peer가 그 op로 메시지를 보낼 때. `handler(ctx, msg, head) -> dict` |
 | `OfferProvider` | `offers() -> [역할]` | 프로필의 공개 역할을 만들 때 |
 | `RoleAcceptor` | `accept_role(ctx, role, request) -> Decision \| None` | 누가 역할 계약(engage)을 청할 때. 모르는 역할이면 `None` |
-| `EventApprover` | `approve_event(ctx, event, request) -> Decision \| None` | 내가 결재자로 적힌 이벤트의 결재 요청이 올 때 |
+| `EventEndorser` | `endorse_event(ctx, body, request) -> Decision \| None` | 다른 peer가 자기 이벤트에 공동 서명을 청할 때(`body`: protocol.md 4.9절). 정하지 않으면 `None`. 플랫폼이 먼저 본문과 원장의 선언을 확인한다 |
 | `RequestReceiver` | `on_request(ctx, request, sender)` | 직접 요청이 받은 편지함에 들어온 뒤(뒤에서 실행, 보낸 쪽은 기다리지 않음) |
 | `ProfileContributor` | `profile_extra() -> dict` | 프로필을 게시할 때 덧붙일 항목 |
 | `Lifecycle` | `start(ctx)` | peer가 시작하거나 앱이 실행 중에 설치될 때 |
@@ -144,6 +144,18 @@ await announce_event(ctx, group="public", title="...", kind="...", rules=자연�
 | `app_or_assistant` | 필수 앱이 모두 있으면 앱들이, 아니면 기본 비서가 처리한다 |
 
 **시각에 맞춰 하는 일과 시각이 지키는 일을 나눈다.** 마감처럼 지켜야 하는 시각은 원장이 기록 시각(`ts`)으로 막는다(예: 제출 받기 요소의 `deadline`). 그 시각에 무언가를 하는 일(만나서 경기 시작, 마감 직후 평가 시작)은 peer의 예약 장치가 앱이나 비서를 깨워서 한다. 원장의 시계와 peer의 시계는 다를 수 있으니, 마감 직후의 행동은 원장 기록으로 마감이 지났는지 확인한 뒤에 한다.
+
+**공동 서명(선택).** 이벤트에 효력이나 명성을 더하고 싶으면, 선언한 뒤에 다른 peer에게 공동 서명을 청한다. 관문이 아니므로 없어도 이벤트는 열린다. 방식은 개최자가 고른다: `ledger`는 원장에 `endorse` 항목을 덧붙이고, `signature`는 원장 밖 토큰을 만들어 공지의 `endorsements`에 싣는다(protocol.md 4.9절).
+
+```python
+from arena.sdk import ask_endorsement, finish_endorsement, tokens_of
+
+done = await ask_endorsement(ctx, event_id=ev_id, event_hash=ev_hash, recorder_url=rec_url, group_id=gid,
+                             endorser=ceo_pub, how="signature")   # 또는 how="ledger"
+# ledger: done["hash"]가 endorse 항목. signature: done["token"]을 공지의 endorsements에 넣어 공지를 다시 낸다
+# 상대 소유자가 아직 정하지 않았으면 pending(task): 다시 보기로 sig를 받은 뒤 finish_endorsement(ctx, body, sig, how, rec_url)
+# 받는 쪽: tokens_of(notice)는 이 이벤트에 맞고 두 서명이 맞는 토큰만 돌려준다
+```
 
 받는 쪽은 플랫폼의 **이벤트 배정기**(내장 앱)가 **코드로만** 처리한다. LLM은 앱 식별자를 보지 않는다. 배정기는 공지의 규칙 해시·실행 방식·앱 목록이 원장과 같은지 확인하고, 목록의 앱을 `app_id`로 찾는다. 버전은 주 버전이 같고 지정 버전 이상이어야 하고, `hash`가 있으면 내 앱의 코드 해시(`app_fingerprint`)와 같아야 한다. 조건이 맞으면 목록에서 이벤트를 받는 앱(`EventHandler`) **모두에게** 넘긴다. 맞지 않으면 넘기지 않고 이유를 로그에 남긴다.
 

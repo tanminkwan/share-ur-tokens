@@ -31,7 +31,8 @@ def ledger_stats(chain: list[dict], top_flows: int, genesis_group_id: str | None
                      for e in chain if e["type"] == "group"],
         "signers": len({pub for e in chain for pub in e["sigs"]}),
         "events": [{"event_id": e["payload"]["event_id"], "kind": e["payload"].get("kind"), "issuer": e["payload"]["issuer"],
-                    "approvers": list(e["payload"].get("approvers", []))} for e in chain if e["type"] == "event"],
+                    "endorsers": [x["payload"]["endorser"] for x in chain if x["type"] == "endorse" and x["payload"]["event_id"] == e["payload"]["event_id"]]}
+                   for e in chain if e["type"] == "event"],
         "verdicts": verdicts,
         "roles": dict(Counter(e["payload"]["role"] for e in chain if e["type"] == "contract")),
         "attests": dict(Counter(e["payload"].get("kind") for e in chain if e["type"] == "attest")),

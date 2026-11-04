@@ -45,7 +45,9 @@ async def setup(tmp_path, settings):
     for p in (rec, ov, judge):
         await p.advertise()
     # a small generic history: approved event, roles, a published doc, shares, a scored verdict and a pick
-    for e in (cast.event(approvers=[cast.approver]), cast.contract(role="keeper", contractor=cast.keeper, nonce="k"), cast.contract(),
+    ev = await svc.record(*cast.event())
+    assert ev["ok"] and (await svc.record(*cast.endorse(ev["hash"])))["ok"]
+    for e in (cast.contract(role="keeper", contractor=cast.keeper, nonce="k"), cast.contract(),
               cast.publish(), cast.share(consumer=cast.judge, nonce="s1"), cast.share(consumer=cast.issuer, nonce="s2"),
               cast.feedback("score", score=8.0), cast.feedback("pick", evaluator=cast.issuer)):
         assert (await svc.record(*e))["ok"]
@@ -57,18 +59,18 @@ async def test_p3c1_p3c2_locates_reads_and_audits(setup):
     snap = await s["role"].snapshot(s["ov"])
     assert [r["recorder_url"] for r in s["role"].recorders] == ["mem://rec/recorder"]
     assert snap["integrity"]["agree"] is True and snap["integrity"]["recorders"][0]["status"] == "ok"
-    s["svc"].ledger.chain[3]["payload"]["author"] = s["cast"].other.pub  # tamper with history behind everyone's back
+    s["svc"].ledger.chain[4]["payload"]["author"] = s["cast"].other.pub  # tamper with history behind everyone's back (the publish)
     s["role"].invalidate()
     snap = await s["role"].snapshot(s["ov"])
-    assert snap["integrity"]["agree"] is False and "TAMPERED at seq 3" in snap["integrity"]["recorders"][0]["status"]
+    assert snap["integrity"]["agree"] is False and "TAMPERED at seq 4" in snap["integrity"]["recorders"][0]["status"]
     assert sum("변조" in e["text"] for e in s["ov"].log.tail(20)) == 1
 
 
 def test_p3c3_generic_stats(setup):
     st = ledger_stats(setup["svc"].ledger.chain, top_flows=5)
     c = setup["cast"]
-    assert st["entries"] == 8 and st["by_type"] == {"event": 1, "contract": 2, "publish": 1, "share": 2, "feedback": 2}
-    assert st["events"] == [{"event_id": c.ev, "kind": "test", "issuer": c.issuer.pub, "approvers": [c.approver.pub]}]
+    assert st["entries"] == 9 and st["by_type"] == {"event": 1, "endorse": 1, "contract": 2, "publish": 1, "share": 2, "feedback": 2}
+    assert st["events"] == [{"event_id": c.ev, "kind": "test", "issuer": c.issuer.pub, "endorsers": [c.endorser.pub]}]
     assert st["verdicts"] == {"score": {"count": 1, "avg": {"score": 8.0}}, "pick": {"count": 1, "avg": {}}}
     assert st["roles"] == {"keeper": 1, "judge": 1}
     assert st["signers"] == 5 and len(st["top_flows"]) == 2 and st["span_sec"] >= 0
@@ -81,14 +83,14 @@ async def test_p3c4_p3c5_per_peer_and_access_log(setup):
     j = by[s["cast"].judge.pub]
     assert j["strengths"] == "평가 전문가" and j["roles"] == {"judge": 1} and j["verdicts_given"] == {"score": 1}
     assert by[s["cast"].keeper.pub]["roles"] == {"keeper": 1} and by[s["cast"].keeper.pub]["group"] == "open"
-    assert s["cast"].approver.pub in by and by[s["cast"].approver.pub]["approvals"] == 1  # no profile, still on record
+    assert s["cast"].endorser.pub in by and by[s["cast"].endorser.pub]["endorsements"] == 1  # no profile, still on record
     assert snap["access"][0]["granted"] is True
 
 
 async def test_p3c6_snapshot_op_only_for_viewers_and_cached(setup, settings):
     s = setup
     r = await s["ov"].handle(dict({"op": "god_snapshot"}, **sign_message(s["viewer"], "god_snapshot")))
-    assert r["ok"] and r["snapshot"]["stats"]["entries"] == 8
+    assert r["ok"] and r["snapshot"]["stats"]["entries"] == 9
     r = await s["ov"].handle(dict({"op": "god_snapshot"}, **sign_message(Identity.generate(), "god_snapshot")))
     assert r == {"ok": False, "error": "not a viewer"}
     assert (await s["ov"].handle({"op": "god_snapshot"}))["ok"] is False
@@ -98,5 +100,5 @@ async def test_p3c6_snapshot_op_only_for_viewers_and_cached(setup, settings):
 
 
 def test_p3c7_god_has_no_write_or_content_ops(setup):
-    assert set(setup["ov"].skills()) == {"engage", "approve", "solicit", "god_snapshot"}  # platform ops + read-only snapshot
+    assert set(setup["ov"].skills()) == {"engage", "endorse", "solicit", "god_snapshot"}  # platform ops + read-only snapshot
     assert setup["ov"].offers() == []

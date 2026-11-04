@@ -10,3 +10,4 @@ from . import builtin_elements  # noqa: F401,E402  (registers the built-in eleme
 from . import schedule  # noqa: F401,E402  (registers the schedule column)
 from . import codebook  # noqa: F401,E402  (registers the codebook entry type and column)
 from . import peer_keys  # noqa: F401,E402  (registers key_commit and peer_rotate: a peer's key succession)
+from . import endorse  # noqa: F401,E402  (registers endorse: co-signing an event after it is declared)

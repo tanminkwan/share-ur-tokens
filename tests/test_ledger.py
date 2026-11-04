@@ -16,10 +16,10 @@ GROUP = "g-test"  # broker group identifier every ledger entry carries (P5-A11)
 
 
 class Cast:
-    """author, event issuer, a contracted judge, a keeper, an approver, a stranger; builders for signed entries"""
+    """author, event issuer, a contracted judge, a keeper, an endorser, a stranger; builders for signed entries"""
 
     def __init__(self):
-        self.author, self.issuer, self.judge, self.keeper, self.approver, self.other = (Identity.generate() for _ in range(6))
+        self.author, self.issuer, self.judge, self.keeper, self.endorser, self.other = (Identity.generate() for _ in range(6))
         self.ev, self.group = "ev-1", GROUP
         self.ledger_id = None  # set it to write into a ledger begun by a genesis (P5-G4)
         self.policy = POLICY  # the policy of the last event declared (which roles are hidden: protocol 3)
@@ -27,15 +27,18 @@ class Cast:
     def _tag(self) -> dict:
         return {"group_id": self.group, **({"ledger_id": self.ledger_id} if self.ledger_id else {})}
 
-    def event(self, ev=None, policy=None, approvers=(), issuer=None, sign_by=None):
+    def event(self, ev=None, policy=None, issuer=None):
         i = issuer or self.issuer
         self.policy = POLICY if policy is None else policy
-        p = {"event_id": ev or self.ev, "issuer": i.pub, "kind": "test", "policy": self.policy,
-             "approvers": [a.pub for a in approvers], **self._tag()}
-        sigs = {i.pub: i.sign(p)}
-        for a in (approvers if sign_by is None else sign_by):
-            sigs[a.pub] = a.sign(p)
-        return "event", p, sigs
+        p = {"event_id": ev or self.ev, "issuer": i.pub, "kind": "test", "policy": self.policy, **self._tag()}
+        return "event", p, {i.pub: i.sign(p)}
+
+    def endorse(self, event_hash, endorser=None, ev=None, issuer=None, sign_by=None):
+        """a co-signature of an event already declared (weight for it, never a gate)"""
+        from arena.ledger.endorse import endorsement_body
+        i, who = issuer or self.issuer, endorser or self.endorser
+        p = endorsement_body(ev or self.ev, event_hash, i.pub, who.pub, self.group, self.ledger_id)
+        return "endorse", p, {x.pub: x.sign(p) for x in (sign_by if sign_by is not None else (i, who))}
 
     def publish(self, content="doc A", author=None, ev="__default__"):
         a = author or self.author
@@ -162,12 +165,26 @@ def test_pa2_event_declared_once_with_valid_policy(ledger, cast):
     ok(ledger, cast.event(ev="ev-5", policy={}))  # every key is optional
 
 
-def test_pa9_event_needs_every_approver_signature(ledger, cast):
+def test_endorsements_come_after_the_event_and_change_nothing_before_them(ledger, cast):
+    """user 2026-11-04: an endorsement is the publisher's choice, for weight; never a gate. The event is declared alone;
+    co-signatures are appended afterwards (the event entry and its hash stay as they were)"""
+    bad = dict(cast.event()[1], approvers=[cast.endorser.pub])
+    assert "approvers" in err(ledger, ("event", bad, {cast.issuer.pub: cast.issuer.sign(bad)}))  # no co-signers at declaration
+    e = ok(ledger, cast.event())
+    before = json.dumps(ledger.chain[e["seq"]])
     second = Identity.generate()
-    assert err(ledger, cast.event(approvers=[cast.approver, second], sign_by=[cast.approver])).startswith("missing/invalid signature")
-    assert err(ledger, cast.event(approvers=[cast.issuer])) == "approver must differ from the issuer"
-    e = ok(ledger, cast.event(approvers=[cast.approver, second]))
-    assert set(e["sigs"]) == {cast.issuer.pub, cast.approver.pub, second.pub}
+    assert err(ledger, cast.endorse(e["hash"], sign_by=[cast.issuer])).startswith("missing/invalid signature")  # the endorser signs too
+    assert "other than the event's issuer" in err(ledger, cast.endorse(e["hash"], endorser=cast.issuer))
+    assert "not declared here" in err(ledger, cast.endorse("0" * 64))
+    assert "not declared here" in err(ledger, cast.endorse(e["hash"], ev="ghost"))
+    assert "only the event's issuer" in err(ledger, cast.endorse(e["hash"], issuer=cast.other, sign_by=[cast.other, cast.endorser]))
+    assert "names event_id" in err(ledger, ("endorse", {"event_id": cast.ev, "group_id": cast.group}, {}))
+    a = ok(ledger, cast.endorse(e["hash"]))
+    ok(ledger, cast.endorse(e["hash"], endorser=second))
+    assert "already endorsed" in err(ledger, cast.endorse(e["hash"]))
+    assert json.dumps(ledger.chain[e["seq"]]) == before and a["seq"] > e["seq"]  # appended; the event entry unchanged
+    ok(ledger, cast.close(result_hash=a["hash"]))
+    ok(ledger, cast.endorse(e["hash"], endorser=Identity.generate()))  # standing: an endorsement may come after the event closed
 
 
 def test_pa4_contract_needs_declared_event_same_issuer_allowed_role(ledger, cast):
@@ -212,7 +229,8 @@ def test_pa5_unknown_event_is_rejected(ledger, cast):
 
 
 def test_pa6_contribution_is_generic(ledger, cast):
-    ok(ledger, cast.event(approvers=[cast.approver]))
+    ev = ok(ledger, cast.event())
+    ok(ledger, cast.endorse(ev["hash"]))
     ok(ledger, cast.publish())
     ok(ledger, cast.share(consumer=cast.issuer, nonce="a"))
     ok(ledger, cast.share(consumer=cast.issuer, nonce="b"))
@@ -223,10 +241,10 @@ def test_pa6_contribution_is_generic(ledger, cast):
     ok(ledger, cast.feedback("pick", evaluator=cast.issuer))
     c = contribution(ledger.chain)
     assert c[cast.author.pub] == {"published": 1, "received_by": 2, "verdicts_received": {"score": 1, "pick": 1},
-                                  "verdicts_given": {}, "roles": {}, "events": 0, "approvals": 0, "attested": {}, "closed": 0, "groups": 0, "revealed": 0, "codebooks": 0, "codebook_followers": 0}
+                                  "verdicts_given": {}, "roles": {}, "events": 0, "endorsements": 0, "endorsed": 0, "attested": {}, "closed": 0, "groups": 0, "revealed": 0, "codebooks": 0, "codebook_followers": 0}
     assert c[cast.judge.pub]["roles"] == {"judge": 1} and c[cast.judge.pub]["verdicts_given"] == {"score": 1}
     assert c[cast.issuer.pub]["events"] == 1 and c[cast.issuer.pub]["verdicts_given"] == {"pick": 1}
-    assert c[cast.approver.pub]["approvals"] == 1
+    assert c[cast.endorser.pub]["endorsements"] == 1 and c[cast.issuer.pub]["endorsed"] == 1
 
 
 # ---------------- audit, persistence ----------------
@@ -251,12 +269,13 @@ def test_r2_10_audit_finds_first_tampered_entry(ledger, cast):
     assert audit_chain(t) == "TAMPERED at seq 0 (recorder seal)"
 
 
-def test_pa9_audit_rechecks_approver_signatures(ledger, cast):
-    ok(ledger, cast.event(approvers=[cast.approver]))
+def test_the_audit_rechecks_endorsement_signatures(ledger, cast):
+    ev = ok(ledger, cast.event())
+    ok(ledger, cast.endorse(ev["hash"]))
     t = json.loads(json.dumps(ledger.chain))
-    t[0]["sigs"][cast.approver.pub] = "00" * 64
-    t[0]["hash"] = h(canon({k: t[0][k] for k in ("type", "payload", "sigs", "prev", "ts")}))
-    assert audit_chain(t) == "TAMPERED at seq 0 (signature)"
+    t[1]["sigs"][cast.endorser.pub] = "00" * 64
+    t[1]["hash"] = h(canon({k: t[1][k] for k in ("type", "payload", "sigs", "prev", "ts")}))
+    assert audit_chain(t).startswith("TAMPERED at seq 1")
 
 
 def test_r2_12_jsonl_store_persists_and_reloads(tmp_path, settings, clock, cast):

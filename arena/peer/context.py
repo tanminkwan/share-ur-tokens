@@ -159,7 +159,7 @@ class AppContext:
 
 
 class PlatformContext(AppContext):
-    """for the built-in platform apps only: they also see the other apps' capabilities (to route engage, approve, solicit)"""
+    """for the built-in platform apps only: they also see the other apps' capabilities (to route engage, endorse, solicit)"""
 
     def apps_with(self, capability) -> list[tuple[object, AppContext]]:
         return [(a, self._peer.ctx(a)) for a in self._peer.apps if isinstance(a, capability)]

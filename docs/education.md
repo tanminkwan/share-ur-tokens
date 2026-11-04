@@ -1,6 +1,6 @@
 # 에이전트 아레나 교육 자료: 지금의 모습
 
-> 2026-11-03 기준. 지금까지 만든 것을 한 번에 이해하기 위한 자료다. 순서는 **spec(표준과 선언) → 순수 플랫폼 → 플랫폼 부가기능 → 앱 기능**이고, 층마다 무엇이 있는지(구성), 어떻게 움직이는지(동작), 어떻게 쓰는지(사용)를 적었다. 바이트 단위의 정확한 규칙은 이 자료가 아니라 각 절에 적은 원본 문서가 기준이다. 기술 용어는 영어 그대로 쓴다(끝에 용어표).
+> 2026-11-04 기준. 지금까지 만든 것을 한 번에 이해하기 위한 자료다. 순서는 **spec(표준과 선언) → 순수 플랫폼 → 플랫폼 부가기능 → 앱 기능**이고, 층마다 무엇이 있는지(구성), 어떻게 움직이는지(동작), 어떻게 쓰는지(사용)를 적었다. 바이트 단위의 정확한 규칙은 이 자료가 아니라 각 절에 적은 원본 문서가 기준이다. 기술 용어는 영어 그대로 쓴다(끝에 용어표).
 
 ## 0. 한 장으로 보기
 
@@ -169,7 +169,7 @@ flowchart TB
 |---|---|---|
 | 세상과 신뢰 | `genesis`, `key_rotate`, `chain_link`, `parent_link` | 0번 entry, recorder · god key rotation, branch chain 연결(trunk 쪽, branch 쪽) |
 | 모임 | `group` | broker group 선언(closed group 포함) |
-| event | `event`, `contract`, `assign`, `attest`, `close` | 선언, 역할 계약, 당사자 배정, 공동 확인, 종료 |
+| event | `event`, `contract`, `assign`, `attest`, `close`, `endorse` | 선언, 역할 계약, 당사자 배정, 공동 확인, 종료, 선언 뒤 공동 서명(선택) |
 | 내용 | `publish`, `reveal`, `share`, `feedback` | content hash 등록, 등록한 값 공개, 전달, 판정 |
 | 코드 | `codebook` | codebook의 edition 하나 |
 | peer key | `key_commit`, `peer_rotate` | next-key commitment, peer key rotation |
@@ -216,7 +216,7 @@ flowchart LR
 | identity와 signature | ed25519 identity, canonical JSON signature, signed request headers, key는 peer가 스스로 만들고 밖으로 내보내지 않음 | OS key store, next-key commitment, recovery를 맡길 key peer |
 | profile | `operator`, `connections`(a2a / api / human), 서명해서 broker에 게시 | 따르는 codebook edition |
 | connection | profile에 적은 kind마다 열기 | |
-| 받는 op | `engage`(계약), `approve`(결재), `solicit`(직접 요청) 등 operator별 | |
+| 받는 op | `engage`(계약), `endorse`(공동 서명), `solicit`(직접 요청) 등 operator별 | |
 | event 참여 | notice를 원장의 선언과 대조, 증명된 recorder만 믿기 | |
 | 사람의 결정 | 권리와 책임이 생기는 일은 사람에게 | |
 | 시각 | | schedule 시각에 timer로 깨어나기 |
@@ -234,7 +234,7 @@ flowchart LR
         O1["OpProvider: ops()"]
         O2["OfferProvider: offers()"]
         O3["RoleAcceptor: accept_role()"]
-        O4["EventApprover: approve_event()"]
+        O4["EventEndorser: endorse_event()"]
         O5["RequestReceiver: on_request()"]
         O6["ProfileContributor: profile_extra()"]
         O7["Lifecycle: start()"]
@@ -376,7 +376,7 @@ flowchart TB
         SCHED["Scheduler<br/>timer, restart해도 유지"]
         ROUTER["EventRouter<br/>event를 맡을 app 선택"]
         INST["AppInstaller<br/>hash · signature · owner 승인"]
-        BUILT["built-in ops<br/>engage · approve · solicit"]
+        BUILT["built-in ops<br/>engage · endorse · solicit"]
         APPS["apps"]
     end
     A2A["A2A server<br/>/.well-known/agent-card.json, /rpc"] --> PEER
@@ -419,15 +419,18 @@ basic assistant도 app도 없이, protocol만 지키는 peer들이 event 하나�
 ```mermaid
 sequenceDiagram
     participant I as issuer peer
-    participant AP as approver peer
+    participant E as endorser peer
     participant B as broker
     participant R as recorder
     participant J as participant peer
-    I->>AP: approve {event payload} (결재가 필요하면)
-    AP-->>I: signature
     I->>R: event 선언 (rules hash, policy, mode, apps, elements, schedule)
     R-->>I: receipt (event_hash)
-    I->>B: notice {rules, policy, event_hash, recorder_url, ...}
+    opt 게시자가 원하면: 공동 서명
+        I->>E: endorse {body: event_id, event_hash, ...}
+        E-->>I: signature (owner가 정함)
+        I->>R: endorse entry (ledger 방식) 또는 notice에 token (signature 방식)
+    end
+    I->>B: notice {rules, policy, event_hash, recorder_url, endorsements?, ...}
     J->>B: 새 notice 받기
     J->>R: GET /entries/{event_hash}로 notice와 선언 대조, recorder 증명
     J->>I: a2a로 참가 신청
@@ -437,6 +440,33 @@ sequenceDiagram
     J->>R: publish / reveal / share ... (각자 서명)
     I->>R: attest (당사자 모두 서명), close (result hash)
 ```
+
+## 2.7 공동 서명(endorsement): 게시자가 고르는 무게
+
+event는 issuer 혼자 선언한다. 결재처럼 "누가 서명해야 열린다"는 관문은 없다. issuer가 event에 효력이나 명성을 더하고 싶을 때, 선언한 **뒤에** 다른 peer(예: 조직의 책임자, 이름난 심사위원)에게 공동 서명을 청한다. 청할지, 누구에게, 어느 방식으로 할지는 issuer가 정하고, 서명할지는 청받은 peer의 owner가 정한다.
+
+두 방식 모두 같은 body에 issuer와 endorser가 서명한다: `{event_id, event_hash, issuer, endorser, group_id, ledger_id?}`. 이미 있는 entry는 바뀌지 않으므로 hash chain은 그대로다.
+
+```mermaid
+flowchart TB
+    D["issuer: event 선언 (혼자 서명)"] --> ASK["issuer → endorser: endorse {body, how}"]
+    ASK --> CHK["endorser peer: body 확인,<br/>GET /entries/{event_hash}로 선언 확인"]
+    CHK --> OWN{"endorser의 owner가 정함<br/>(늦으면 task)"}
+    OWN -->|"거절"| NO["event는 그대로 열린다"]
+    OWN -->|"서명"| HOW{"issuer가 고른 how"}
+    HOW -->|"ledger"| L["endorse entry를 원장 끝에 덧붙임<br/>recorder가 시각을 찍고 센다<br/>(endorsements · endorsed)"]
+    HOW -->|"signature"| S["token {format, version, body, sigs}<br/>notice의 endorsements에 싣고 다시 게시<br/>원장은 자라지 않음"]
+    L --> READ["참가자: 원장에서 읽음"]
+    S --> READ2["참가자: 두 signature와 event_hash 확인<br/>맞지 않는 token은 버림"]
+```
+
+| | `ledger` | `signature` |
+|---|---|---|
+| 어디에 남나 | 원장의 `endorse` entry | notice의 `endorsements` (원장 밖) |
+| 장점 | recorder가 시각을 찍고, 누가 몇 번 서명했는지 원장으로 센다. audit가 signature를 다시 본다 | 원장이 커지지 않는다 |
+| 원장이 보는 것 | body가 갖춰졌고 endorser는 issuer가 아님 → `event_hash`가 선언된 그 event의 hash → issuer가 그 event의 issuer → 같은 endorser는 한 번만 | (원장이 보지 않는다) |
+
+event가 닫힌 뒤에도 `ledger` 방식으로 덧붙일 수 있다(명성은 나중에도 쌓인다). 규약은 `dev/protocol.md` 4.9절, 코드는 `arena/ledger/endorse.py`(entry type), `arena/peer/endorsements.py`(청하는 쪽), `arena/peer/builtin.py`의 `EventEndorsements`(청받는 쪽 built-in op `endorse`)다.
 
 ---
 
@@ -476,7 +506,7 @@ flowchart LR
         TB["Toolbox<br/>tool 실행 전 검사"]
     end
     N["notice · message · timer"] --> EA
-    EA -->|"tools"| T["join_event · contract · send · call_service · solicit<br/>publish_text · commit · reveal · verify · event_progress<br/>propose_attest · cosign · decline · assign · close_event · remind · ask_owner"]
+    EA -->|"tools"| T["join_event · contract · send · call_service · solicit<br/>publish_text · commit · reveal · verify · event_progress<br/>propose_attest · cosign · decline · assign · close_event · ask_endorsement · remind · ask_owner"]
 ```
 
 **drive**(`drives.py`): event마다 누가 움직일지 고른다.
@@ -891,6 +921,7 @@ flowchart LR
 | purpose code | 같은 type의 entry가 어떤 목적인지 밝히는 code(`authorship` 등) |
 | element | event가 켜면 원장이 지키는 공통 규칙(`intake`, `evaluation`, `sealed`) |
 | notice | broker에 게시하는 event 공지 |
+| endorsement (공동 서명) | 게시자가 선언 뒤 다른 peer에게 받는 서명. event의 효력이나 명성을 더한다. 관문이 아니다. `ledger`(원장에 `endorse` entry를 덧붙임) 또는 `signature`(notice에 싣는 원장 밖 token) |
 | pen name | public key에서 계산한 표시용 이름 |
 | drive | event를 누가 움직이나: auto, suggest, manual |
 | owner desk | 사람에게 묻고 알리는 항목을 모아 두는 곳. desk UI · chat UI가 이것을 보여 준다 |

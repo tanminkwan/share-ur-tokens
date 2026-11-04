@@ -1,6 +1,6 @@
 # 에이전트 아레나 규약 (peer를 다른 언어로 만들기 위한 문서)
 
-> 판 4 · 2026-11-03(판 3에 가지 체인의 갈라진 지점과 1번 기록 `parent_link`(CP-1·2), peer 키 이어받기 `key_commit`·`peer_rotate`와 `GET /key/{pub}`, 암호화한 키 백업의 모양(2.6절)을 더함, 6-K. 원장 밖 content의 `ref` block, content form, `GET /content/{hash}`, 책에 싣는 ledger reference(4.7절)를 더함, CP-4·9·10. entry 크기 상한과 free-form field 상한(4.3절), storage kind `link`와 link peer(4.8절)를 더함. 판 3 · 2026-11-03: 판 2에 공개 본체와 비공개 봉투, 공개 기록 흐름을 더함. 판 2 · 2026-11-02, 판 1에 6단계를 더함: 이벤트의 요소 블록과 요소별 원장 규칙, 연결 방식과 api 묶음, 서비스 영수증. 판 1: 진짜 원장 증명). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
+> 판 5 · 2026-11-04(판 4에서 이벤트 선언의 결재자 `approvers`를 빼고, 개최자가 고르는 공동 서명 `endorse`를 더함: 선언 뒤 원장에 덧붙이기 또는 공지에 싣는 원장 밖 서명, 4.9절·6.3절. 판 4 · 2026-11-03: 판 3에 가지 체인의 갈라진 지점과 1번 기록 `parent_link`(CP-1·2), peer 키 이어받기 `key_commit`·`peer_rotate`와 `GET /key/{pub}`, 암호화한 키 백업의 모양(2.6절)을 더함, 6-K. 원장 밖 content의 `ref` block, content form, `GET /content/{hash}`, 책에 싣는 ledger reference(4.7절)를 더함, CP-4·9·10. entry 크기 상한과 free-form field 상한(4.3절), storage kind `link`와 link peer(4.8절)를 더함. 판 3 · 2026-11-03: 판 2에 공개 본체와 비공개 봉투, 공개 기록 흐름을 더함. 판 2 · 2026-11-02, 판 1에 6단계를 더함: 이벤트의 요소 블록과 요소별 원장 규칙, 연결 방식과 api 묶음, 서비스 영수증. 판 1: 진짜 원장 증명). 지금의 Python 구현(`arena/`)이 실제로 하는 일을 적은 것이다. 이 문서와 코드가 다르면 코드가 맞고, 이 문서를 고친다. 판을 올리는 방식은 아직 정하지 않았다(9절).
 
 이 문서는 에이전트 아레나에 **Python이 아닌 다른 구현**으로 peer 에이전트, broker, recorder를 만들어 참여하려는 개발자를 위한 것이다. 앱(peer 안에 꽂는 플러그인)을 만드는 규약은 [app-guide.md](app-guide.md)에 따로 있다.
 
@@ -169,7 +169,7 @@ peer의 비밀키 백업은 기기 안에서 소유자의 암호문구로 잠근
 |---|---|---|
 | `genesis` | `god` | `god`, `broker`, `recorder`, `group_id`, 커뮤니티 체인이면 `parent`(`{ledger_id, recorder_url, recorder, branch_point}`: 연결한 원래 체인, 그 기록자 주소, 갈라질 때 그 기록자 키, 갈라진 지점 `{seq, hash}`(그때 원래 체인의 마지막 기록)) |
 | `group` | `founder` | `group_id`, `founder`, `closed`, `brokers` |
-| `event` | `issuer`와 `approvers` 전원 | `event_id`, `issuer`, `kind`, `policy`, `approvers`, `rules_hash`, `mode`, `apps`, 선택 `elements`(4.6절), 선택 `schedule`(`[{at, code, subject?, note?}]`: 일정. `at`은 초 단위 시각, `code`는 등록된 시각 코드 `start`·`session`·`deadline`·`end`, 항목 수 상한 `ARENA_EVENT_SCHEDULE_MAX`), 선택 `codebook`(`{entry, publisher, version}`: 따르는 코드표 판. 원장이 그 판 기록과 대조하고, 기본 요소가 그 판의 코드인지, 이 기록자가 그 판의 원장 코드를 모두 구현했는지 본다) |
+| `event` | `issuer` | `event_id`, `issuer`, `kind`, `policy`, `rules_hash`, `mode`, `apps`, 선택 `elements`(4.6절), 선택 `schedule`(`[{at, code, subject?, note?}]`: 일정. `at`은 초 단위 시각, `code`는 등록된 시각 코드 `start`·`session`·`deadline`·`end`, 항목 수 상한 `ARENA_EVENT_SCHEDULE_MAX`), 선택 `codebook`(`{entry, publisher, version}`: 따르는 코드표 판. 원장이 그 판 기록과 대조하고, 기본 요소가 그 판의 코드인지, 이 기록자가 그 판의 원장 코드를 모두 구현했는지 본다) |
 | `contract` | `issuer`, `contractor` | `event_id`, `role`, `issuer`, `contractor`, `nonce`, `rules_hash` |
 | `publish` | `author` | `author`, `content_hash`, 선택 `event_id`, 선택 `label`, 선택 `purpose`(`authorship` · `commit`), 선택 `form`(content form, 4.7절), 선택 `ref`(원장 밖 위치, 4.7절. 숨기려면 봉투에) |
 | `reveal` | `author` | `author`, `label`, `value`, `salt`, `commit`(그 작성자의 `publish` 항목 해시), `event_id` |
@@ -178,6 +178,7 @@ peer의 비밀키 백업은 기기 안에서 소유자의 암호문구로 잠근
 | `assign` | `issuer` | `event_id`, `issuer`, `subjects`(`{주제: [공개키, ...]}`) |
 | `attest` | `parties` 전원 | 선택 `event_id`, `kind`, `subject`, `value`, `parties`, `nonce` |
 | `close` | `issuer` | `event_id`, `issuer`, `result_hash`(이 이벤트의 항목) |
+| `endorse` | `issuer`, `endorser` | `event_id`, `event_hash`(그 이벤트 선언 항목의 해시), `issuer`, `endorser`(공동 서명, 4.9절) |
 | `key_rotate` | `old`, `new`, 기록자면 `god`도 | `role`(`recorder`·`god`), `old`(그 시점의 유효한 키), `new`, 기록자면 `god`(지금의 god 키), `nonce` |
 | `codebook` | `publisher` | `publisher`, `name`, `version`(`x.y`), `content_hash`(코드표 문서의 해시), `codes`(`entry_types`·`purposes`·`elements`·`time_codes`·`connections` 목록), 선택 `supersedes`(앞 판의 기록 해시), 선택 `local`(가지 체인만: `{"purposes": {"x-<커뮤니티>.<코드>": {types, description}}}`, 그 체인 안에서만 쓰는 자체 목적 코드). **옮겨 적기**(가지 체인만): `{copier, copied: 뿌리의 판 기록 전체}`, 서명자 `copier`. 원장이 옮긴 기록의 해시·판을 낸 이의 서명·봉인·뿌리 식별자를 확인하고, 그 뒤 이벤트는 뿌리 판 기록의 해시로 판을 가리킨다. 같은 낸 이·이름·번호는 한 번만, 같은 표의 새 판은 번호가 더 커야 함([codebook.md](codebook.md)) |
 | `key_commit` | `pub` | `pub`, `next`(다음 키의 약속: 다음 공개키 16진 문자열의 UTF-8 바이트에 대한 SHA-256), 선택 `recovery`(복구에 서명할 수 있는 키 peer 공개키 목록, 최대 `ARENA_KEY_RECOVERY_MAX`, 자기 자신은 안 됨). 키마다 한 번, 이미 이어받기에 든 키는 안 됨 |
@@ -286,6 +287,49 @@ content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
 
 **ledger reference**에는 선택 `links: [{"peer", "id", "via"?}, ...]`가 붙고, 한 줄 주소에는 link peer마다 `&link=<peer>/<id>|<via>`가 붙는다.
 
+### 4.9 공동 서명(endorse): 게시자가 고르는 무게
+
+이벤트는 개최자 혼자 선언한다. 개최자가 이벤트에 효력이나 명성을 더하고 싶으면, 선언한 **뒤에** 다른 peer(예: 조직의 책임자)에게 공동 서명을 청한다. 공동 서명은 관문이 아니다. 없어도 이벤트는 그대로 열리고, 청할지, 누구에게, 어느 방식으로 청할지는 개최자가 정하며, 서명할지는 청받은 peer의 소유자가 정한다. 이미 있는 항목은 바뀌지 않으므로 해시 체인도 그대로다.
+
+두 방식은 서명한 본문 하나를 같이 쓴다. 청받은 peer의 서명 하나가 어느 방식에도 쓰인다.
+
+```
+body = {event_id, event_hash, issuer, endorser, group_id, ledger_id?}   # issuer와 endorser가 서명
+```
+
+| 방식(`how`) | 어디에 남나 | 누가 어떻게 확인하나 |
+|---|---|---|
+| `ledger` | `endorse` 항목을 원장 끝에 덧붙인다(본문이 payload). 기록자가 시각을 찍고 센다(`endorsements`: 준 수, `endorsed`: 받은 수) | 누구나 원장에서 읽는다. 감사(audit)가 두 서명을 다시 본다 |
+| `signature` | 원장은 자라지 않는다. 토큰 `{format: "arena-endorsement", version: 1, body, sigs}`을 공지의 `endorsements` 목록에 실어 공지를 다시 낸다(`ver` + 1) | 공지를 받은 peer가 두 서명을 보고, `GET /entries/{event_hash}`로 그 이벤트가 선언되었는지 본다. 맞지 않는 토큰은 버린다 |
+
+원장이 `endorse` 항목에서 보는 것(원본: `arena/ledger/endorse.py`):
+
+1. 본문에 `event_id`, `event_hash`, `issuer`, `endorser`, `group_id`가 있고, `endorser`는 `issuer`가 아니다
+2. `event_hash`가 이 원장에 선언된 그 `event_id` 이벤트 항목의 해시다
+3. `issuer`가 그 이벤트의 개최자다
+4. 같은 `endorser`가 같은 이벤트에 두 번 서명하지 않는다
+
+이벤트가 닫힌 뒤에도 덧붙일 수 있다(명성은 나중에도 쌓인다).
+
+```mermaid
+sequenceDiagram
+    participant I as issuer peer
+    participant R as recorder
+    participant E as endorser peer
+    participant B as broker
+    I->>R: event 선언 (issuer 혼자 서명)
+    R-->>I: receipt (event_hash)
+    I->>E: endorse {body, how}
+    E->>R: GET /entries/{event_hash} (선언 확인)
+    E-->>I: sig(body) (소유자가 정함. 늦으면 task)
+    alt how = ledger
+        I->>R: endorse 항목 (issuer, endorser 서명)
+        R-->>I: receipt
+    else how = signature
+        I->>B: notice 다시 내기 (endorsements: [token], ver + 1)
+    end
+```
+
 ## 5. broker
 
 | 요청 | 본문 또는 질의 | 서명 |
@@ -333,7 +377,7 @@ content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
 | op | 본문 | 답 |
 |---|---|---|
 | `engage` | `role`, `contract`(4.4의 contract payload, 내가 `contractor`), `request` | 받아들이면 `{"ok": true, "sig": 서명(contract)}` |
-| `approve` | `event`(4.4의 event payload, 내가 `approvers`에 있음), `request` | 결재하면 `{"ok": true, "sig": 서명(event)}` |
+| `endorse` | `body`(4.9절의 공동 서명 본문, 내가 `endorser`), `how`(`ledger` · `signature`), 선택 `recorder_url`, `request` | 서명하면 `{"ok": true, "sig": 서명(body)}`, 아니면 `{"ok": false, "reason"}`. 사람이 정하면 느린 답(task) |
 | `solicit` | `request`(공지 없는 직접 요청: `request_id`, `text`, `data`, `issuer_pub`, `issuer_url`, `until`, `group_id`, 선택 `event_id`·`audience`), `sig = 서명(request)` | `{"ok": true, "received": true}` |
 | `event_message` | 서명된 본문(6.4): `text`, `data` | `{"ok": true}` |
 | `attest_request` | 서명된 본문: `request_id`, `payload`(4.4의 attest payload, 나도 당사자) | `{"ok": true}` |
@@ -341,7 +385,7 @@ content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
 | `app_get`, `app_list`, `app_publish` | 앱 배포 peer만(선택, [app-guide.md](app-guide.md) 10-1) | |
 | `intake.submit`, `evaluation.request` | 요소의 내장 앱(4.6절) | |
 
-앱이 더하는 op는 앱마다 다르다. `engage`, `approve`, `solicit`는 플랫폼 예약어다.
+앱이 더하는 op는 앱마다 다르다. `engage`, `endorse`, `solicit`는 플랫폼 예약어다.
 
 ### 6.4 서명된 본문 (기본 비서끼리)
 
@@ -365,7 +409,7 @@ content hash = SHA-256(form으로 만든 bytes). 시험 벡터 `content_form`.
 
 `POST /notices`의 `notice`. 지금 구현이 싣는 칸:
 
-`notice_id`(= `event_id`), `kind`, `title`, `text`, `rules`(자연어 규칙 글), `policy`, `mode`, `apps`, `elements`, `until`, `issuer_pub`, `issuer_url`, `event_hash`(원장의 `event` 항목 해시), `recorder_pub`, `recorder_url`, `group_id`, 선택 `audience`. broker가 `ver`, `updated_at`, `closed`를 붙인다.
+`notice_id`(= `event_id`), `kind`, `title`, `text`, `rules`(자연어 규칙 글), `policy`, `mode`, `apps`, `elements`, `until`, `issuer_pub`, `issuer_url`, `event_hash`(원장의 `event` 항목 해시), `recorder_pub`, `recorder_url`, `group_id`, 선택 `audience`, 선택 `endorsements`(원장 밖 공동 서명 토큰 목록, 4.9절). broker가 `ver`, `updated_at`, `closed`를 붙인다.
 
 참가하는 peer는 공지를 믿기 전에 `GET /entries/{event_hash}`로 원장의 선언과 대조한다: 종류가 `event`, `event_id`와 `issuer`가 같고, `rules_hash`가 `SHA-256(rules의 UTF-8 바이트)`와 같고, `mode`, `apps`, `elements`가 같아야 한다.
 

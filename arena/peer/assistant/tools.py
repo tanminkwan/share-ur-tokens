@@ -35,6 +35,7 @@ class ToolHost(Protocol):
     async def offering_op(self, ctx, op: str) -> list: ...
     def reveal_records(self, obj) -> list: ...
     waiting: WaitingCalls  # calls that came back pending
+    async def keep_endorsement(self, ctx, st, done: dict) -> dict: ...
     async def fill_reveals(self, ctx, st, obj) -> tuple: ...
     async def verify_reveals(self, ctx, st, obj) -> list: ...
 
@@ -57,14 +58,14 @@ LABELS = {"ask_owner": "소유자에게 묻기", "join_event": "참가 신청", 
           "call_service": "서비스 부르기", "contact": "사람 연락처 보기", "solicit": "직접 요청 보내기", "publish_text": "글 먼저 등록",
           "commit": "값 먼저 등록(숨김)", "reveal": "등록한 값 공개", "my_reveal": "내 공개값 보기", "check_reveal": "받은 공개값 확인",
           "verify": "원장 항목 확인", "event_progress": "진행 현황 보기", "propose_attest": "공동 확인 제안", "cosign": "서명 요청에 서명",
-          "decline": "서명 요청 거절", "assign": "당사자 배정", "close_event": "이벤트 닫기", "note": "메모 남기기", "remind": "예약(그 시각에 알림)", "check_pending": "기다리던 답 확인",
+          "decline": "서명 요청 거절", "assign": "당사자 배정", "close_event": "이벤트 닫기", "note": "메모 남기기", "remind": "예약(그 시각에 알림)", "check_pending": "기다리던 답 확인", "ask_endorsement": "공동 서명 청하기",
           "wait": "기다리기"}
 ARG_LABELS = {"question": "물을 말", "role": "역할", "peer": "상대(필명)", "to": "받는 이(필명)", "text": "글", "data_json": "덧붙일 자료(JSON)",
               "attach_reveals": "붙일 공개 이름표(JSON 목록)", "op": "기능 이름", "input_json": "입력(JSON)", "subject": "주제",
               "targets": "받는 이들(필명, JSON 목록)", "label": "이름표", "value": "값", "publish_hash": "등록 기록 해시", "author": "작성자(필명)",
               "salt": "비밀값", "hash": "기록 해시 또는 내용 해시", "kind": "종류", "value_json": "값(JSON)", "parties": "당사자들(필명, JSON 목록)",
               "request_id": "요청 번호", "reason": "이유", "subjects_json": "배정(JSON: {\"주제\": [필명, …]})", "result_hash": "결과 기록 해시",
-              "when": "언제('+초' 또는 2026-11-03T18:00:00+09:00)", "note": "메모", "evaluator": "평가자(필명)", "task_id": "기다리는 일 번호"}
+              "when": "언제('+초' 또는 2026-11-03T18:00:00+09:00)", "note": "메모", "evaluator": "평가자(필명)", "task_id": "기다리는 일 번호", "how": "방식(ledger: 원장에 덧붙이기, signature: 원장 밖 서명)"}
 
 
 # ---------------- implementations ----------------
@@ -373,6 +374,31 @@ async def remind(A, ctx, st, when, note):
     return {"ok": True, "id": tid, "at": fmt_time(at), "note": "그 시각에 코드가 깨운다. 그때까지 확인하러 깨어날 필요가 없다"}
 
 
+async def ask_endorsement(A, ctx, st, peer, how="ledger"):
+    """ask another peer to co-sign this event: weight for it, my choice, never a gate (the event goes on regardless)"""
+    from ..endorsements import ask_endorsement as ask
+    if not st.event_hash:
+        return {"ok": False, "error": "이 이벤트의 선언 기록 hash를 모른다"}
+    pub, url = await A.resolve_peer(ctx, st, peer, need_url=False)
+    if not pub:
+        return {"ok": False, "error": f"{peer}를 찾지 못했다"}
+    r = await ask(ctx, event_id=st.event_id, event_hash=st.event_hash, recorder_url=st.recorder_url, group_id=st.group_id, endorser=pub,
+                  endorser_url=url, how=how, request={"title": st.title, "text": f"'{st.title}'에 공동 서명을 청합니다"},
+                  recorder_pub=st.recorder_pub)
+    if r.get("pending"):  # the other side's owner is deciding: finished when the answer arrives (WaitingCalls)
+        return A.waiting.hold(ctx, st, r, "endorse", {"body": r["body"], "how": how, "recorder_url": st.recorder_url})
+    if not r.get("ok"):
+        return r
+    return await A.keep_endorsement(ctx, st, dict(r, endorser=pub))
+
+
+@finisher("endorse")
+async def finish_endorse(A, ctx, st, eng, data):
+    from ..endorsements import finish_endorsement
+    done = await finish_endorsement(ctx, data["body"], eng.get("sig"), data["how"], data["recorder_url"], st.recorder_pub)
+    return await A.keep_endorsement(ctx, st, dict(done, endorser=data["body"]["endorser"]))
+
+
 async def check_pending(A, ctx, st, task_id=None):
     """look again at calls that came back pending; those whose answer arrived are finished by code"""
     results = await A.waiting.check(A, ctx, st, task_id)
@@ -427,6 +453,9 @@ def _default_tools() -> list[Tool]:
         Tool("close_event", "{result_hash}: 이 이벤트를 원장에서 닫고 공지를 마감한다", _obj(result_hash=S), close_event, host_only=True),
         Tool("note", "{text}: 나중을 위해 메모를 남긴다", _obj(text=S), note, after_close=True),
         Tool("remind", "{when, note}: 그 시각에 나를 깨운다(when: '+초' 또는 ISO 8601 시각). 시각이 정해진 일을 기다릴 때 쓴다", _obj(when=S, note=S), remind),
+        Tool("ask_endorsement", "{peer, how?}: 다른 peer(필명)에게 이 이벤트의 공동 서명을 청한다(이벤트의 효력이나 명성을 위해, 개최자가 고른다). "
+             "how: ledger(원장에 덧붙임, 기본) 또는 signature(원장 밖 서명, notice에 붙음). 상대가 거절해도 이벤트는 그대로 진행한다",
+             dict(_obj(peer=S), properties={"peer": S, "how": {"type": "string", "enum": ["ledger", "signature"]}}), ask_endorsement, host_only=True),
         Tool("check_pending", "{task_id?}: pending으로 돌아온 호출(상대가 아직 답하지 않은 계약 등)을 지금 다시 확인한다. 답이 왔으면 코드가 마저 처리한다. "
              "코드도 정해진 간격으로 확인하므로 꼭 부를 필요는 없다", {"type": "object", "properties": {"task_id": S}}, check_pending),
         Tool("wait", "{}: 이번 입력에 대해 할 일을 다 했다. 다음 입력을 기다린다", None, wait, after_close=True),

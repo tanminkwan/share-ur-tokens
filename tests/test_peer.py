@@ -1,4 +1,4 @@
-"""P2-B5, B8, B9, B11, B14: peer assembly, op dispatch, engage, approve, profile, receipts."""
+"""P2-B5, B8, B9, B11, B14: peer assembly, op dispatch, engage, endorse, profile, receipts."""
 import pytest
 
 from arena.a2a import LocalTransport
@@ -32,8 +32,8 @@ class EchoApp(PeerApp):
     async def accept_role(self, peer, role, request):
         return Decision(request.get("fit", True), "fits" if request.get("fit", True) else "busy") if role == "judge" else None
 
-    async def approve_event(self, peer, event, request):
-        return Decision(event.get("kind") != "bad", "looks fine")
+    async def endorse_event(self, peer, body, request):
+        return Decision(request.get("ok", True), "looks fine" if request.get("ok", True) else "not my kind of event")
 
 
 def area(tmp_path, settings):
@@ -57,7 +57,7 @@ async def test_pb8_ops_from_apps_and_unknown_op(tmp_path, settings, broker):
     p = make_peer(tmp_path, settings, broker, apps=[EchoApp()])
     assert await p.handle({"op": "hello", "who": "me"}) == {"ok": True, "hello": "me"}
     assert await p.handle({"op": "nope"}) == {"ok": False, "error": "unknown op: nope"}
-    assert set(p.skills()) == {"engage", "approve", "solicit", "hello"}
+    assert set(p.skills()) == {"engage", "endorse", "solicit", "hello"}
     assert p.offers() == ["x", "judge"]
 
 
@@ -96,18 +96,22 @@ async def test_pb9_engage_rules(tmp_path, settings, broker):
     assert r == {"ok": False, "error": "no app decides about role x"}
 
 
-async def test_pb14_approve_rules(tmp_path, settings, broker):
-    from arena.crypto import verify
+async def test_endorse_rules_on_the_endorsers_side(tmp_path, settings, broker):
+    """another peer asks me to co-sign its event: I sign the body only if it names me, an app of mine agrees, and (given
+    a recorder) the event is really declared by that issuer"""
+    from arena.crypto import Identity, verify
+    from arena.ledger.endorse import endorsement_body
     p = make_peer(tmp_path, settings, broker, apps=[EchoApp()])
-    ev = {"event_id": "e", "issuer": "i", "kind": "ok", "policy": {}, "approvers": [p.identity.pub]}
-    r = await p.handle({"op": "approve", "event": ev, "request": {}})
-    assert r["ok"] and verify(p.identity.pub, ev, r["sig"]) and r["reason"] == "looks fine"
-    assert (await p.handle({"op": "approve", "event": dict(ev, kind="bad"), "request": {}}))["ok"] is False
-    r = await p.handle({"op": "approve", "event": dict(ev, approvers=["other"]), "request": {}})
-    assert r == {"ok": False, "error": "I am not an approver of this event"}
+    body = endorsement_body("e", "h" * 64, Identity.generate().pub, p.identity.pub, "public")
+    r = await p.handle({"op": "endorse", "body": body, "request": {}})
+    assert r["ok"] and verify(p.identity.pub, body, r["sig"]) and r["reason"] == "looks fine"
+    assert (await p.handle({"op": "endorse", "body": body, "request": {"ok": False}}))["error"] == "not my kind of event"
+    assert "another endorser" in (await p.handle({"op": "endorse", "body": dict(body, endorser="other"), "request": {}}))["error"]
+    assert "names event_id" in (await p.handle({"op": "endorse", "body": {"event_id": "e"}}))["error"]
+    assert "how must be" in (await p.handle({"op": "endorse", "body": body, "how": "fax"}))["error"]
     q = make_peer(tmp_path, settings, broker)
-    r = await q.handle({"op": "approve", "event": dict(ev, approvers=[q.identity.pub]), "request": {}})
-    assert r == {"ok": False, "error": "no app approves events here"}
+    r = await q.handle({"op": "endorse", "body": dict(body, endorser=q.identity.pub), "request": {}})
+    assert r == {"ok": False, "error": "no app here decides about endorsements"}
 
 
 async def test_pb5_profile_summarizes_public_docs_and_bumps_version(tmp_path, settings, broker, clock):
