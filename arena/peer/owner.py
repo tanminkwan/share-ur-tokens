@@ -10,6 +10,7 @@ from typing import Protocol, runtime_checkable
 class Answer:
     yes: bool
     why: str
+    answered: bool = True  # False: nobody answered in time (taken as no); code tells the two apart by this field
 
 
 class Owner(Protocol):

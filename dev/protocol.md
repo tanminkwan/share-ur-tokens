@@ -87,6 +87,14 @@ peer의 비밀키 백업은 기기 안에서 소유자의 암호문구로 잠근
 
 키 peer에 맡기는 요청 `key.backup.put`의 서명 대상은 `{"op": "key.backup.put", "pub", "backup": SHA-256(정규JSON(백업)), "ts"}`이고 그 백업의 키(`pub`)가 서명한다.
 
+스핑크스(그룹 생성을 허락하는 사람의 peer, `dev/founding/requirements.md`)에 내는 신청 `sphinx.apply`는 `{"application": {"founder", "purpose", "contact", "ts"}, "sig"}`이고, `sig`는 `founder` 키(앞으로 가지의 god)가 `application`에 한 서명이다. `purpose`와 `contact`는 짧은 글(`ARENA_SPHINX_PURPOSE_MAX`자 이하), `ts`는 서명 창 안의 시각. 사람이 승인하면 통과 증명서가 나온다:
+
+```
+pass = {format: "arena-founding-pass", version: 1, body: {founder, sphinx, issued_at, until, nonce}, sig}   # sig: sphinx 키가 body에
+```
+
+증명서는 그 `founder` 키에만 쓰인다(양도 불가). 확인: `arena/ledger/founding.py`의 `pass_error`. 뿌리 원장이 `chain_link`에서 증명서를 요구하는 규칙은 아직 없다(FG-C3).
+
 ## 3. broker·recorder에 보내는 HTTP 서명 요청
 
 열람에 권한이 필요한 요청은 세 머리를 단다.

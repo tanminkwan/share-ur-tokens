@@ -95,6 +95,27 @@ sequenceDiagram
 | 대리인의 사람 판단 | 대리인 peer를 사람 모드로 띄워 console 화면에서 통과·거절(Playwright) |
 | 세리머니 순서에 위임 기록이 들어감 | 제네시스 리허설 테스트(CP-6) |
 
+## 3-1. 구현 1차: 스핑크스 peer (2026-11-04)
+
+사용자: "특수목적 peer로 심사자(스핑크스) peer를 만들어", "지금은 신청을 받으면 사람이 대면하고 OK를 하면 그룹생성을 해주는 역할".
+
+| 부분 | 파일 | 요구사항 |
+|---|---|---|
+| 스핑크스의 역할(앱) | `arena/peer/sphinx_role.py`: `sphinx.info`, `sphinx.apply`, `sphinx.status` | FG-B1 신청(founder 키 서명, 지금 시각, 짧은 글), FG-B5 사람이 정함(소유자 창구의 물음, `ARENA_SPHINX_DECIDE_WAIT_SEC`까지 기다림), FG-B6 기간당 상한(`ARENA_SPHINX_CAP_COUNT`/`_DAYS`), FG-D1·D2 원장에 개인정보 없음(신청은 스핑크스 home에만) |
+| 통과 증명서 | `arena/ledger/founding.py`: `pass_body`, `make_pass`, `pass_error` | FG-C1(모양은 `{format, version, body, sig}`로 정함), FG-C2 founder 키에만, 기한 `ARENA_SPHINX_PASS_DAYS` |
+| 실행 | `python -m arena.peers.sphinx`: 견본 개인 peer(사람 모드)에 스핑크스 역할을 얹음, 사람의 창은 console. `deploy/sphinx-peer/` | FG-B3 영상·대면은 플랫폼 밖 |
+| 신청자 | `python -m arena.groups apply`(`--home` 또는 가지 god 키 `--key-file`), `pass`(`--out`) | FG-B1 |
+
+정한 동작:
+- 같은 founder의 신청이 기다리는 중이면 같은 신청 번호를 돌려준다. 유효한 증명서를 이미 가진 founder에게는 새로 주지 않는다.
+- 사람이 정해진 시간 안에 정하지 않으면 거절이 아니라 `expired`(다시 신청)다. 답의 전용 field `Answer.answered`로 구별한다(글자 비교가 아님).
+- 승인 순간에 상한이 찼으면 그 신청은 `rejected`(한도). 상한은 신청 때와 승인 때 모두 본다.
+- peer가 다시 시작하면 기다리던 신청을 사람에게 다시 묻는다.
+
+아직 아닌 것: FG-A(god의 `delegate` 기록, 스핑크스 키의 다음 키 약속), FG-B2(통화 예약을 플랫폼이 다룸: 지금은 스핑크스의 사람이 신청자의 연락처로 직접 연락), FG-B4(무작위 지시는 사람이 통화에서 함), FG-C3·C4(뿌리 원장이 `chain_link`에서 증명서를 요구), FG-E.
+
+테스트: `tests/test_sphinx.py`(9개: 증명서, 신청 검사, 승인, 거절과 시간 초과의 구별, 상한, 재시작, 사람 없는 peer, 신청자 명령, 실행), `tests/test_sphinx_processes.py`(진짜 제네시스 위의 실제 프로세스: 스핑크스 peer가 broker에 보이고, 신청자 명령으로 a2a 신청, 사람의 창 API에서 승인, 신청자 명령으로 증명서를 받아 확인), `tests/test_deploy.py`(`deploy/sphinx-peer`).
+
 ## 4. 아직 다루지 않는 것
 
 - 커뮤니티가 커뮤니티를 보증하는 길(주된 길이 될 것)과 그 모의 실험
