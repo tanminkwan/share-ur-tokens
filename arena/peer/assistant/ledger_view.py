@@ -20,6 +20,8 @@ class LedgerView:
 
     async def progress_entries(self, ctx, st) -> list[dict]:
         """this event's entries in public view; everyone named in them joins the roster (so they show as handles)"""
+        if not st.on_ledger:
+            return []  # a broker group without a ledger: nothing to read
         try:
             r = await ctx.recorder(st.recorder_url).event_entries(st.event_id)
         except Exception:

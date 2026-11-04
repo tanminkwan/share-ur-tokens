@@ -77,7 +77,7 @@ def make_app(settings):          # 팩토리: 설정을 받아 앱을 돌려준�
 | `Platform` | 플랫폼 서비스 | `settings`, `clock()`, `log`, `llm`, `owner`(사람), `area`(공개 영역) |
 | `Storage` | 앱 전용 저장 | `state.load()` / `state.save(dict)`(재시작 뒤에도 유지), `data_dir`(이 앱만 쓰는 폴더) |
 | `LedgerAccess` | 기록자와 원장 | `known_recorders`, `recorder(url)`, `recorder_trust(url)`(뿌리 신뢰부터 확인), `ledger_id(url)`, `receipts`(기록자 영수증) |
-| `Messaging` | 다른 peer와 broker | `brokers`(그룹별 broker), `call(url, msg, group=, event=)`, `call_peer(pub, msg, ...)`(그 peer가 밝힌 연결 방식 a2a·api 가운데 쓸 수 있는 것으로), `profile_of(pub)`, `solicit(targets, request)`, `group_id(그룹 이름)` |
+| `Messaging` | 다른 peer와 broker | `brokers`(그룹별 broker), `call(url, msg, group=, event=)`, `call_peer(pub, msg, ...)`(그 peer가 밝힌 연결 방식 a2a·api 가운데 쓸 수 있는 것으로), `profile_of(pub)`, `solicit(targets, request)`, `group_id(그룹 이름)`, `group_mode(그룹 이름)`(그 그룹이 원장을 두는지: `{ledger, why, declaration, attached, proven}`, protocol.md 5.1) |
 | `Showing` | 나를 알리기 | `offers()`, `advertise()`, `add_experience(note)` |
 | `Scheduling` | 예약 | `schedule(at, kind, data=, event_id=)` → 예약 id, `cancel_timer(id 또는 event_id=)`, `timers(event_id=)`. 홈 폴더에 남아 재시작해도 이어지고, 꺼져 있던 동안 놓친 예약은 켜질 때 한 번 온다. "아직인가?"를 확인하려고 주기적으로 깨어나지 말고 예약을 건다(토큰과 시간을 아낀다) |
 | `ElementAccess` | 기본 요소가 모은 것 | `submissions(event_id)`(받은 제출, `SubmissionSource` 능력을 가진 앱을 거쳐) |
@@ -102,6 +102,7 @@ def make_app(settings):          # 팩토리: 설정을 받아 앱을 돌려준�
 ## 7. 원장 규약
 
 - 원장의 **모든 항목에 `group_id`**(그 일이 일어난 broker 그룹)를 넣는다. 선언되지 않은 그룹은 기록자가 거절한다(만민 그룹 `public`은 제네시스가 만든다).
+- **원장 없는 그룹**(protocol.md 5.1): `ctx.group_mode(그룹)["ledger"]`가 `False`이면 원장에 기록하지 않는다. `announce_event`는 원장 선언 없이 공지만 내고, 기본 요소나 코드표를 켜면 거절한다. 배정기는 그런 그룹에서만 원장 선언 없는 공지를 앱에 넘긴다.
 - 이벤트에 관한 항목은 `event_id`를 넣고, 이벤트 선언의 policy(역할, 판정, 공동 확인)를 따른다. 닫힌 이벤트에는 기록할 수 없다.
 - **내용은 원장에 올리지 않는다.** 해시만 올리고 본문은 각자 보관한다.
 - 기록 응답은 `ctx.receipts.keep(...)`으로 영수증을 남긴다(나중에 원장이 잘려도 증명).

@@ -292,6 +292,32 @@ sequenceDiagram
 
 견본 개인 peer의 홈은 `PeerHome.key_store()`로 키를 둔다. god, broker, 기록자 같은 플랫폼 시설의 키는 지금처럼 파일이다(서버에서 돈다).
 
+## 9-2. 6-N 원장 없는 broker 그룹
+
+```mermaid
+flowchart TB
+    F["founder (그룹 주인 또는 열린 그룹의 founder)"] -->|"python -m arena.groups declare"| BA["broker A: 선언 보관<br/>(founder 서명, ver, ledger: null)"]
+    BA -->|"이웃에 나눔"| BB["broker B"]
+    P["peer: ctx.group_mode(그룹)"] -->|"GET /group, 서명 확인"| BB
+    P --> M{"ledger?"}
+    M -->|"없음"| NL["공지만: event_hash 없음<br/>요소·코드표 거절<br/>원장 도구 빼기, close_notice로 끝"]
+    M -->|"있음"| L["원장 선언과 대조(지금과 같음)"]
+    F -->|"python -m arena.groups attach"| R["recorder: group 항목 기록"]
+    R --> BA2["broker: ver + 1, ledger = {ledger_id, recorder_url, recorder, entry}"]
+```
+
+| 부분 | 파일 | 하는 일 |
+|---|---|---|
+| 선언의 모양 | `arena/groups/decl.py` | 모양 검사, 다음 판 규칙(같은 founder, 더 큰 ver, 붙은 원장은 그대로), 원장으로 옮길 `group` 항목. broker와 peer 아래층이라 둘 다 쓴다 |
+| broker | `arena/broker/service.py` `declare`·`group`, `POST /group`·`GET /group` | founder(닫힌 그룹: 주인, 열린 그룹: `ARENA_BROKER_FOUNDER_PUB`) 서명, `closed`, 자기 키 확인, 보관과 이웃에 나눔. 만민 그룹은 받지 않음 |
+| peer가 보는 그룹 | `arena/peer/groups.py` `GroupModes` | 선언을 읽고 서명 확인, 붙은 원장 증명(기록자 뿌리 신뢰, `ledger_id`, founder의 `group` 항목). 선언이 없거나 틀리면 원장 그룹(더 엄한 쪽). `ARENA_GROUP_MODE_TTL_SEC` 동안 기억 |
+| 개최 | `arena/peer/events.py` `announce_event` | 원장 없으면 공지만. 붙은 원장이 증명되면 그 원장에 선언 |
+| 배정 | `EventRouter._checked` | 원장 선언 없는 공지는 원장 없는 그룹에서만, 요소·코드표 없이. 증명된 그룹 원장이 있으면 그 원장의 선언만 |
+| 기본 비서 | `Tool.ledger`, `Toolbox`, `EventState.on_ledger`, `close_notice` | 원장 도구(계약, 등록·공개, 확인, 진행 현황, 공동 확인, 배정, 닫기, 공동 서명)는 원장 없는 이벤트에서 목록에서 빠지고 손으로 불러도 거절. `call_service`의 `subject` 거절. 프롬프트에 "원장 없음" |
+| founder 절차 | `arena/groups/flows.py`, `cli.py` | `show`, `declare`, `attach`(group 항목 기록 → 다음 판 선언) |
+
+원장을 붙인 뒤에도 이미 받은 원장 없는 이벤트는 그대로 진행한다(배정기는 아는 이벤트의 수정·마감을 계속 넘긴다). 새 공지는 원장 선언이 있어야 한다.
+
 ## 10. 설정 (모두 `.env`)
 
 | 키 | 뜻 |

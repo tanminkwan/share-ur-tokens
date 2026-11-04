@@ -105,6 +105,7 @@ class Settings(EnvSettings):
     broker_group_id: str | None = F("ARENA_BROKER_GROUP_ID", None, _opt, "이 broker가 속한 broker 그룹 식별자(같은 그룹의 broker는 같은 값, 비면 만민 그룹)")
     broker_neighbors: list[str] = F("ARENA_BROKER_NEIGHBORS", [], _list, "이웃 broker 주소(쉼표 구분)")
     broker_owner_pub: str | None = F("ARENA_BROKER_OWNER_PUB", None, _opt, "닫힌 그룹 소유자 공개키(비면 열린 그룹)")
+    broker_founder_pub: str | None = F("ARENA_BROKER_FOUNDER_PUB", None, _opt, "열린 그룹의 선언(그룹 선언, 원장 붙이기)에 서명하는 founder 공개키. 닫힌 그룹은 소유자가 founder. 비면 열린 그룹은 선언을 받지 않는다")
     broker_key_file: str = F("ARENA_BROKER_KEY_FILE", "data/broker.key", str, "broker 키 파일")
     # recorder
     recorder_port: int = F("ARENA_RECORDER_PORT", 9120, int, "recorder 포트")
@@ -306,6 +307,7 @@ class Settings(EnvSettings):
     assistant_idle_sec: float = F("ARENA_ASSISTANT_IDLE_SEC", 60.0, float, "열린 이벤트에 입력이 없을 때 기본 비서가 스스로 점검하기까지(초, 점검마다 두 배)")
     assistant_idle_max_checks: int = F("ARENA_ASSISTANT_IDLE_MAX_CHECKS", 5, int, "입력 없이 연달아 하는 점검의 최대 횟수")
     event_watch_sec: float = F("ARENA_EVENT_WATCH_SEC", 1.0, float, "이벤트 배정기가 broker 그룹들의 변경분을 읽는 주기(초)")
+    group_mode_ttl_sec: float = F("ARENA_GROUP_MODE_TTL_SEC", 30.0, float, "peer가 broker에서 읽은 그룹 선언(원장이 있는 그룹인지)을 다시 읽기 전까지 기억하는 시간(초)")
     assistant_ref_len: int = F("ARENA_ASSISTANT_REF_LEN", 10, int, "기본 비서가 LLM에게 보이는 해시의 짧은 참조 길이(# 뒤 글자 수)")
     assistant_ledger_watch_sec: float = F("ARENA_ASSISTANT_LEDGER_WATCH_SEC", 3.0, float, "기본 비서가 참여 중인 이벤트의 원장에 다른 사람의 새 기록이 있는지 보는 간격(초)")
     assistant_progress_max: int = F("ARENA_ASSISTANT_PROGRESS_MAX", 40, int, "기본 비서가 진행 현황(이벤트 원장 기록)으로 보여 주는 최근 항목 수")

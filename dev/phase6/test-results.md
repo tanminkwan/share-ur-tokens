@@ -100,3 +100,15 @@
 | 명령으로 백업 파일에서 되살리기, 암호문구와 비밀키를 찍지 않음 | `test_p6k_the_command_line_...` | 통과 |
 | **실제 프로세스**: 제네시스 위에서 키 peer 프로세스, `python -m arena.keys register`(키 peer에 맡기고 복구 담당으로 정함) → `rotate`(키 peer에서 백업을 받아) → 원장에서 옛 키가 물러남 → 이미 쓴 백업으로는 다시 못 옮김. 출력에 암호문구와 복구 비밀이 없음 | `tests/test_runner_processes.py` | 통과 |
 
+
+## 8. 원장 없는 broker 그룹 (6-N)
+
+2026-11-04. 테스트 11개(`tests/test_groups.py` 10개, 진짜 제네시스 위의 실제 프로세스 `tests/test_groups_processes.py` 1개), 모두 통과. 전체 479개(478개 통과, docker 1개 건너뜀), 커버리지 94.5%. 무엇을 확인했는지는 `dev/test-report.md` 5-11절.
+
+| 요구사항 | 결과 |
+|---|---|
+| P6-N1 그룹 선언은 broker가 보관 | founder 서명, `closed`, 자기 키 확인, 이웃 broker에 나눔, 재시작해도 남음, 만민 그룹은 받지 않음 |
+| P6-N2 원장 없는 그룹에서 할 수 없는 일을 코드가 막음 | 개최는 공지만(요소·코드표 거절), 참가자는 원장 선언 없는 공지를 그런 그룹에서만 받음, 기본 비서는 원장 도구 14개를 빼고 손으로 불러도 거절, `close_notice`로 끝 |
+| P6-N3 원장 모드로 올라가기 | `python -m arena.groups attach`: 원장에 founder의 `group` 항목, 선언 2판이 그 항목을 가리킴, 그 뒤 새 이벤트는 그 원장에, 그 전 일은 기록 아님, 붙은 원장은 떼지 못함 |
+
+알게 된 한계: 다른 사람이 같은 `group_id`를 원장에 먼저 선언하면 진짜 founder는 그 원장에 붙일 수 없다. 원장이 broker 선언의 founder와 맞춰 보는 장치는 아직 없다.

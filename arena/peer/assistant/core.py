@@ -205,16 +205,16 @@ class EventAssistant:
         out = await announce_event(ctx, group=self.group, title=title, kind=kind, rules=rules, policy=policy,
                                    mode="assistant", apps=[], audience=audience, recorder=recorder, elements=elements, codebook=codebook,
                                    schedule=schedule)
-        ev, rec = out["event_id"], out["recorder"]
+        ev, rec = out["event_id"], out["recorder"] or {"recorder_url": "", "pub": ""}  # no recorder: a group without a ledger
         st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url,
                                           policy=dict(policy), elements=dict(elements or {}))
         st.instruction = instruction
-        st.event_hash, st.notice = out["event_hash"], dict(out["notice"])
+        st.event_hash, st.notice = out["event_hash"] or "", dict(out["notice"])
         st.drive = self.initial_drive(ctx)
         st.schedule = event_times(out["notice"])
         schedule_event_times(ctx, out["notice"])  # the host wakes at its own event's times too
         self.save(ctx, st)
-        ctx.log.emit("assistant", ctx.pen, f"이벤트 개최 {ev} '{title}' (규칙 해시 {out['rules_hash'][:10]}, 방식 assistant)")
+        ctx.log.emit("assistant", ctx.pen, f"이벤트 개최 {ev} '{title}' (규칙 해시 {out['rules_hash'][:10]}, 방식 assistant{'' if st.on_ledger else ', 원장 없는 그룹'})")
         await self.feed(ctx, ev, f"[소유자의 지시] {instruction}", kind="owner")
         return ev
 
@@ -224,7 +224,7 @@ class EventAssistant:
         st = self.events.get(ev)
         if change == "new" and st is None:
             st = self.events[ev] = EventState(ev, "participant", notice.get("title", ""), notice["rules"], h(notice["rules"].encode()),
-                                              notice["group_id"], notice["recorder_url"], notice["recorder_pub"], notice["issuer_pub"],
+                                              notice["group_id"], notice.get("recorder_url", ""), notice.get("recorder_pub", ""), notice["issuer_pub"],
                                               notice["issuer_url"], offer_roles=list(notice.get("policy", {}).get("roles", [])), policy=dict(notice.get("policy", {})),
                                               elements=dict(notice.get("elements") or {}), schedule=event_times(notice), drive=self.initial_drive(ctx),
                                               notice_ver=notice.get("ver", 1))
@@ -232,7 +232,9 @@ class EventAssistant:
             st.event_hash = notice.get("event_hash", "")
             self._read_endorsements(ctx, st, notice)
             self.save(ctx, st)
-            await self.feed(ctx, ev, f"[새 공지] '{notice.get('title', '')}' (개최자 pub={notice['issuer_pub']}). 규칙과 실행 방식이 원장에 공증된 것과 같음을 확인했다.", kind="notice")
+            checked = ("규칙과 실행 방식이 원장에 공증된 것과 같음을 확인했다." if st.on_ledger else
+                       "이 broker 그룹에는 원장이 없다: 공지는 개최자 서명만 확인했고, 이 이벤트의 일은 원장에 기록되지 않는다.")
+            await self.feed(ctx, ev, f"[새 공지] '{notice.get('title', '')}' (개최자 pub={notice['issuer_pub']}). {checked}", kind="notice")
         elif st is not None and change == "updated":
             st.notice_ver = notice.get("ver", st.notice_ver)
             self._read_endorsements(ctx, st, notice)
@@ -319,6 +321,10 @@ class EventAssistant:
                 continue
             if now - st.last_input_at >= self.s.assistant_idle_sec * (2 ** st.idle_checks):
                 st.idle_checks += 1
+                if not st.on_ledger:
+                    await self.feed(ctx, st.event_id, "[점검] 한동안 새 입력이 없다. 지금까지 주고받은 말을 보고 규칙상 지금 내가 해야 할 일이 "
+                                                      "남았는지 확인하고, 있으면 하라(이 그룹에는 원장이 없다).", idle=True)
+                    continue
                 progress = "\n".join(await self.progress_lines(ctx, st)) or "없음"
                 await self.feed(ctx, st.event_id, "[점검] 한동안 새 입력이 없다. 아래 원장 기록을 보고 규칙상 지금 내가 해야 할 일이 남았는지 "
                                                   f"확인하고, 있으면 하라. 다른 사람이 이미 한 일을 기다리고 있지 않은지도 보라.\n[진행 현황] (원장, 코드가 읽음) {self.SETTLED_NOTE}\n{progress}", idle=True)

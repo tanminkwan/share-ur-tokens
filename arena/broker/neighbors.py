@@ -25,6 +25,7 @@ class Caller:
 class NeighborGateway(Protocol):
     async def share_notice(self, url: str, notice: dict, sig: str) -> None: ...
     async def share_close(self, url: str, notice_id: str, sig: str) -> None: ...
+    async def share_group(self, url: str, decl: dict, sig: str) -> None: ...
     async def list_profiles(self, url: str, caller: Caller) -> list[dict]: ...
     async def find(self, url: str, caller: Caller, query: dict) -> list[dict]: ...
 
@@ -34,6 +35,9 @@ class NoNeighbors:
         return None
 
     async def share_close(self, url, notice_id, sig):
+        return None
+
+    async def share_group(self, url, decl, sig):
         return None
 
     async def list_profiles(self, url, caller):
@@ -67,6 +71,9 @@ class InMemoryNeighbors:
     async def share_close(self, url, notice_id, sig):
         await self._get("share_close", url).close_notice(notice_id, sig, shared=True)
 
+    async def share_group(self, url, decl, sig):
+        await self._get("share_group", url).declare(decl, sig, shared=True)
+
     async def list_profiles(self, url, caller):
         return await self._get("list_profiles", url).list_profiles(caller, local=True) or []
 
@@ -88,6 +95,9 @@ class HttpNeighbors:
 
     async def share_close(self, url, notice_id, sig):
         await self._req("POST", url, f"/notices/{notice_id}/close", json={"sig": sig, "shared": True})
+
+    async def share_group(self, url, decl, sig):
+        await self._req("POST", url, "/group", json={"declaration": decl, "sig": sig, "shared": True})
 
     async def list_profiles(self, url, caller):
         return (await self._req("GET", url, "/profiles", params={"local": "1"}, headers=caller.headers)).get("profiles", [])

@@ -50,6 +50,7 @@ class Tool:
     participant_only: bool = False
     after_close: bool = False               # still usable once the event is closed
     element: str | None = None              # a built-in element's tool: offered only where the event switched it on
+    ledger: bool | None = None              # True: needs the event's ledger; False: only without one (P6-N2); None: either
     label: str = ""                         # the plain name a person sees on a screen (the LLM sees `name`)
 
 
@@ -58,7 +59,7 @@ LABELS = {"ask_owner": "소유자에게 묻기", "join_event": "참가 신청", 
           "call_service": "서비스 부르기", "contact": "사람 연락처 보기", "solicit": "직접 요청 보내기", "publish_text": "글 먼저 등록",
           "commit": "값 먼저 등록(숨김)", "reveal": "등록한 값 공개", "my_reveal": "내 공개값 보기", "check_reveal": "받은 공개값 확인",
           "verify": "원장 항목 확인", "event_progress": "진행 현황 보기", "propose_attest": "공동 확인 제안", "cosign": "서명 요청에 서명",
-          "decline": "서명 요청 거절", "assign": "당사자 배정", "close_event": "이벤트 닫기", "note": "메모 남기기", "remind": "예약(그 시각에 알림)", "check_pending": "기다리던 답 확인", "ask_endorsement": "공동 서명 청하기",
+          "decline": "서명 요청 거절", "assign": "당사자 배정", "close_event": "이벤트 닫기", "close_notice": "공지 마감", "note": "메모 남기기", "remind": "예약(그 시각에 알림)", "check_pending": "기다리던 답 확인", "ask_endorsement": "공동 서명 청하기",
           "wait": "기다리기"}
 ARG_LABELS = {"question": "물을 말", "role": "역할", "peer": "상대(필명)", "to": "받는 이(필명)", "text": "글", "data_json": "덧붙일 자료(JSON)",
               "attach_reveals": "붙일 공개 이름표(JSON 목록)", "op": "기능 이름", "input_json": "입력(JSON)", "subject": "주제",
@@ -139,6 +140,8 @@ async def call_service(A, ctx, st, peer, op, input=None, subject=None):
     pub, _ = await A.resolve_peer(ctx, st, peer, need_url=False)
     if not pub:
         return {"ok": False, "error": f"{peer}를 찾지 못했다"}
+    if subject and not st.on_ledger:
+        return {"ok": False, "error": "이 broker 그룹에는 원장이 없어 서비스 결과를 원장에 기록(subject)할 수 없다. subject 없이 부른다"}
     req = {"op": op, "input": input if isinstance(input, dict) else {},
            **({"event_id": st.event_id, "subject": subject, "recorder_url": st.recorder_url, "group_id": st.group_id} if subject else {})}
     r = await ctx.call_peer(pub, req, group=st.group_id, event=st.event_id)  # a2a or api, by the peer's profile
@@ -354,6 +357,15 @@ async def close_event(A, ctx, st, result_hash):
     return {"ok": bool(r.get("ok")), "hash": r.get("hash"), "error": r.get("error")}
 
 
+async def close_notice(A, ctx, st):
+    """a group without a ledger: the event ends when its notice closes (nothing to record a result on)"""
+    r = await ctx.brokers[A.group].close_notice(ctx.identity, st.event_id)
+    if r.get("ok"):
+        st.closed = True
+        ctx.cancel_timer(event_id=st.event_id)  # a closed event wakes no one
+    return {"ok": bool(r.get("ok")), "error": r.get("error")}
+
+
 async def note(A, ctx, st, text):
     return {"ok": True}
 
@@ -419,7 +431,7 @@ def _default_tools() -> list[Tool]:
         Tool("ask_owner", "{question}: 소유자(사람)에게 예/아니오로 묻는다. 결과 yes, why", _obj(question=S), ask_owner),
         Tool("join_event", "{}: 이 이벤트에 참가 신청을 한다(개최자에게 메시지로 알림)", None, join_event, participant_only=True),
         Tool("contract", "{role, peer}: 그 peer(필명)와 이 이벤트의 역할 계약을 맺어 원장에 기록한다. 계약에는 규칙 해시가 들어간다",
-             _obj(role=S, peer=S), contract, host_only=True),
+             _obj(role=S, peer=S), contract, host_only=True, ledger=True),
         Tool("send", "{to, text, data_json, attach_reveals?: [라벨...]}: 상대 peer(필명)에게 이 이벤트의 메시지를 보낸다(data_json은 JSON 객체를 담은 문자열). "
              "내 공개값을 보낼 때는 손으로 옮기지 말고 attach_reveals에 라벨을 넣는다. 코드가 공개값 묶음을 data.reveals에 그대로 붙인다",
              dict(_obj(to=S, text=S, data_json=S), properties={"to": S, "text": S, "data_json": S, "attach_reveals": {"type": "array", "items": S}}),
@@ -430,32 +442,34 @@ def _default_tools() -> list[Tool]:
         Tool("contact", "{peer}: 상대 peer(필명)의 사람 연락처(human 연결)를 찾아 알려 준다. 자동으로 보내지 않는다", _obj(peer=S), contact),
         Tool("solicit", "{targets: [필명...], text, data_json}: 고른 peer들에게 직접 요청을 한 번에 보낸다(data_json은 JSON 객체 문자열)",
              _obj(targets={"type": "array", "items": S}, text=S, data_json=S), solicit),
-        Tool("publish_text", "{text}: 글을 원장에 먼저 등록한다. 결과 content_hash, publish_hash", _obj(text=S), publish_text),
+        Tool("publish_text", "{text}: 글을 원장에 먼저 등록한다. 결과 content_hash, publish_hash", _obj(text=S), publish_text, ledger=True),
         Tool("commit", "{label, value}: 값에 비밀값을 붙인 해시를 원장에 먼저 등록하고 값은 숨겨 둔다. 결과 label, commit, publish_hash",
-             _obj(label=S, value=S), commit),
+             _obj(label=S, value=S), commit, ledger=True),
         Tool("reveal", "{label}: 내가 먼저 등록한 값을 원장에 공개한다(값과 비밀값은 코드가 채우고, 원장이 먼저 등록한 해시와 맞는지 확인한다). "
-             "다른 사람의 공개는 진행 현황(event_progress)에서 보인다", _obj(label=S), reveal),
+             "다른 사람의 공개는 진행 현황(event_progress)에서 보인다", _obj(label=S), reveal, ledger=True),
         Tool("my_reveal", "{label}: 내가 먼저 등록한 값의 공개값 묶음(author, label, value, salt, publish_hash)을 본다. 보낼 때는 send의 attach_reveals를 쓴다",
-             _obj(label=S), my_reveal),
+             _obj(label=S), my_reveal, ledger=True),
         Tool("check_reveal", "{publish_hash, author, label, value, salt}: 상대(필명)가 보낸 공개값이 상대가 먼저 등록한 해시와 맞는지 원장으로 확인한다. 결과 match",
-             _obj(publish_hash=S, author=S, label=S, value=S, salt=S), check_reveal),
-        Tool("verify", "{hash}: 원장 항목이 있는지와 공개 정보를 확인한다(내용 해시를 넣으면 그 내용을 담은 항목을 알려 준다)", _obj(hash=S), verify_entry, after_close=True),
+             _obj(publish_hash=S, author=S, label=S, value=S, salt=S), check_reveal, ledger=True),
+        Tool("verify", "{hash}: 원장 항목이 있는지와 공개 정보를 확인한다(내용 해시를 넣으면 그 내용을 담은 항목을 알려 준다)", _obj(hash=S), verify_entry, after_close=True, ledger=True),
         Tool("event_progress", "{}: 이 이벤트의 원장 기록(계약, 등록과 이름표, 공동 확인, 닫힘)을 순서대로 본다. 누가 무엇을 했는지 확인할 때 쓴다",
-             None, event_progress, after_close=True),
+             None, event_progress, after_close=True, ledger=True),
         Tool("propose_attest", "{kind, subject, value_json, parties: [필명...]}: 공동 확인을 제안한다(value_json은 JSON 문자열). "
              "value 안에 공개값 묶음을 넣을 자리에는 \"공개:필명-xxxxxx:라벨\"이라고 쓰면 코드가 확인된 묶음을 그대로 넣는다. "
              "당사자가 나 혼자면 바로 기록하고, 아니면 다른 당사자에게 서명 요청을 보낸다",
-             _obj(kind=S, subject=S, value_json=S, parties={"type": "array", "items": S}), propose_attest),
-        Tool("cosign", "{request_id}: 받은 서명 요청에 서명해 돌려준다(내용이 내가 본 것과 같을 때만)", _obj(request_id=S), cosign),
-        Tool("decline", "{request_id, reason}: 받은 서명 요청을 거절하고 이유를 알린다", _obj(request_id=S, reason=S), decline),
+             _obj(kind=S, subject=S, value_json=S, parties={"type": "array", "items": S}), propose_attest, ledger=True),
+        Tool("cosign", "{request_id}: 받은 서명 요청에 서명해 돌려준다(내용이 내가 본 것과 같을 때만)", _obj(request_id=S), cosign, ledger=True),
+        Tool("decline", "{request_id, reason}: 받은 서명 요청을 거절하고 이유를 알린다", _obj(request_id=S, reason=S), decline, ledger=True),
         Tool("assign", "{subjects_json}: 주제(예: 경기 번호)마다 맡을 당사자를 원장에 배정한다. subjects_json은 {\"주제\": [필명, ...]} JSON 문자열. "
-             "배정된 종류의 공동 확인은 원장이 배정된 당사자에게서만 받는다", _obj(subjects_json=S), assign, host_only=True),
-        Tool("close_event", "{result_hash}: 이 이벤트를 원장에서 닫고 공지를 마감한다", _obj(result_hash=S), close_event, host_only=True),
+             "배정된 종류의 공동 확인은 원장이 배정된 당사자에게서만 받는다", _obj(subjects_json=S), assign, host_only=True, ledger=True),
+        Tool("close_event", "{result_hash}: 이 이벤트를 원장에서 닫고 공지를 마감한다", _obj(result_hash=S), close_event, host_only=True, ledger=True),
+        Tool("close_notice", "{}: 이 이벤트의 공지를 마감해 이벤트를 끝낸다(원장 없는 broker 그룹에서 쓴다. 결과는 원장에 남지 않는다)", None, close_notice,
+             host_only=True, ledger=False),
         Tool("note", "{text}: 나중을 위해 메모를 남긴다", _obj(text=S), note, after_close=True),
         Tool("remind", "{when, note}: 그 시각에 나를 깨운다(when: '+초' 또는 ISO 8601 시각). 시각이 정해진 일을 기다릴 때 쓴다", _obj(when=S, note=S), remind),
         Tool("ask_endorsement", "{peer, how?}: 다른 peer(필명)에게 이 이벤트의 공동 서명을 청한다(이벤트의 효력이나 명성을 위해, 개최자가 고른다). "
              "how: ledger(원장에 덧붙임, 기본) 또는 signature(원장 밖 서명, notice에 붙음). 상대가 거절해도 이벤트는 그대로 진행한다",
-             dict(_obj(peer=S), properties={"peer": S, "how": {"type": "string", "enum": ["ledger", "signature"]}}), ask_endorsement, host_only=True),
+             dict(_obj(peer=S), properties={"peer": S, "how": {"type": "string", "enum": ["ledger", "signature"]}}), ask_endorsement, host_only=True, ledger=True),
         Tool("check_pending", "{task_id?}: pending으로 돌아온 호출(상대가 아직 답하지 않은 계약 등)을 지금 다시 확인한다. 답이 왔으면 코드가 마저 처리한다. "
              "코드도 정해진 간격으로 확인하므로 꼭 부를 필요는 없다", {"type": "object", "properties": {"task_id": S}}, check_pending),
         Tool("wait", "{}: 이번 입력에 대해 할 일을 다 했다. 다음 입력을 기다린다", None, wait, after_close=True),

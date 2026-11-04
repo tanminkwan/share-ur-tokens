@@ -36,30 +36,42 @@ async def announce_event(ctx, *, group: str, title: str, kind: str, rules: str, 
                          audience: dict | None = None, recorder: dict | None = None, text: str | None = None,
                          elements: dict | None = None, codebook: dict | None = None, schedule: list | None = None) -> dict:
     """declare the event on the ledger and post its notice. Separate blocks: rules (natural language), policy (roles),
-    mode (how it runs) and apps (the app list block); the rules hash, mode and app list are notarized"""
+    mode (how it runs) and apps (the app list block); the rules hash, mode and app list are notarized. In a broker group
+    without a ledger (P6-N2) there is nothing to declare on: the notice alone, signed by me, and no elements or code table"""
     apps = list(apps or [])
     if not valid_run(mode, apps):
         raise ValueError(f"bad mode or app list: {mode} {apps}")
     broker = ctx.brokers[group]
     gid = await ctx.group_id(group)
-    rec = recorder or (await broker.find("기록", role="record", identity=ctx.identity))["peers"][0]
+    gm = await ctx.group_mode(group)
     ev = "ev-" + _nonce(title)
     rules_hash = h(rules.encode())
-    lid = await ctx.ledger_id(rec["recorder_url"])
-    decl = {"event_id": ev, "issuer": ctx.pub, "kind": kind, "policy": policy, "group_id": gid, "rules_hash": rules_hash,
-            "mode": mode, "apps": apps, **({"elements": elements} if elements else {}), **({"codebook": codebook} if codebook else {}),
-            **({"schedule": schedule} if schedule else {}), **({"ledger_id": lid} if lid else {})}
-    r = await ctx.recorder(rec["recorder_url"]).record("event", decl, {ctx.pub: ctx.sign(decl)})
-    if not r.get("ok"):
-        raise RuntimeError(f"event declaration refused: {r.get('error')}")
     notice = {"notice_id": ev, "kind": kind, "title": title, "text": text or f"{title}: 규칙은 rules, 실행 방식은 mode, 쓰는 앱은 apps에 있다",
-              "rules": rules, "policy": policy, "mode": mode, "apps": apps, "elements": dict(elements or {}), **({"codebook": codebook} if codebook else {}), **({"schedule": schedule} if schedule else {}), "until": ctx.clock() + ctx.settings.event_notice_ttl_sec, "issuer_pub": ctx.pub,
-              "issuer_url": ctx.url, "event_hash": r["hash"], "recorder_pub": rec["pub"], "recorder_url": rec["recorder_url"], "group_id": gid,
-              **({"audience": audience} if audience else {})}
+              "rules": rules, "policy": policy, "mode": mode, "apps": apps, "elements": dict(elements or {}), **({"codebook": codebook} if codebook else {}),
+              **({"schedule": schedule} if schedule else {}), "until": ctx.clock() + ctx.settings.event_notice_ttl_sec, "issuer_pub": ctx.pub,
+              "issuer_url": ctx.url, "group_id": gid, **({"audience": audience} if audience else {})}
+    if not gm["ledger"]:
+        if elements or codebook:
+            raise ValueError("이 broker 그룹에는 원장이 없다: 기본 요소와 코드표는 원장이 지키므로 켤 수 없다")
+        rec, event_hash = None, None
+    else:
+        attached = gm.get("attached") if gm.get("proven") else None  # a group with its own ledger: declare there
+        rec = recorder or ({"recorder_url": attached["recorder_url"], "pub": attached["recorder"]} if attached else
+                           (await broker.find("기록", role="record", identity=ctx.identity))["peers"][0])
+        lid = await ctx.ledger_id(rec["recorder_url"])
+        decl = {"event_id": ev, "issuer": ctx.pub, "kind": kind, "policy": policy, "group_id": gid, "rules_hash": rules_hash,
+                "mode": mode, "apps": apps, **({"elements": elements} if elements else {}), **({"codebook": codebook} if codebook else {}),
+                **({"schedule": schedule} if schedule else {}), **({"ledger_id": lid} if lid else {})}
+        r = await ctx.recorder(rec["recorder_url"]).record("event", decl, {ctx.pub: ctx.sign(decl)})
+        if not r.get("ok"):
+            raise RuntimeError(f"event declaration refused: {r.get('error')}")
+        event_hash = r["hash"]
+        notice.update(event_hash=event_hash, recorder_pub=rec["pub"], recorder_url=rec["recorder_url"])
     posted = await broker.post_notice(ctx.identity, notice)
     if not posted.get("ok"):
         raise RuntimeError(f"notice refused: {posted.get('error')}")
-    return {"event_id": ev, "notice": notice, "event_hash": r["hash"], "recorder": rec, "group_id": gid, "rules_hash": rules_hash}
+    return {"event_id": ev, "notice": notice, "event_hash": event_hash, "recorder": rec, "group_id": gid, "rules_hash": rules_hash,
+            "ledger": gm["ledger"]}
 
 
 class EventRouter(BaseApp):
@@ -106,7 +118,7 @@ class EventRouter(BaseApp):
                 continue
             self.since[group] = r["now"]
             for n in r["notices"]:
-                await self._route(ctx, n)
+                await self._route(ctx, n, group)
         self._save(ctx)
 
     def choose(self, ctx, mode: str, apps: list) -> tuple[list, str | None]:
@@ -136,7 +148,7 @@ class EventRouter(BaseApp):
             return [assistant], None
         return [], why
 
-    async def _route(self, ctx, n):
+    async def _route(self, ctx, n, group: str | None = None):
         ev = n["notice_id"]
         known = self.routes.get(ev)
         if known is not None:
@@ -156,18 +168,7 @@ class EventRouter(BaseApp):
         if not valid_run(mode, apps):
             ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 실행 방식이나 앱 목록이 잘못됨 → 무시")
             return
-        trust = await ctx.recorder_trust(n["recorder_url"])
-        if not trust["ok"] or (trust["anchored"] and n.get("recorder_pub") != trust["recorder"]):
-            ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 기록자가 뿌리 신뢰로 증명되지 않음({trust.get('why') or '공지의 기록자 키가 지금 키와 다름'}) → 무시")
-            return
-        v = await ctx.recorder(n["recorder_url"]).verify(n["event_hash"])
-        rules_ok = "rules" not in n or v.get("rules_hash") == h(n["rules"].encode())
-        run_ok = ("mode" not in n) or (v.get("mode") == mode and v.get("apps") == apps)
-        run_ok = run_ok and (v.get("elements") or {}) == (n.get("elements") or {})  # the elements block is notarized too
-        run_ok = run_ok and v.get("codebook") == n.get("codebook")  # so is the code table edition it follows
-        run_ok = run_ok and v.get("schedule") == n.get("schedule")  # and its schedule: everyone acts at the same notarized times
-        if not (v.get("exists") and v.get("type") == "event" and v.get("event_id") == ev and v.get("issuer") == n["issuer_pub"] and rules_ok and run_ok):
-            ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 공지의 규칙·실행 방식·앱 목록이 원장에 공증된 것과 다름 → 무시")
+        if not await self._checked(ctx, n, group, ev):
             return
         handlers, why = self.choose(ctx, mode, apps)
         missing = [r for r in apps if r.get("required", True) and ctx.app_by_id(r["id"]) is None]
@@ -183,3 +184,34 @@ class EventRouter(BaseApp):
             await app.on_event(ctx.ctx_of(app), n, "new")
             if isinstance(app, TimerHandler):  # the scheduler wakes the app at the event's notarized times
                 schedule_event_times(ctx.ctx_of(app), n)
+
+    async def _checked(self, ctx, n, group, ev) -> bool:
+        """is this notice what it says? In a group without a ledger: the issuer's signature (the broker checked it) and no
+        elements. Otherwise: its declaration on a proven ledger (the group's own, if one is attached)"""
+        gm = await ctx.group_mode(group) if group else {"ledger": True}
+        if not n.get("event_hash"):
+            if gm["ledger"]:
+                ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 원장이 있는 그룹인데 공지에 원장 선언이 없음 → 무시")
+                return False
+            if n.get("elements") or n.get("codebook"):
+                ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 원장 없는 그룹에서 기본 요소나 코드표를 켠 공지 → 무시(원장이 지키는 것)")
+                return False
+            return True
+        if gm.get("proven") and await ctx.ledger_id(n["recorder_url"]) != gm["attached"]["ledger_id"]:
+            ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 그룹에 붙은 원장이 아닌 곳에 선언됨 → 무시")
+            return False
+        trust = await ctx.recorder_trust(n["recorder_url"])
+        if not trust["ok"] or (trust["anchored"] and n.get("recorder_pub") != trust["recorder"]):
+            ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 기록자가 뿌리 신뢰로 증명되지 않음({trust.get('why') or '공지의 기록자 키가 지금 키와 다름'}) → 무시")
+            return False
+        mode, apps = n.get("mode", "assistant"), n.get("apps", [])
+        v = await ctx.recorder(n["recorder_url"]).verify(n["event_hash"])
+        rules_ok = "rules" not in n or v.get("rules_hash") == h(n["rules"].encode())
+        run_ok = ("mode" not in n) or (v.get("mode") == mode and v.get("apps") == apps)
+        run_ok = run_ok and (v.get("elements") or {}) == (n.get("elements") or {})  # the elements block is notarized too
+        run_ok = run_ok and v.get("codebook") == n.get("codebook")  # so is the code table edition it follows
+        run_ok = run_ok and v.get("schedule") == n.get("schedule")  # and its schedule: everyone acts at the same notarized times
+        if not (v.get("exists") and v.get("type") == "event" and v.get("event_id") == ev and v.get("issuer") == n["issuer_pub"] and rules_ok and run_ok):
+            ctx.log.emit("events", ctx.pen, f"이벤트 {ev}: 공지의 규칙·실행 방식·앱 목록이 원장에 공증된 것과 다름 → 무시")
+            return False
+        return True
