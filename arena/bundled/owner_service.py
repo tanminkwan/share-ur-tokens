@@ -19,6 +19,7 @@ class EventsPort(Protocol):
     def allowed_drives(self, ctx) -> tuple: ...
     def state_line(self, ctx, st) -> str: ...
     def tools_view(self, st) -> list: ...
+    def conversation(self, ctx, st, lines: int) -> dict: ...
     def set_drive(self, ctx, event_id: str, drive: str) -> dict: ...
     async def owner_run(self, ctx, event_id: str, name: str, args: dict) -> dict: ...
     async def feed(self, ctx, event_id: str, text: str, idle: bool = False, kind: str = "message"): ...
@@ -76,7 +77,15 @@ class OwnerService:
         return {"event_id": st.event_id, "title": st.title, "role": st.role, "drive": st.drive, "closed": st.closed, "rules": st.rules,
                 "state_line": a.state_line(ctx, st), "transcript": st.transcript[-n:], "tools": a.tools_view(st),
                 "schedule": [dict(x, when=fmt_time(x["at"])) for x in st.schedule],
-                "timers": [dict(t, when=fmt_time(t["at"])) for t in ctx.timers(event_id)]}
+                "timers": [dict(t, when=fmt_time(t["at"])) for t in ctx.timers(event_id)],
+                **a.conversation(ctx, st, self.peer.settings.desk_transcript_lines)}
+
+    async def say(self, event_id: str, to: str, text: str) -> dict:
+        """the person speaks as their peer to another in this event (one message, a2a: walkie-talkie)"""
+        text = (text or "").strip()
+        if not text or not to:
+            return {"ok": False, "error": "받는 이와 할 말이 필요하다"}
+        return await self.run_tool(event_id, "send", {"to": to, "text": text, "data_json": "{}"})
 
     async def tell(self, event_id: str, text: str) -> dict:
         """pass the owner's words to the assistant of one event (it acts on them in its drive)"""

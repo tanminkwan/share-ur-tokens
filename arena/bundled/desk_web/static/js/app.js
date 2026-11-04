@@ -1,16 +1,16 @@
 // Composition root: builds the pieces and wires them (the only place that knows the concrete classes).
-import { Actions } from './actions.js';
-import { ApiClient } from './api.js';
-import { Poller } from './poller.js';
-import { Store } from './store.js';
+import { Actions } from '/common/owner/actions.js';
+import { ApiClient } from '/common/owner/api.js';
+import { Poller } from '/common/owner/poller.js';
+import { Store } from '/common/owner/store.js';
 import { readToken } from '/common/token.js';
-import { defaultCards } from './views/cards.js';
+import { defaultCards } from '/common/owner/views/cards.js';
 import { EventView } from './views/event.js';
-import { EventsView } from './views/events.js';
-import { HeaderView } from './views/header.js';
-import { HostForm } from './views/hostform.js';
-import { ItemsView } from './views/items.js';
-import { Toast } from './views/toast.js';
+import { EventsView } from '/common/owner/views/events.js';
+import { HeaderView } from '/common/owner/views/header.js';
+import { HostForm } from '/common/owner/views/hostform.js';
+import { ItemsView } from '/common/owner/views/items.js';
+import { Toast } from '/common/owner/views/toast.js';
 
 const $ = id => document.getElementById(id);
 const toast = new Toast($('toast'));

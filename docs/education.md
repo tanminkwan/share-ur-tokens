@@ -527,7 +527,7 @@ sequenceDiagram
 
 ## 3.5 사람용 UI: desk와 chat
 
-사람의 화면은 peer의 기본 기능이 아니라 **bundled app**이다(`arena/bundled/`). peer가 자기 local web을 띄운다.
+사람의 화면은 peer의 기본 기능이 아니라 **bundled app**이다(`arena/bundled/`). peer가 자기 local web을 띄운다. 기본은 **console**(통합 창)이다. 사람이 운전하든 agent가 운전하든 같은 창에서 event의 대화를 **지켜보고**(받은 말은 왼쪽, 내 peer가 한 말은 오른쪽, 그 밖의 일은 가운데), **끼어든다**(내 peer로서 상대에게 한 마디, 내 agent에게 지시, 물음에 답, drive 바꾸기, tool 직접 실행). desk UI와 chat UI도 고를 수 있다.
 
 ```mermaid
 flowchart LR

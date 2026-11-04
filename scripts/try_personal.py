@@ -58,7 +58,8 @@ def main(argv=None) -> int:
     peers = [("human-a", "human", "none", b + 10), ("human-b", "human", "none", b + 20)] + ([("agent", "agent", None, b + 30)] if a.agent else [])
     for name, mode, llm, port in peers:
         env = {"ARENA_PERSONAL_MODE": mode, "ARENA_PERSONAL_PEER_HOME": str(d / name), "ARENA_PERSONAL_PEER_PORT": str(port),
-               "ARENA_PERSONAL_DESK_PORT": str(port + 1), "ARENA_PERSONAL_CHAT_PORT": str(port + 2), "ARENA_PERSONAL_WEB_HOST": a.web_host,
+               "ARENA_PERSONAL_DESK_PORT": str(port + 1), "ARENA_PERSONAL_CHAT_PORT": str(port + 2), "ARENA_PERSONAL_CONSOLE_PORT": str(port + 3),
+               "ARENA_PERSONAL_WEB_HOST": a.web_host,
                "ARENA_PERSONAL_PEER_BROKERS": f"public=http://127.0.0.1:{b}", "ARENA_PERSONAL_PEER_LABELS": f"이름:{name}"}
         if llm:
             env["ARENA_LLM_BACKEND"] = llm
@@ -74,8 +75,7 @@ def main(argv=None) -> int:
                 tok = p.read_text().strip()
                 break
             time.sleep(0.5)
-        screen, wport = ("창구", port + 1) if mode == "human" else ("대화", port + 2)
-        print(f"  {name:8} ({mode}) {screen}: http://{host}:{wport}/#token={tok}", flush=True)
+        print(f"  {name:8} ({mode}) 콘솔: http://{host}:{port + 3}/#token={tok}", flush=True)  # the integrated window, both modes
     print(f"기록: {d}/*.log   멈추기: Ctrl-C", flush=True)
     try:
         signal.pause()

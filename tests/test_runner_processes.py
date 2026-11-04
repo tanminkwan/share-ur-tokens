@@ -41,9 +41,9 @@ async def test_runner_processes_on_a_real_genesis(tmp_path, procs):
     rec_url = (await BrokerClient(burl, s).find("기록", role="record"))["peers"][0]["recorder_url"]
     brokers = f"public={burl}"
 
-    # the sample personal peer, human mode: its desk window answers with the token it wrote in its home
+    # the sample personal peer, human mode: its window (the console by default) answers with the token it wrote in its home
     me = Proc("arena.peers.personal", dict(env, ARENA_PERSONAL_MODE="human", ARENA_PERSONAL_PEER_HOME=str(tmp_path / "me"),
-                                          ARENA_PERSONAL_PEER_PORT=str(ports["me"]), ARENA_PERSONAL_DESK_PORT=str(ports["desk"]),
+                                          ARENA_PERSONAL_PEER_PORT=str(ports["me"]), ARENA_PERSONAL_CONSOLE_PORT=str(ports["desk"]),
                                           ARENA_PERSONAL_PEER_BROKERS=brokers), tmp_path)
     procs.append(me)
     token = wait_file(tmp_path / "me" / "web-token")

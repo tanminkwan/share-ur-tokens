@@ -31,6 +31,7 @@ class EventState:
     transcript: list = field(default_factory=list)
     secrets: dict = field(default_factory=dict)      # label -> {value, salt, commit, publish_hash}
     pending: dict = field(default_factory=dict)      # signature requests waiting for me: id -> {payload, from_pub, from_url}
+    timeline: list = field(default_factory=list)       # what a person watching reads: who said what, in which direction (Timeline)
     waiting_calls: dict = field(default_factory=dict)  # my calls that came back pending (A2A task id -> {url, kind, data, since})
     proposals: dict = field(default_factory=dict)    # my attest proposals: id -> {payload, sigs}
     peers: dict = field(default_factory=dict)        # pub -> url learned from messages and contracts
@@ -62,7 +63,7 @@ class EventState:
     task: asyncio.Task | None = None
 
     KEEP = ("event_id", "role", "title", "rules", "rules_hash", "group_id", "recorder_url", "recorder_pub", "issuer_pub", "issuer_url",
-            "offer_roles", "transcript", "pending", "waiting_calls", "proposals", "peers", "contracts", "applicants", "drive", "schedule", "instruction", "role_offers", "sealed_view", "evaluations", "service_receipts", "elements", "policy", "assignments", "ledger_seen", "sent_reveals", "reveals", "roster", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed",
+            "offer_roles", "transcript", "timeline", "pending", "waiting_calls", "proposals", "peers", "contracts", "applicants", "drive", "schedule", "instruction", "role_offers", "sealed_view", "evaluations", "service_receipts", "elements", "policy", "assignments", "ledger_seen", "sent_reveals", "reveals", "roster", "aliases", "last_action", "joined", "closed", "notice_ver", "notice_closed",
             "last_input_at", "idle_checks")
 
     def to_dict(self) -> dict:

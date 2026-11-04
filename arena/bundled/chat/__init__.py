@@ -4,12 +4,10 @@ pending questions show in the chat, and the person may answer them with a button
 part in a2a through their agent (dev/peer-spec.md 1.1)."""
 from __future__ import annotations
 
-import time
-
 from ..owner_service import OwnerService
 from ..web import LocalWebApp
 from .api import build_chat_api
-from .concierge import Concierge
+from ..agent_talk import AgentTalk
 
 
 class ChatApp(LocalWebApp):
@@ -18,7 +16,7 @@ class ChatApp(LocalWebApp):
     def __init__(self, service: OwnerService, settings, host: str, port: int, token: str):
         super().__init__(host, port, token)
         self.s = settings
-        self.messages: list[dict] = []
+        self.talk = AgentTalk(settings)
         self._ctx = None
         self.service = service
 
@@ -29,38 +27,31 @@ class ChatApp(LocalWebApp):
     @service.setter
     def service(self, svc: OwnerService | None) -> None:
         self._service = svc
-        self.concierge = Concierge(svc, self.s) if svc is not None else None
+        self.talk.use(svc)
+
+    @property
+    def concierge(self):
+        return self.talk.concierge
+
+    @property
+    def messages(self) -> list[dict]:
+        return self.talk.messages
 
     def web_app(self, ctx):
         return build_chat_api(self, self.token)
 
     async def start(self, ctx) -> None:
-        self._ctx = ctx
-        self.messages = list(ctx.state.load().get("messages", []))
+        self.bind(ctx)
         await super().start(ctx)
 
     def bind(self, ctx) -> None:
         """for composition roots and tests that drive the app without starting its window"""
         self._ctx = ctx
-        self.messages = list(ctx.state.load().get("messages", []))
-
-    def _add(self, who: str, text: str) -> dict:
-        m = {"who": who, "text": text, "ts": time.time()}
-        self.messages.append(m)
-        self.messages = self.messages[-self.s.chat_keep_messages:]
-        self._ctx.state.save({"messages": self.messages})
-        return m
+        self.talk.bind(ctx.state, self._service)
 
     async def say(self, text: str) -> list[dict]:
         """the owner said something: the agent answers (and may act through the owner's use cases)"""
-        text = (text or "").strip()
-        if not text:
-            return []
-        history = list(self.messages)
-        out = [self._add("owner", text)]
-        for reply in await self.concierge.respond(self._ctx, history, text):
-            out.append(self._add("agent", reply))
-        return out
+        return await self.talk.say(self._ctx, text)
 
     def feed(self) -> dict:
         st = self.service.state()
