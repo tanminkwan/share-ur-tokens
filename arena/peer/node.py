@@ -44,6 +44,7 @@ class PeerConfig:
     operator: str | None = None  # service | agent | human (dev/peer-spec.md); None = agent unless the peer has no LLM (human)
     codebook: dict | None = None  # the code table edition this peer follows {entry, publisher, version} (optional)
     element_apps: bool | None = None  # built-in elements' apps (desks): None = only if an app handles events, True/False = always/never
+    kind: str = "personal"  # which kind of peer this is, for its windows (arena/bundled/peer_kinds.py): personal, sphinx, observer, ...
 
 
 class Peer:

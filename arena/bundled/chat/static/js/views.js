@@ -1,4 +1,5 @@
 import { h } from '/common/dom.js';
+import { showKind } from '/common/owner/views/header.js';
 
 // Pending things from the desk shown inside the chat. One renderer per kind (a new kind = a new registration).
 const AWAITED = {
@@ -18,8 +19,11 @@ const NOTE = (it, a) => h('div', { class: 'note', testid: `note-${it.kind}` }, `
 
 export class HeaderView {
   constructor(root, store) { this.root = root; store.subscribe(s => this.render(s)); }
-  render({ me }) { this.root.replaceChildren(me ? h('span', { class: 'pen', testid: 'me-pen' }, me.pen) : h('span', {}, '연결 중…'),
-    h('span', {}, '내 비서와 대화')); }
+  render({ me }) {
+    showKind(me);
+    this.root.replaceChildren(me ? h('span', { class: 'pen', testid: 'me-pen' }, me.pen) : h('span', {}, '연결 중…'),
+      ...(me ? [h('span', { class: 'tag kind', testid: 'me-kind' }, me.kind_label)] : []), h('span', {}, '내 비서와 대화'));
+  }
 }
 
 export class TimelineView {
@@ -31,7 +35,7 @@ export class TimelineView {
     const key = JSON.stringify([messages.length, items.map(i => i.id)]);
     if (key === this.key) return;
     this.key = key;
-    const msgs = messages.map(m => h('div', { class: `msg ${m.who}`, testid: `msg-${m.who}` }, m.text));
+    const msgs = messages.map(m => h('div', { class: m.who === 'owner' ? 'line out' : 'line in by-agent', testid: `msg-${m.who}` }, m.text));  // the shared bubbles (arena.css)
     const pend = items.map(it => (this.awaited[it.kind] || this.note)(it, this.actions));
     this.root.replaceChildren(...msgs, ...pend);
     this.root.scrollTop = this.root.scrollHeight;

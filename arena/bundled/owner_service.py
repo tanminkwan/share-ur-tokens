@@ -50,7 +50,8 @@ class OwnerService:
         p = self.peer
         events = [{"event_id": st.event_id, "title": st.title, "role": st.role, "drive": st.drive, "closed": st.closed}
                   for st in self._asst.events.values()]
-        return {"me": {"pen": p.pen, "pub": p.identity.pub, "operator": p.operator(), "llm": llm_available(p.llm)},
+        from .peer_kinds import kind_view
+        return {"me": {"pen": p.pen, "pub": p.identity.pub, "operator": p.operator(), "llm": llm_available(p.llm), **kind_view(p.config.kind)},
                 "events": sorted(events, key=lambda x: (x["closed"], x["title"])), "open_items": len(self.desk.list("open"))}
 
     def items(self, status: str = "open") -> list[dict]:
