@@ -16,7 +16,7 @@ import pytest
 from arena.config import Settings
 
 DEPLOY = pathlib.Path(__file__).resolve().parents[1] / "deploy"
-DIRS = ["test-broker", "link-peer", "key-peer", "foundation-peer", "app-store-peer", "search-peer", "service-peer"]
+DIRS = ["test-broker", "link-peer", "key-peer", "foundation-peer", "app-store-peer", "search-peer", "service-peer", "sphinx-peer"]
 COMPOSE_ONLY = {"ARENA_IMAGE", "ARENA_SERVICE_SPEC_FILE"}  # read by compose itself, not by the platform
 
 

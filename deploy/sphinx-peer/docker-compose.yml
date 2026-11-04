@@ -1,0 +1,36 @@
+# sphinx peer: a person who lets others found branch groups. Applications come in by a2a; the person meets each
+# applicant outside the platform (video call or face to face) and says yes in the window; yes gives a founding pass.
+# Runs on its own, wherever this peer lives. From this directory:
+#   cp .env.example .env     (then set the broker and the addresses; keys and secrets stay in .env)
+#   docker compose up -d
+# The person's window (console) opens at ARENA_PERSONAL_WEB_HOST:ARENA_PERSONAL_CONSOLE_PORT (default: this machine only);
+# its token is in the home folder (web-token) unless ARENA_PERSONAL_WEB_TOKEN is set.
+# The image comes from deploy/build.sh (no build here). Network: host. Guide: dev/docker.md
+services:
+  sphinx-peer:
+    image: ${ARENA_IMAGE:-agent-arena:latest}
+    command: ["arena.peers.sphinx"]
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ARENA_HOST: ${ARENA_HOST:-127.0.0.1}
+      ARENA_PUBLIC_HOST: ${ARENA_PUBLIC_HOST:-}
+      ARENA_KEY_STORE: file
+      ARENA_LLM_BACKEND: ${ARENA_LLM_BACKEND:-none}
+      ARENA_PERSONAL_MODE: human
+      ARENA_PERSONAL_PEER_BROKERS: ${ARENA_PERSONAL_PEER_BROKERS:-public=http://127.0.0.1:9100}
+      ARENA_PERSONAL_PEER_PORT: ${ARENA_PERSONAL_PEER_PORT:-9195}
+      ARENA_PERSONAL_CONSOLE_PORT: ${ARENA_PERSONAL_CONSOLE_PORT:-9196}
+      ARENA_PERSONAL_WEB_HOST: ${ARENA_PERSONAL_WEB_HOST:-127.0.0.1}
+      ARENA_PERSONAL_PEER_HOME: /app/data/home
+      ARENA_SPHINX_CAP_COUNT: ${ARENA_SPHINX_CAP_COUNT:-20}
+      ARENA_SPHINX_CAP_DAYS: ${ARENA_SPHINX_CAP_DAYS:-30}
+      ARENA_SPHINX_PASS_DAYS: ${ARENA_SPHINX_PASS_DAYS:-30}
+    volumes:
+      - data:/app/data
+
+volumes:
+  data:

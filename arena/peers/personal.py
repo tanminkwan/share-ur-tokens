@@ -46,7 +46,8 @@ def web_token(s: Settings, home: PeerHome) -> str:
         return f.read().strip()
 
 
-def build(s: Settings) -> tuple[Peer, OwnerService, str]:
+def build(s: Settings, extra_apps: list = ()) -> tuple[Peer, OwnerService, str]:
+    """extra_apps: more apps on the same person's peer (e.g. the sphinx's role)"""
     groups = parse_groups(s.personal_peer_brokers)
     if not groups:
         raise ConfigError(f"{s.key_of('personal_peer_brokers')}가 비어 있습니다")
@@ -65,7 +66,7 @@ def build(s: Settings) -> tuple[Peer, OwnerService, str]:
     windows = ([ConsoleApp(None, s, s.personal_web_host, s.personal_console_port, token)] if "console" in screens else []) + \
               ([DeskWebApp(None, s.personal_web_host, s.personal_desk_port, token)] if "desk" in screens else []) + \
               ([ChatApp(None, s, s.personal_web_host, s.personal_chat_port, token)] if "chat" in screens else [])
-    apps = [OwnerDeskApp(desk), EventAssistant(s), *windows]
+    apps = [OwnerDeskApp(desk), EventAssistant(s), *extra_apps, *windows]
     peer = Peer(home.identity(), s, PeerConfig(url=s.public_url(s.personal_peer_port), labels=list(s.personal_peer_labels),
                                                operator=s.personal_mode),
                 home.area(), DeskOwner(desk, s), llm, A2ATransport(s), EventLog(keep=s.event_log_size),
@@ -76,9 +77,9 @@ def build(s: Settings) -> tuple[Peer, OwnerService, str]:
     return peer, service, token
 
 
-async def run(s: Settings) -> None:
+async def run(s: Settings, built=None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    peer, _, _ = build(s)
+    peer, _, _ = built or build(s)
     await serve_background(peer.a2a_app(), s.host, s.personal_peer_port)
     peer.log.emit("peer", peer.pen, f"A2A {peer.config.url} · operator {peer.operator()}")
     await peer.start()  # the screen apps open their local web here

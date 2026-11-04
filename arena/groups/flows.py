@@ -50,3 +50,26 @@ async def attach_ledger(founder: Identity, broker, recorder, recorder_url: str) 
     if not posted.get("ok"):
         return {"ok": False, "error": f"the broker refused the new declaration: {posted.get('error')}", "entry": r["hash"]}
     return {"ok": True, "declaration": decl, "entry": r["hash"], "receipt": r}
+
+
+# ---------------- founding a branch group through a sphinx (dev/founding/requirements.md) ----------------
+def application(founder: Identity, purpose: str, contact: str, ts: float) -> dict:
+    """the signed application: the founder key (the branch's future god) signs it, so the sphinx knows it is theirs"""
+    body = {"founder": founder.pub, "purpose": purpose, "contact": contact, "ts": ts}
+    return {"op": "sphinx.apply", "application": body, "sig": founder.sign(body)}
+
+
+async def apply_to_sphinx(founder: Identity, ask, purpose: str, contact: str, now: float) -> dict:
+    """ask: one message to the sphinx peer (a2a). The answer comes later: the person behind the sphinx meets you first"""
+    return await ask(application(founder, purpose, contact, now))
+
+
+async def founding_pass(ask, application_id: str, founder: str | None = None) -> dict:
+    """where the application stands; a pass that came back is checked here (signature, for this founder)"""
+    from ..ledger.founding import pass_error
+    r = await ask({"op": "sphinx.status", "application_id": application_id})
+    if r.get("ok") and r.get("status") == "passed":
+        bad = pass_error(r.get("pass"), founder=founder)
+        if bad:
+            return {"ok": False, "error": f"the pass does not check out: {bad}"}
+    return r

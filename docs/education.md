@@ -642,6 +642,7 @@ sequenceDiagram
 | link peer | 원장이 가리키는 영구 link를 맡는다. 실제 위치는 게시자가 자기 key로 서명해 바꾸고, 원장은 그대로다(`link.info`, `link.set`, `link.get`, `link.history`) | `python -m arena.peers.link_peer` |
 | search peer | embedding(bge-m3) 벡터로 peer 찾기 | `python -m arena.peers.search` |
 | service peer template | spec 파일 하나로 API peer를 만든다(Python 함수나 기존 HTTP API, signed receipt, 결과를 원장에 남기는 op) | `python -m arena.peers.service --spec spec.json` |
+| sphinx peer | 가지 그룹을 만들려는 사람의 신청을 받는다. 그 peer의 사람이 신청자를 플랫폼 밖(영상 통화, 대면)에서 만나 OK하면 founder key에만 쓰이는 founding pass를 준다. 기간당 발급 상한(`sphinx.info`, `sphinx.apply`, `sphinx.status`). 신청자는 `python -m arena.groups apply`, `pass` | `python -m arena.peers.sphinx`(human mode) |
 
 플랫폼 시설의 role app(`god_role`, `record_role`)은 genesis가 띄운다.
 
@@ -957,7 +958,8 @@ flowchart LR
 | pen name | public key에서 계산한 표시용 이름 |
 | drive | event를 누가 움직이나: auto, suggest, manual |
 | owner desk | 사람에게 묻고 알리는 항목을 모아 두는 곳. desk UI · chat UI가 이것을 보여 준다 |
-| special-purpose peer | 생태계를 튼튼하게 하려고 미리 정의해 둔 선택 peer(foundation, key, link, app store, search) |
+| special-purpose peer | 생태계를 튼튼하게 하려고 미리 정의해 둔 선택 peer(foundation, key, link, app store, search, sphinx) |
+| sphinx / founding pass | 가지 그룹 생성을 허락하는 사람의 peer / 그 사람이 신청자를 만나고 준 증명서(founder key에만 쓰임) |
 | link peer | 원장이 가리키는 영구 link를 맡고, 실제 위치는 게시자 서명으로만 바꾸는 API peer |
 | content form | 본문을 hash하기 전에 bytes로 만드는 방식 |
 | ledger reference | 책에 싣는 원장 정보(ledger_id, entry, content hash, form, author) |

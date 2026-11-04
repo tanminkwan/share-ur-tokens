@@ -16,7 +16,8 @@ flowchart LR
     IMG --> AP["deploy/app-store-peer"]
     IMG --> SP["deploy/service-peer<br/>+ specs/"]
     IMG --> SE["deploy/search-peer<br/>(embedding 서버 필요)"]
-    LP & KP & FP & AP & SP & SE -. "broker에 연결될 때까지 계속 시도" .-> TB
+    IMG --> SX["deploy/sphinx-peer<br/>(사람이 운전)"]
+    LP & KP & FP & AP & SP & SE & SX -. "broker에 연결될 때까지 계속 시도" .-> TB
 ```
 
 | 디렉토리 | 실행 | 기본 포트 | 필요한 것 |
@@ -28,6 +29,7 @@ flowchart LR
 | `deploy/app-store-peer` | `arena.peers.app_store` | A2A 9150 | broker |
 | `deploy/service-peer` | `arena.peers.service --spec specs/<파일>` | api 9161 | broker, `specs/`의 spec 파일과 함수 |
 | `deploy/search-peer` | `arena.peers.search` | A2A 9130 | broker, embedding 서버(`ARENA_EMBED_URL`) |
+| `deploy/sphinx-peer` | `arena.peers.sphinx` | A2A 9195, 사람의 창(console) 9196 | broker, 사람(신청자를 만나 정함). 창의 토큰은 home의 `web-token` |
 
 ## 2. 쓰는 법
 
