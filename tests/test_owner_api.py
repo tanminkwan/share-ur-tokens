@@ -93,10 +93,10 @@ def test_p6p6_the_personal_peer_mode_sets_who_drives_and_both_modes_speak_a2a(tm
         personal.build(dataclasses.replace(settings, personal_mode="agent", llm_backend="compat", llm_base_url="", **home("h5")))
     with pytest.raises(ConfigError):
         personal.build(dataclasses.replace(settings, personal_mode="robot", llm_backend="none", **home("h6")))
-    # the screens are bundled apps, chosen by mode (human: desk, agent: chat) or by ARENA_PERSONAL_APPS
+    # the screens are bundled apps: the integrated console in both modes by default (user 2026-11-04), or ARENA_PERSONAL_APPS
     names = lambda p: [a.name for a in p.apps]
-    assert "bundled.desk_web" in names(peer) and "bundled.chat" not in names(peer)
-    assert "bundled.chat" in names(agent) and "bundled.desk_web" not in names(agent)
+    assert "bundled.console" in names(peer) and not {"bundled.chat", "bundled.desk_web"} & set(names(peer))
+    assert "bundled.console" in names(agent) and not {"bundled.chat", "bundled.desk_web"} & set(names(agent))
     both, _, _ = personal.build(dataclasses.replace(settings, personal_mode="agent", llm_backend="compat", personal_apps=["desk", "chat"], **llm, **home("h8")))
     assert {"bundled.desk_web", "bundled.chat"} <= set(names(both))
     with pytest.raises(ConfigError):  # a chat needs an LLM to talk with

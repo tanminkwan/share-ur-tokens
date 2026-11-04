@@ -53,6 +53,18 @@ class Scheduler(BaseApp):
         self._save(ctx)
         return n
 
+    def bring_forward(self, ctx, event_id: str, kind: str) -> int:
+        """the timers of this kind for this event fire now (e.g. a webhook said a pending answer changed)"""
+        now, n = ctx.clock(), 0
+        for t in self.timers:
+            if t["event_id"] == event_id and t["kind"] == kind and t["at"] > now:
+                t["at"], n = now, n + 1
+        if n:
+            self.timers.sort(key=lambda x: x["at"])
+            self._save(ctx)
+            self._wake.set()
+        return n
+
     def of(self, app_id: str, event_id: str | None = None) -> list[dict]:
         return [dict(t) for t in self.timers if t["app_id"] == app_id and (event_id is None or t["event_id"] == event_id)]
 

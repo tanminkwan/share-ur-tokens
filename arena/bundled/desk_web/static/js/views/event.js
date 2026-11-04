@@ -1,5 +1,5 @@
 import { h, replace } from '/common/dom.js';
-import { ToolForm } from './toolform.js';
+import { ToolForm } from '/common/owner/views/toolform.js';
 
 // EventView: one event as the code sees it (state line, schedule, my timers), its drive, the tools the owner may run,
 // and the recent record.

@@ -67,11 +67,23 @@ def _note(text: str) -> str:
 
 
 class TaskFollower:
-    def __init__(self, poll: float, clock: Callable[[], float] = time.monotonic, sleep=asyncio.sleep):
-        self.poll, self.clock, self.sleep = poll, clock, sleep
+    def __init__(self, poll: float, clock: Callable[[], float] = time.monotonic, sleep=asyncio.sleep, fallback: float | None = None):
+        """poll: how often to look again; with a webhook (wake), look again when it says so, and every `fallback` anyway"""
+        self.poll, self.clock, self.sleep, self.fallback = poll, clock, sleep, fallback or poll
 
-    async def follow(self, client, task, wait: float) -> dict:
+    async def _pause(self, seconds: float, wake: asyncio.Event | None) -> None:
+        if wake is None:
+            await self.sleep(seconds)
+            return
+        try:
+            await asyncio.wait_for(wake.wait(), timeout=seconds)
+        except asyncio.TimeoutError:
+            pass
+        wake.clear()
+
+    async def follow(self, client, task, wait: float, wake: asyncio.Event | None = None) -> dict:
         end = self.clock() + wait
+        interval = self.fallback if wake is not None else self.poll
         while True:
             st = task.status.state
             if st == TaskState.TASK_STATE_COMPLETED:
@@ -82,8 +94,8 @@ class TaskFollower:
                 return {"ok": False, "error": f"the peer needs input: {task_text(task)}", "task_id": task.id, "needs_input": True}
             if self.clock() >= end:
                 return {"ok": False, "pending": True, "task_id": task.id, "error": f"still waiting: {_note(task_text(task))}"}
-            await self.sleep(min(self.poll, max(0.0, end - self.clock())))
-            task = await client.get_task(GetTaskRequest(id=task.id))
+            await self._pause(min(interval, max(0.0, end - self.clock())), wake)
+            task = await client.get_task(GetTaskRequest(id=task.id))  # the answering peer's own word, not the notification's
 
 
 RESTARTED = {"ok": False, "error": "the peer restarted before it could answer; ask again"}

@@ -14,7 +14,8 @@ from ..web_api import read_body, screen_routes, token_guard
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 
 
-def build_owner_api(service: OwnerService, token: str, static_dir: str = STATIC) -> Starlette:
+def build_owner_api(service: OwnerService, token: str, static_dir: str = STATIC, routes: list = ()) -> Starlette:
+    """routes: more /api routes of a window built on the owner API (they get the same token check)"""
     guarded, body = token_guard(token), read_body
 
     async def config(_):
@@ -55,5 +56,6 @@ def build_owner_api(service: OwnerService, token: str, static_dir: str = STATIC)
         Route("/api/events/{event_id}", guarded(event)),
         Route("/api/events/{event_id}/drive", guarded(drive), methods=["POST"]),
         Route("/api/events/{event_id}/tools/{name}", guarded(tool), methods=["POST"]),
+        *[Route(r.path, guarded(r.endpoint), methods=list(r.methods or ["GET"])) for r in routes],
         *screen_routes(static_dir),
     ])

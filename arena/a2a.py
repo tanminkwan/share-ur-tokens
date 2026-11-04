@@ -14,11 +14,12 @@ from a2a.helpers.proto_helpers import get_message_text, new_text_message
 from a2a.server.agent_execution import AgentExecutor
 from a2a.server.request_handlers.default_request_handler_v2 import DefaultRequestHandlerV2
 from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
-from a2a.server.tasks import InMemoryTaskStore
+from a2a.server.tasks import BasePushNotificationSender, InMemoryPushNotificationConfigStore, InMemoryTaskStore
 from a2a.types import (AgentCapabilities, AgentCard, AgentInterface, AgentSkill, GetTaskRequest, Role, SendMessageConfiguration,
-                       SendMessageRequest)
+                       SendMessageRequest, TaskPushNotificationConfig)
 from starlette.applications import Starlette
 
+from .a2a_push import push_url_ok
 from .a2a_tasks import SlowAnswer, TaskFollower
 from .config import Settings
 
@@ -63,34 +64,47 @@ class _JsonExecutor(AgentExecutor):
 
 
 def build_a2a_app(name: str, description: str, url: str, skills: list[str], handler: Handler, version: str = "1.0",
-                  answer_wait: float = 5.0, task_store=None) -> Starlette:
-    """task_store: where slow answers' tasks are kept (a FileTaskStore in the peer's home survives a restart)"""
+                  answer_wait: float = 5.0, task_store=None, push: bool = True, streaming: bool = True, routes=()) -> Starlette:
+    """task_store: where slow answers' tasks are kept (a FileTaskStore in the peer's home survives a restart);
+    push: notify a caller's webhook when a task changes (arena/a2a_push.py); streaming: accept SSE (message:stream);
+    routes: more routes on the same server (the peer's own webhook)"""
     card = AgentCard(
         name=name, description=description, version=version,
         supported_interfaces=[AgentInterface(url=url.rstrip("/") + RPC_PATH, protocol_binding="JSONRPC", protocol_version="1.0")],
-        capabilities=AgentCapabilities(streaming=False),
+        capabilities=AgentCapabilities(streaming=streaming, push_notifications=push),
         default_input_modes=["application/json"], default_output_modes=["application/json"],
         skills=[AgentSkill(id=s, name=s, description=s, tags=[s]) for s in skills])
-    rh = DefaultRequestHandlerV2(agent_executor=_JsonExecutor(handler, answer_wait), task_store=task_store or InMemoryTaskStore(), agent_card=card)
-    return Starlette(routes=create_agent_card_routes(card) + create_jsonrpc_routes(rh, rpc_url=RPC_PATH))
+    pushes = {}
+    if push:
+        store = InMemoryPushNotificationConfigStore()
+        pushes = {"push_config_store": store, "push_url_validator": push_url_ok,  # refused up front, and checked again on sending
+                  "push_sender": BasePushNotificationSender(httpx.AsyncClient(timeout=10.0), store, push_url_validator=push_url_ok)}
+    rh = DefaultRequestHandlerV2(agent_executor=_JsonExecutor(handler, answer_wait), task_store=task_store or InMemoryTaskStore(), agent_card=card,
+                                 **pushes)
+    return Starlette(routes=create_agent_card_routes(card) + create_jsonrpc_routes(rh, rpc_url=RPC_PATH) + list(routes))
 
 
 class A2ATransport:
     def __init__(self, settings: Settings):
         self.timeout, self.wait = settings.a2a_timeout_sec, settings.a2a_task_wait_sec
-        self.follower = TaskFollower(settings.a2a_task_poll_sec)
+        self.follower = TaskFollower(settings.a2a_task_poll_sec, fallback=settings.a2a_push_fallback_sec)
 
     async def call(self, url, msg, timeout=None, meta=None):
         """discover the Agent Card at url, send one JSON message, parse the JSON reply.
         meta {"group_id", "event_id"} rides in the message head: context_id = event_id, metadata, and HTTP headers.
-        meta "wait": how long to follow a task the peer answers with (seconds; default ARENA_A2A_TASK_WAIT_SEC)"""
+        meta "wait": how long to follow a task the peer answers with (seconds; default ARENA_A2A_TASK_WAIT_SEC);
+        meta "notify" {url, token, wake}: my webhook for that task (arena/a2a_push.py), and the event it sets"""
         meta = meta or {}
         group, event = meta.get("group_id"), meta.get("event_id")
         headers = {k: v for k, v in ((H_GROUP, group), (H_EVENT, event)) if v}
         message = new_text_message(json.dumps(msg, ensure_ascii=False), role=Role.ROLE_USER, **({"context_id": event} if event else {}))
         if group or event:
             message.metadata.update({k: v for k, v in (("group_id", group), ("event_id", event)) if v})
-        request = SendMessageRequest(message=message, configuration=SendMessageConfiguration(return_immediately=True))
+        notify = meta.get("notify")
+        config = SendMessageConfiguration(return_immediately=True)
+        if notify:
+            config.task_push_notification_config.CopyFrom(TaskPushNotificationConfig(url=notify["url"], token=notify["token"]))
+        request = SendMessageRequest(message=message, configuration=config)
         async with httpx.AsyncClient(timeout=timeout or self.timeout, headers=headers) as hc:
             client = await create_client(url, ClientConfig(streaming=False, httpx_client=hc))
             last = None
@@ -100,7 +114,7 @@ class A2ATransport:
                 return {"ok": False, "error": "no response"}
             if last.HasField("message"):
                 return json.loads(get_message_text(last.message))
-            return _with_url(await self.follower.follow(client, last.task, meta.get("wait") or self.wait), url)
+            return _with_url(await self.follower.follow(client, last.task, meta.get("wait") or self.wait, (notify or {}).get("wake")), url)
 
     async def check_task(self, url, task_id, wait=None):
         """look again at a task a call gave back as pending (wait: how long to follow it now; 0 = just look)"""

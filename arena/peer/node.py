@@ -7,7 +7,11 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
+from starlette.responses import JSONResponse
+from starlette.routing import Route
+
 from ..a2a import Transport, build_a2a_app
+from ..a2a_push import NOTIFY_PATH, TOKEN_HEADER, TaskWatch, task_id_of
 from ..rest import RestTransport
 from ..config import Settings
 from ..crypto import Identity, pen_name
@@ -59,7 +63,8 @@ class Peer:
         if "inbox" in saved:  # older homes kept the inbox at the top level
             self.app_states.setdefault(DirectRequests.name, {"inbox": saved["inbox"]})
         self.last_profile: dict | None = None
-        self.unreached: set[str] = set()  # broker groups that did not answer the last profile post (Presence tries again)
+        self.unreached: set[str] = set()
+        self.watch = TaskWatch(settings.a2a_watch_keep)  # my calls waiting for a webhook (arena/a2a_push.py)  # broker groups that did not answer the last profile post (Presence tries again)
         self._group_ids: dict[str, str] = {}
         self.trust = RecorderTrust(lambda: self.settings, self.recorder)  # proving recorders from the root of trust (P5-G6)
         self._trust = self.trust.cache
@@ -221,7 +226,21 @@ class Peer:
         from ..a2a_tasks import FileTaskStore
         store = FileTaskStore(self.home.path("a2a-tasks.json"), self.settings.a2a_task_keep) if self.home else None
         return build_a2a_app(f"peer-{self.pen}", f"peer {self.pen}", self.config.url, self.skills(), self.handle,
-                             answer_wait=self.settings.a2a_answer_wait_sec, task_store=store)
+                             answer_wait=self.settings.a2a_answer_wait_sec, task_store=store, push=self.settings.a2a_push,
+                             streaming=self.settings.a2a_streaming, routes=[Route(NOTIFY_PATH, self._notified, methods=["POST"])])
+
+    async def _notified(self, request):
+        """my webhook: another peer says a task I called changed. Only a signal: I look again at that peer myself"""
+        try:
+            payload = await request.json()
+        except ValueError:
+            payload = None
+        c = self.watch.notify(request.headers.get(TOKEN_HEADER), task_id_of(payload))
+        if c is None:
+            return JSONResponse({"ok": False, "error": "unknown notification"}, status_code=401)
+        if c["held"] and c["event_id"]:  # a call that came back pending: the timer that looks again fires now
+            self.scheduler.bring_forward(self.ctx(self.scheduler), c["event_id"], "pending_check")
+        return JSONResponse({"ok": True})
 
     async def start(self) -> None:
         """start the event router (built-in) and every app that has a start"""
@@ -262,8 +281,15 @@ class Peer:
                    wait: float | None = None) -> dict:
         """send to another peer; group/event (if this is about one) ride in the message head; `wait` is how long to
         follow a slow answer (an A2A task) before giving back pending"""
-        meta = {k: v for k, v in (("group_id", group), ("event_id", event), ("wait", wait)) if v} or None
-        return await self.transport.call(url, msg, timeout, meta) if meta else await self.transport.call(url, msg, timeout)
+        meta = {k: v for k, v in (("group_id", group), ("event_id", event), ("wait", wait)) if v}
+        token = None
+        if self.settings.a2a_push and self.config.url.startswith("http"):  # tell the other peer where to say a slow answer changed
+            token, wake = self.watch.issue(event)
+            meta["notify"] = {"url": self.config.url.rstrip("/") + NOTIFY_PATH, "token": token, "wake": wake}
+        r = await self.transport.call(url, msg, timeout, meta) if meta else await self.transport.call(url, msg, timeout)
+        if token:
+            self.watch.hold(token, r["task_id"]) if r.get("pending") else self.watch.done(token)
+        return r
 
     async def check_task(self, url: str, task_id: str, wait: float | None = None) -> dict:
         """look again at a call that came back pending (an A2A task of a slow answer)"""

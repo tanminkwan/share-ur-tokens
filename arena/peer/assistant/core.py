@@ -21,6 +21,7 @@ from ..plugin import ASSISTANT_APP_ID, Decision, MessageHead
 from ..scheduler import fmt_time
 from .directory import Directory
 from .drives import Drives
+from .timeline import Timeline
 from .waiting_calls import TIMER as WAITING_TIMER, WaitingCalls
 from .handles import HEX64, Handles  # noqa: F401  (HEX64 kept importable from here)
 from .ledger_view import LedgerView
@@ -50,6 +51,7 @@ class EventAssistant:
         self.prompt = Prompt(self.handles)
         self.drives = Drives(settings)
         self.waiting = WaitingCalls(settings)
+        self.timeline = Timeline(settings, self.handles)
         self.toolbox = Toolbox(self.handles, tools if tools is not None else default_tools() + element_tools())
         self.tools = self.toolbox.tools
 
@@ -79,6 +81,7 @@ class EventAssistant:
         st = self.events.get(request.get("event_id"))
         if st:
             st.peers[sender] = request.get("issuer_url", st.peers.get(sender))
+            self.timeline.received(ctx, st, sender, "request", request.get("text", ""))
             await self.feed(ctx, st.event_id, f"[직접 요청] 보낸 이 pub={sender}\n{request.get('text', '')}\n"
                                               f"data={json.dumps(request.get('data', {}), ensure_ascii=False)}")
 
@@ -289,6 +292,12 @@ class EventAssistant:
         """a new input for an event. Who handles it depends on the event's drive (P6-P4): in manual the owner gets it on the
         desk and no LLM runs; otherwise the LLM takes a turn (and the owner still hears of notices and scheduled times)"""
         st = self.events[event_id]
+        if kind == "owner":
+            self.timeline.note(ctx, st, "owner", "instruction", text.removeprefix("[소유자의 지시] "))
+        elif kind in ("notice", "timer"):
+            self.timeline.note(ctx, st, "system", kind, text.split("\n", 1)[0])
+        elif kind == "ledger":  # the entries themselves, not the sentence before them
+            self.timeline.note(ctx, st, "system", kind, text.split("\n", 1)[1] if "\n" in text else text)
         note = self.drives.notifier(ctx)
         if st.drive == "manual":
             if idle:
@@ -336,6 +345,8 @@ class EventAssistant:
             name = d.get("tool", "wait")
             if name == "wait":
                 st.transcript.append(f"[기다림] {d.get('thought', '')[:self.s.text_thought_chars]}")
+                if d.get("thought"):
+                    self.timeline.note(ctx, st, "agent", "thought", d["thought"][:self.s.text_thought_chars])
                 ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] 기다림: {d.get('thought', '')[:self.s.text_log_chars]}")
                 self.save(ctx, st)
                 return
@@ -369,6 +380,7 @@ class EventAssistant:
 
     def _note_action(self, ctx, st, who: str, name: str, args: dict, result) -> None:
         """one action and its result in the event's record and the log (the LLM's turn and the owner's hand alike)"""
+        self.timeline.action(ctx, st, "agent" if who == "행동" else "owner", name, args, result)
         st.transcript.append(self.shorten(ctx, st, f"[{who}] {name} {json.dumps(args, ensure_ascii=False)[:self.s.text_args_chars]}"))
         st.transcript.append(self.shorten(ctx, st, f"{name} 결과: {json.dumps(result, ensure_ascii=False)[:self.s.text_result_chars]}"))
         ctx.log.emit("assistant", ctx.pen, f"[{st.event_id}] {'' if who == '행동' else who + ': '}{name} → "
@@ -398,6 +410,16 @@ class EventAssistant:
 
     def tools_view(self, st) -> list[dict]:
         return self.toolbox.owner_view(st)
+
+    def conversation(self, ctx, st, lines: int) -> dict:
+        """what a person watching an event reads: the timeline, and whom this peer may speak to in it"""
+        pubs = [p for p in [st.issuer_pub, *st.peers, *st.applicants, *(c[1] for c in st.contracts)] if p and p != ctx.pub]
+        seen, peers = set(), []
+        for p in pubs:
+            if p not in seen:
+                seen.add(p)
+                peers.append({"pub": p, "handle": self.handles.handle(ctx, st, p)})
+        return {"timeline": st.timeline[-lines:], "peers": peers}
 
     async def owner_run(self, ctx, event_id: str, name: str, args: dict) -> dict:
         """the owner runs a tool by hand (any drive): the same code path as the LLM's, so the same checks hold"""
@@ -431,6 +453,8 @@ class EventAssistant:
             else:
                 notes += "\n[코드 확인] 참가 신청이 아님: 규칙 해시가 다르다"
         notes += self.reveals.summary(ctx, st, data, await self.verify_reveals(ctx, st, data))
+        joined = isinstance(data, dict) and data.get("type") == "join"
+        self.timeline.received(ctx, st, who, "join" if joined else "message", msg.get("text", "") or ("참가 신청" if joined else ""))
         await self.feed(ctx, st.event_id, f"[메시지] 보낸 이 pub={who}\n{msg.get('text', '')}\n"
                                           f"data={json.dumps(data, ensure_ascii=False)}{notes}")
         return {"ok": True}
@@ -444,6 +468,7 @@ class EventAssistant:
         checks = await self.verify_reveals(ctx, st, p.get("value"))
         st.pending[msg["request_id"]] = {"payload": p, "from_pub": who, "from_url": msg.get("url"), "reveals_ok": all(ok for ok, _ in checks)}
         st.peers[who] = msg.get("url")
+        self.timeline.received(ctx, st, who, "sign_request", f"공동 확인 서명 요청: {p.get('kind')} {p.get('subject') or ''}".strip())
         await self.feed(ctx, st.event_id, f"[서명 요청] request_id={msg['request_id']} 제안자 pub={who}\n"
                                           f"kind={p.get('kind')} subject={p.get('subject')} parties={p.get('parties')}\n"
                                           f"value={json.dumps(p.get('value'), ensure_ascii=False)}{self.reveals.summary(ctx, st, p.get('value'), checks)}")
@@ -455,6 +480,7 @@ class EventAssistant:
         if not who or not prop or not self.messenger.head_ok(st, msg, head) or who not in prop["payload"]["parties"]:
             return {"ok": False, "error": "unknown proposal or party"}
         if msg.get("declined"):
+            self.timeline.received(ctx, st, who, "declined", f"공동 확인 거절: {msg.get('reason', '')}")
             await self.feed(ctx, st.event_id, f"[공동 확인 거절] request_id={msg['request_id']} 거절한 이 pub={who} 이유: {msg.get('reason', '')}")
             return {"ok": True}
         if not verify(who, prop["payload"], msg.get("attest_sig", "")):

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>에이전트 아레나 · 콘솔</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header id="header" data-testid="header"></header>
+  <div id="toast" data-testid="toast" role="status" aria-live="polite"></div>
+  <main class="console">
+    <section class="col" aria-label="이벤트와 알림">
+      <div id="events" data-testid="events"></div>
+      <div id="host" data-testid="host"></div>
+      <h2>알림</h2>
+      <div id="items" data-testid="items"></div>
+    </section>
+    <section class="col wide" aria-label="대화">
+      <div id="conversation" data-testid="conversation"></div>
+    </section>
+    <section class="col" aria-label="상태와 개입">
+      <div id="agent" data-testid="agent"></div>
+      <div id="side" data-testid="side"></div>
+    </section>
+  </main>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

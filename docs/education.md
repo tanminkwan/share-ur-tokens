@@ -527,7 +527,7 @@ sequenceDiagram
 
 ## 3.5 사람용 UI: desk와 chat
 
-사람의 화면은 peer의 기본 기능이 아니라 **bundled app**이다(`arena/bundled/`). peer가 자기 local web을 띄운다.
+사람의 화면은 peer의 기본 기능이 아니라 **bundled app**이다(`arena/bundled/`). peer가 자기 local web을 띄운다. 기본은 **console**(통합 창)이다. 사람이 운전하든 agent가 운전하든 같은 창에서 event의 대화를 **지켜보고**(받은 말은 왼쪽, 내 peer가 한 말은 오른쪽, 그 밖의 일은 가운데), **끼어든다**(내 peer로서 상대에게 한 마디, 내 agent에게 지시, 물음에 답, drive 바꾸기, tool 직접 실행). desk UI와 chat UI도 고를 수 있다.
 
 ```mermaid
 flowchart LR
@@ -548,6 +548,7 @@ flowchart LR
 ```
 
 - 사람과 사람의 소통도 각자의 peer가 `a2a`로 주고받는다. 그래서 사람의 message에도 signature, head, 원장 연결이 똑같이 붙는다.
+- **a2a는 무전기 방식이다.** peer와 peer 사이에는 session(websocket 등)을 열어 두지 않는다. message 하나가 말 한 번이고, 사람이 운전하는 peer도 바깥에서는 agent와 똑같이 보인다(사람이 agent를 흉내 낸다). 늦은 답은 task로 하고, 바뀌면 받는 peer가 부르는 peer의 **webhook**(`/a2a/notify`)으로 알린다. 부르는 peer는 알림을 신호로만 쓰고 직접 다시 묻는다. 바깥 client를 위해 **SSE**도 열어 둔다.
 - 사람의 답은 늦을 수 있다. 받는 peer는 짧은 시간 안에 끝나지 않는 답을 **A2A task**(`working`, "waiting for the owner")로 알리고, 부르는 peer는 `tasks/get`으로 끝까지 따라간다(아래 그림). 상대가 human peer면 더 오래 기다리고, 한도가 지나면 거절이 아니라 pending으로 받는다. basic assistant는 pending으로 돌아온 contract를 기억했다가 timer로 다시 보고, 답이 오면 원장 기록까지 마저 한다(`check_pending` tool로 지금 볼 수도 있다). 받는 peer는 task를 home에 남겨 재시작 뒤에도 결과나 사유("restarted, ask again")를 돌려준다.
 
 ```mermaid
@@ -555,17 +556,15 @@ sequenceDiagram
     participant C as caller peer
     participant H as human peer
     participant P as 사람 (desk UI)
-    C->>H: engage (return_immediately)
+    C->>H: engage (return_immediately, 내 webhook과 1회용 token)
     H->>P: desk에 question
     Note over H: ARENA_A2A_ANSWER_WAIT_SEC 안에 답이 없다
     H-->>C: task working {"note": "waiting for the owner"}
-    loop ARENA_A2A_TASK_POLL_SEC마다
-        C->>H: tasks/get
-        H-->>C: working
-    end
     P->>H: 예 (몇 분, 몇 시간 뒤)
-    C->>H: tasks/get
+    H->>C: webhook /a2a/notify (token): task가 바뀌었다
+    C->>H: tasks/get (알림 본문은 믿지 않고 직접 묻는다)
     H-->>C: completed {ok, sig}
+    Note over C,H: 알림이 오지 않으면 ARENA_A2A_PUSH_FALLBACK_SEC마다 다시 묻는다
 ```
 - 화면은 token이 있어야 열린다(주소의 `#token=`, 열자마자 주소창에서 지워짐).
 - UI 테스트는 Playwright headless Chromium으로 돌린다(`tests/ui/`, 8개).
