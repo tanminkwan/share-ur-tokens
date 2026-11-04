@@ -46,8 +46,8 @@ def web_token(s: Settings, home: PeerHome) -> str:
         return f.read().strip()
 
 
-def build(s: Settings, extra_apps: list = ()) -> tuple[Peer, OwnerService, str]:
-    """extra_apps: more apps on the same person's peer (e.g. the sphinx's role)"""
+def build(s: Settings, extra_apps: list = (), kind: str = "personal") -> tuple[Peer, OwnerService, str]:
+    """extra_apps: more apps on the same person's peer (e.g. the sphinx's role); kind: what its windows show (peer_kinds)"""
     groups = parse_groups(s.personal_peer_brokers)
     if not groups:
         raise ConfigError(f"{s.key_of('personal_peer_brokers')}가 비어 있습니다")
@@ -68,7 +68,7 @@ def build(s: Settings, extra_apps: list = ()) -> tuple[Peer, OwnerService, str]:
               ([ChatApp(None, s, s.personal_web_host, s.personal_chat_port, token)] if "chat" in screens else [])
     apps = [OwnerDeskApp(desk), EventAssistant(s), *extra_apps, *windows]
     peer = Peer(home.identity(), s, PeerConfig(url=s.public_url(s.personal_peer_port), labels=list(s.personal_peer_labels),
-                                               operator=s.personal_mode),
+                                               operator=s.personal_mode, kind=kind),
                 home.area(), DeskOwner(desk, s), llm, A2ATransport(s), EventLog(keep=s.event_log_size),
                 brokers={g: FailoverBrokerClient.from_urls(urls, s) for g, urls in groups.items()}, apps=apps, home=home)
     service = OwnerService(peer, desk)

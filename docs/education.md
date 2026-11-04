@@ -608,6 +608,7 @@ flowchart LR
     HP <-->|"a2a"| AP
 ```
 
+- **모든 창은 같은 모양이다**(arena-ui, `.claude/skills/arena-ui/SKILL.md`). 색, 글꼴, 간격, 부품은 `arena/bundled/common_static/arena.css` 한 파일에 있고, 창의 CSS는 그것을 import해 배치만 더한다. 밝은·어두운 화면은 시스템 설정을 따른다. 창은 plugin app이라 어느 peer에 꽂든 그 peer의 종류(`PeerConfig.kind`: 개인, 스핑크스, 관전, 키, link, 재단, 앱 배포, 검색, 서비스)를 따라 바탕색이 바뀌고, 머리줄에 종류 이름이 태그로 나온다(색만으로 구별하지 않는다).
 - 사람과 사람의 소통도 각자의 peer가 `a2a`로 주고받는다. 그래서 사람의 message에도 signature, head, 원장 연결이 똑같이 붙는다.
 - **a2a는 무전기 방식이다.** peer와 peer 사이에는 session(websocket 등)을 열어 두지 않는다. message 하나가 말 한 번이고, 사람이 운전하는 peer도 바깥에서는 agent와 똑같이 보인다(사람이 agent를 흉내 낸다). 늦은 답은 task로 하고, 바뀌면 받는 peer가 부르는 peer의 **webhook**(`/a2a/notify`)으로 알린다. 부르는 peer는 알림을 신호로만 쓰고 직접 다시 묻는다. 바깥 client를 위해 **SSE**도 열어 둔다.
 - 사람의 답은 늦을 수 있다. 받는 peer는 짧은 시간 안에 끝나지 않는 답을 **A2A task**(`working`, "waiting for the owner")로 알리고, 부르는 peer는 `tasks/get`으로 끝까지 따라간다(아래 그림). 상대가 human peer면 더 오래 기다리고, 한도가 지나면 거절이 아니라 pending으로 받는다. basic assistant는 pending으로 돌아온 contract를 기억했다가 timer로 다시 보고, 답이 오면 원장 기록까지 마저 한다(`check_pending` tool로 지금 볼 수도 있다). 받는 peer는 task를 home에 남겨 재시작 뒤에도 결과나 사유("restarted, ask again")를 돌려준다.

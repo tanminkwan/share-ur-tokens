@@ -14,7 +14,7 @@ from . import personal
 def build(s: Settings):
     if s.personal_mode != "human":
         raise ConfigError(f"스핑크스는 사람이 정한다: {s.key_of('personal_mode')}=human 으로 띄운다")
-    return personal.build(s, extra_apps=[SphinxRole(s)])
+    return personal.build(s, extra_apps=[SphinxRole(s)], kind="sphinx")
 
 
 def main():

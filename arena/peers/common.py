@@ -31,6 +31,10 @@ def parse_groups(items: list[str]) -> dict[str, list[str]]:
     return out
 
 
+KINDS = {"key_peer": "key", "link_peer": "link", "foundation_peer": "foundation", "app_store_peer": "app-store", "search_peer": "search",
+         "service_peer": "service"}  # what each special-purpose peer is, for any window plugged into it (arena/bundled/peer_kinds.py)
+
+
 def build_autonomous_peer(settings: Settings, prefix: str, apps: list, description: str) -> Peer:
     get = lambda k: getattr(settings, f"{prefix}_{k}")
     groups = parse_groups(get("brokers"))
@@ -47,7 +51,7 @@ def build_autonomous_peer(settings: Settings, prefix: str, apps: list, descripti
     except ConfigError:
         llm = NoLLM()
     return Peer(load_or_create(open_key_store(settings), get("key_file")), settings,
-                PeerConfig(url=settings.public_url(get("port")), labels=list(get("labels"))),
+                PeerConfig(url=settings.public_url(get("port")), labels=list(get("labels")), kind=KINDS.get(prefix, "personal")),
                 LocalFolderArea(area_dir, settings), NoOwner(), llm, A2ATransport(settings), EventLog(keep=settings.event_log_size),
                 brokers={g: FailoverBrokerClient.from_urls(urls, settings) for g, urls in groups.items()}, apps=apps)
 

@@ -1,0 +1,169 @@
+/* Agent Arena: the one look of every window (desk, chat, console, and any window built later).
+   Rules and how to use it: .claude/skills/arena-ui/SKILL.md. A window's own CSS imports this file and adds only its layout.
+   Colors come from the tokens below; no window writes a hex color of its own. Light and dark follow the system
+   (prefers-color-scheme); [data-theme="light" | "dark"] on <html> forces one. Contrast was computed: text >= 4.5:1. */
+
+:root {
+  color-scheme: light dark;
+  /* surfaces: the window's background (tinted by the peer's kind), cards and fields, raised panel (header), sunken */
+  --page: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f6f8fa;
+  --surface-3: #eef1f4;
+  /* text and lines */
+  --fg: #1f2328;
+  --muted: #59636e;
+  --line: #d1d9e0;
+  /* the accent: primary actions, my words, focus */
+  --accent: #1f6fcc;
+  --accent-fg: #ffffff;
+  --accent-soft: #e3eefb;
+  /* what my agent says (distinct from what I say) */
+  --agent-soft: #ece9fb;
+  /* states: only for states, never for decoration (always with a word or icon too) */
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  --bad: #cf222e;
+  /* type */
+  --font: system-ui, "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "D2Coding", monospace;
+  --fs-sm: 12px;
+  --fs: 14px;
+  --fs-lg: 16px;
+  /* space, corners, depth */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --r-sm: 4px;
+  --r: 6px;
+  --r-lg: 12px;
+  --shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #111315; --surface: #111315; --surface-2: #1a1d21; --surface-3: #22262b;
+    --fg: #e6e8eb; --muted: #9aa4af; --line: #343a41;
+    --accent: #6aa6f2; --accent-fg: #0b1220; --accent-soft: #1d3350; --agent-soft: #2a2546;
+    --ok: #3fb950; --warn: #d29922; --bad: #f47067;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  }
+}
+:root[data-theme="dark"] {
+  --page: #111315;
+  --surface: #111315; --surface-2: #1a1d21; --surface-3: #22262b;
+  --fg: #e6e8eb; --muted: #9aa4af; --line: #343a41;
+  --accent: #6aa6f2; --accent-fg: #0b1220; --accent-soft: #1d3350; --agent-soft: #2a2546;
+  --ok: #3fb950; --warn: #d29922; --bad: #f47067;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+}
+
+/* ---------- the peer's kind: its window's background and header (html[data-peer], set from /api/state me.kind) ----------
+   The kind's name is also shown as a tag in the header, so the color is never the only sign. Light, then dark. */
+[data-peer="observer"]   { --page: #eef7f0; --surface-2: #d5ecdb; }
+[data-peer="sphinx"]     { --page: #fbf6e9; --surface-2: #f1e3bd; }
+[data-peer="key"]        { --page: #f5f2fb; --surface-2: #e4dcf4; }
+[data-peer="link"]       { --page: #edf7f7; --surface-2: #d3ebeb; }
+[data-peer="foundation"] { --page: #f1f4f8; --surface-2: #dbe3ee; }
+[data-peer="app-store"]  { --page: #fcf3ec; --surface-2: #f4dcc8; }
+[data-peer="search"]     { --page: #f4f5fc; --surface-2: #dadef5; }
+[data-peer="service"]    { --page: #f3f4f5; --surface-2: #e1e5e9; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-peer="observer"]   { --page: #0f1712; --surface-2: #173021; }
+  :root:not([data-theme="light"])[data-peer="sphinx"]     { --page: #17140c; --surface-2: #2e2512; }
+  :root:not([data-theme="light"])[data-peer="key"]        { --page: #15121c; --surface-2: #272036; }
+  :root:not([data-theme="light"])[data-peer="link"]       { --page: #0e1717; --surface-2: #16302f; }
+  :root:not([data-theme="light"])[data-peer="foundation"] { --page: #11151b; --surface-2: #1d2633; }
+  :root:not([data-theme="light"])[data-peer="app-store"]  { --page: #19130e; --surface-2: #30221a; }
+  :root:not([data-theme="light"])[data-peer="search"]     { --page: #12131c; --surface-2: #20243a; }
+  :root:not([data-theme="light"])[data-peer="service"]    { --page: #131416; --surface-2: #202327; }
+}
+:root[data-theme="dark"][data-peer="observer"]   { --page: #0f1712; --surface-2: #173021; }
+:root[data-theme="dark"][data-peer="sphinx"]     { --page: #17140c; --surface-2: #2e2512; }
+:root[data-theme="dark"][data-peer="key"]        { --page: #15121c; --surface-2: #272036; }
+:root[data-theme="dark"][data-peer="link"]       { --page: #0e1717; --surface-2: #16302f; }
+:root[data-theme="dark"][data-peer="foundation"] { --page: #11151b; --surface-2: #1d2633; }
+:root[data-theme="dark"][data-peer="app-store"]  { --page: #19130e; --surface-2: #30221a; }
+:root[data-theme="dark"][data-peer="search"]     { --page: #12131c; --surface-2: #20243a; }
+:root[data-theme="dark"][data-peer="service"]    { --page: #131416; --surface-2: #202327; }
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html, body { background: var(--page); }
+body { margin: 0; font: var(--fs)/1.5 var(--font); color: var(--fg); }
+h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: var(--sp-1) 0 var(--sp-2); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.empty { color: var(--muted); }
+.code { color: var(--muted); font-family: var(--mono); font-size: 11px; word-break: break-all; }
+
+/* ---------- header: who I am ---------- */
+header { display: flex; gap: var(--sp-4); align-items: baseline; flex-wrap: wrap; padding: 10px var(--sp-4);
+         border-bottom: 1px solid var(--line); background: var(--surface-2); }
+header .pen { font-weight: 600; font-size: var(--fs-lg); }
+header .tag { padding: 1px var(--sp-2); border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: var(--fs-sm); }
+header .tag.kind { color: var(--fg); border-color: var(--muted); font-weight: 600; }
+
+/* ---------- columns (a window chooses its grid; these are the parts) ---------- */
+main { display: grid; grid-template-columns: 260px 320px 1fr; min-height: calc(100vh - 48px); }
+.col { padding: var(--sp-3) 14px; border-right: 1px solid var(--line); overflow: auto; }
+.col.wide { border-right: 0; }
+
+/* ---------- cards: one thing for the person (a question, a notice, an event) ---------- */
+.card, .ask { border: 1px solid var(--line); border-radius: var(--r); padding: var(--sp-2) 10px; margin-bottom: var(--sp-2);
+              background: var(--surface); box-shadow: var(--shadow); }
+.ask { border-color: var(--accent); }
+.card .kind, .ask .kind { font-size: var(--fs-sm); color: var(--muted); }
+.card .title { font-weight: 600; margin: 2px 0; white-space: pre-wrap; }
+.card .body { color: var(--muted); white-space: pre-wrap; max-height: 8em; overflow: auto; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
+details { margin-bottom: 6px; }
+
+/* ---------- controls ---------- */
+button { font: inherit; padding: 3px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2);
+         color: var(--fg); cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button.bad { color: var(--bad); }
+input, textarea, select { font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: var(--r); width: 100%;
+                          background: var(--surface); color: var(--fg); }
+textarea { min-height: 4em; }
+label { display: block; font-size: var(--fs-sm); color: var(--muted); margin-top: 6px; }
+.event-item { display: block; width: 100%; text-align: left; margin-bottom: var(--sp-1); }
+.event-item.selected { border-color: var(--accent); background: var(--accent-soft); }
+
+/* ---------- code-made text: where an event stands, a transcript ---------- */
+.state { background: var(--surface-2); padding: var(--sp-2); border-radius: var(--r); white-space: pre-wrap; font-size: 13px; }
+.transcript { font-family: var(--mono); font-size: var(--fs-sm); white-space: pre-wrap; background: var(--surface-3); padding: var(--sp-2);
+              border-radius: var(--r); max-height: 24em; overflow: auto; }
+
+/* ---------- a conversation: bubbles ---------- */
+.timeline { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; padding: var(--sp-2); border: 1px solid var(--line);
+            border-radius: var(--r-lg); background: var(--surface-3); }
+.line { max-width: 85%; padding: 6px 10px; border-radius: var(--r-lg); white-space: pre-wrap; word-break: break-word; }
+.line .who { display: block; font-size: 0.75em; color: var(--muted); margin-bottom: 2px; }
+.line.in { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); }
+.line.out { align-self: flex-end; background: var(--accent-soft); }
+.line.out.by-agent, .line.in.by-agent { background: var(--agent-soft); }
+.line.note { align-self: center; max-width: 95%; background: transparent; font-size: 0.85em; color: var(--muted); }
+.line.note.thought { font-style: italic; }
+.note { color: var(--muted); font-size: 13px; margin: var(--sp-1) 0; }
+
+/* ---------- writing: a text box with its buttons on one line ---------- */
+.composer, .tell, .agent-say { display: flex; gap: 6px; margin-top: var(--sp-2); align-items: flex-start; }
+.composer textarea, .tell textarea, .agent-say textarea, .composer input { flex: 1; width: auto; min-width: 0; min-height: 2.4em; }
+.composer select { flex: 0 0 auto; width: auto; max-width: 30%; }
+.composer button, .tell button, .agent-say button { flex: 0 0 auto; white-space: nowrap; }
+
+/* ---------- toasts: what just happened ---------- */
+#toast { position: fixed; right: var(--sp-4); top: 56px; max-width: 420px; z-index: 10; }
+#toast .msg { background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-left: 4px solid var(--ok);
+              padding: 6px 10px; margin-bottom: 6px; border-radius: var(--r-sm); white-space: pre-wrap; box-shadow: var(--shadow); }
+#toast .msg.bad { border-left-color: var(--bad); }
+
+/* ---------- tables ---------- */
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: var(--sp-1) var(--sp-2); border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }

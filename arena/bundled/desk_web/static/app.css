@@ -1,2 +1,2 @@
-/* the owner desk window: the shared owner styles */
-@import url('/common/owner/base.css');
+/* the owner desk window: the shared look (arena.css) and its default three columns */
+@import url('/common/arena.css');

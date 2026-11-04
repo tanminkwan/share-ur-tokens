@@ -209,3 +209,4 @@ def test_the_runner_is_a_person_s_peer_with_the_role(tmp_path, settings):
         sphinx.build(Settings.load(env=dict(env, ARENA_PERSONAL_MODE="agent"), dotenv_path=None))
     peer, service, token = sphinx.build(Settings.load(env=dict(env, ARENA_PERSONAL_MODE="human"), dotenv_path=None))
     assert peer.operator() == "human" and any(isinstance(a, SphinxRole) for a in peer.apps) and "sphinx.apply" in peer.skills() and token
+    assert peer.config.kind == "sphinx" and service.state()["me"]["kind_label"] == "스핑크스"
