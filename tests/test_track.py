@@ -26,8 +26,9 @@ async def recs(settings):
 async def history(svc, cast, judge=None):
     if judge:
         cast.judge = judge
-    for e in (cast.event(approvers=[cast.approver]), cast.contract(), cast.publish(), cast.share(consumer=cast.judge, nonce="s"),
-              cast.feedback("score", score=7.0)):
+    ev = await svc.record(*cast.event())
+    assert ev["ok"] and (await svc.record(*cast.endorse(ev["hash"])))["ok"]
+    for e in (cast.contract(), cast.publish(), cast.share(consumer=cast.judge, nonce="s"), cast.feedback("score", score=7.0)):
         assert (await svc.record(*e))["ok"]
 
 
@@ -37,7 +38,7 @@ async def test_p4c1_track_endpoint_and_switch(recs, settings, tmp_path):
     http = httpx.AsyncClient(transport=httpx.ASGITransport(app=build_recorder_app(svc)), base_url="http://r")
     t = (await http.get(f"/track/{cast.judge.pub}")).json()
     assert t == {"ok": True, "pub": cast.judge.pub, "track": {"published": 0, "received_by": 0, "verdicts_received": {}, "verdicts_given": {"score": 1},
-                                                                "roles": {"judge": 1}, "events": 0, "approvals": 0,
+                                                                "roles": {"judge": 1}, "events": 0, "endorsements": 0, "endorsed": 0,
                                                                 "attested": {}, "closed": 0, "groups": 0, "revealed": 0, "codebooks": 0, "codebook_followers": 0}}
     nobody = (await http.get(f"/track/{Identity.generate().pub}")).json()
     assert nobody["track"]["roles"] == {} and nobody["track"]["published"] == 0
@@ -68,8 +69,8 @@ async def test_p4c2_track_of_sums_recorders_and_marks_failures(recs):
 def test_p4c3_meets_compares_mechanically():
     t = {"published": 0, "received_by": 3, "verdicts_received": {}, "verdicts_given": {"review": 4}, "roles": {"review": 2}, "events": 0, "approvals": 0}
     assert meets(t, {"roles": {"review": 1}, "received_by": 2}) == (True, [])
-    ok, missing = meets(t, {"roles": {"review": 3, "record": 1}, "approvals": 1})
-    assert not ok and missing == ["roles.review 2/3", "roles.record 0/1", "approvals 0/1"]
+    ok, missing = meets(t, {"roles": {"review": 3, "record": 1}, "endorsements": 1})
+    assert not ok and missing == ["roles.review 2/3", "roles.record 0/1", "endorsements 0/1"]
 
 
 async def test_p4c4_peer_remembers_recorders(tmp_path, settings):

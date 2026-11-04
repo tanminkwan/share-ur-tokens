@@ -57,8 +57,10 @@ class RoleAcceptor(Protocol):
 
 
 @runtime_checkable
-class EventApprover(Protocol):
-    async def approve_event(self, ctx, event: dict, request: dict) -> Decision | None: ...
+class EventEndorser(Protocol):
+    """another peer asks me to co-sign its event (an endorsement: weight for the event, never a gate). `body` is what I
+    would sign (arena/ledger/endorse.py); None when this app does not decide about endorsements"""
+    async def endorse_event(self, ctx, body: dict, request: dict) -> Decision | None: ...
 
 
 @runtime_checkable
@@ -100,7 +102,7 @@ class EvaluationProvider(Protocol):
     async def evaluate(self, ctx, items: list, request: dict) -> list: ...
 
 
-CAPABILITIES = (OpProvider, OfferProvider, RoleAcceptor, EventApprover, RequestReceiver, ProfileContributor, Lifecycle, EventHandler,
+CAPABILITIES = (OpProvider, OfferProvider, RoleAcceptor, EventEndorser, RequestReceiver, ProfileContributor, Lifecycle, EventHandler,
                 EvaluationProvider, TimerHandler, SubmissionSource)
 
 # ---------------- which app runs an event, and how ----------------

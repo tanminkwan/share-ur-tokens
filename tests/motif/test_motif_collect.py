@@ -27,7 +27,7 @@ class ApplyOnRequest(PeerApp):
     async def on_request(self, peer, request, sender):
         n = dict(request, notice_id=request["request_id"])
         chk = await check_notice(peer, n)
-        if chk["event_ok"] and chk["approver_label_ok"] and chk["contracts_ok"]:
+        if chk["event_ok"] and chk["endorsed_ok"] and chk["endorser_label_ok"] and chk["contracts_ok"]:
             content = await peer.owner.write("기획서", "\n".join(peer.area.lines()), {})
             self.results.append(await apply(peer, n, content))
 
@@ -52,7 +52,7 @@ async def world(tmp_path, settings):
     # an earlier event in which the experienced reviewer already served
     R = w.org.recorder("mem://rec/recorder")
     L = await lid(R)
-    past = {"event_id": "past", "issuer": w.org.identity.pub, "kind": "earlier", "policy": {}, "approvers": [], "group_id": "g-review", **L}
+    past = {"event_id": "past", "issuer": w.org.identity.pub, "kind": "earlier", "policy": {}, "group_id": "g-review", **L}
     assert (await R.record("event", past, {w.org.identity.pub: w.org.sign(past)}))["ok"]
     c = {"event_id": "past", "role": "review", "issuer": w.org.identity.pub, "contractor": w.rev.identity.pub, "nonce": "past-1", "group_id": "g-review", **L}
     assert (await R.record("contract", c, {w.org.identity.pub: w.org.sign(c), w.rev.identity.pub: w.rev.sign(c)}))["ok"]
@@ -75,7 +75,7 @@ async def test_p4e2_collection_mode_end_to_end(world):
     assert dict((c["pub"], m) for c, (_, m) in checked)[w.rev2.identity.pub] == ["roles.review 0/1"]
     # 2. open the event with the pre-checked reviewer, without posting a notice
     o = await open_event(w, reviewer=passed[0], post=False)
-    assert o["approved"] and o["posted"] is None and w.brokers[OPEN].notices == {}
+    assert o["endorsed"] and o["posted"] is None and w.brokers[OPEN].notices == {}
     # 3. applicant candidates from the search peer, then direct requests
     taken = {org.identity.pub, w.rec.identity.pub, w.ceo.identity.pub}
     hits = (await ask("search_profiles", q="신입 온보딩 프로그램 운영", labels=[SDS], exclude=sorted(taken), k=2))["hits"]

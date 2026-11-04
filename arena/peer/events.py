@@ -46,7 +46,7 @@ async def announce_event(ctx, *, group: str, title: str, kind: str, rules: str, 
     ev = "ev-" + _nonce(title)
     rules_hash = h(rules.encode())
     lid = await ctx.ledger_id(rec["recorder_url"])
-    decl = {"event_id": ev, "issuer": ctx.pub, "kind": kind, "policy": policy, "approvers": [], "group_id": gid, "rules_hash": rules_hash,
+    decl = {"event_id": ev, "issuer": ctx.pub, "kind": kind, "policy": policy, "group_id": gid, "rules_hash": rules_hash,
             "mode": mode, "apps": apps, **({"elements": elements} if elements else {}), **({"codebook": codebook} if codebook else {}),
             **({"schedule": schedule} if schedule else {}), **({"ledger_id": lid} if lid else {})}
     r = await ctx.recorder(rec["recorder_url"]).record("event", decl, {ctx.pub: ctx.sign(decl)})

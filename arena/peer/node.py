@@ -19,7 +19,7 @@ from ..events import EventLog
 from ..llm import LLM, llm_available
 from ..recorder.client import RecorderAPI, RecorderClient
 from .area import PublicArea
-from .builtin import RESERVED_OPS, DirectRequests, EventApprovals, RoleContracts
+from .builtin import RESERVED_OPS, DirectRequests, EventEndorsements, RoleContracts
 from .app_install import AppInstaller
 from .elements import PEER_ELEMENTS
 from .events import EventRouter
@@ -73,7 +73,7 @@ class Peer:
         self._requests = DirectRequests(settings)
         self.events = EventRouter(settings, installer=AppInstaller(settings) if (settings.app_store_urls or settings.app_store_discover) else None)
         self.scheduler = Scheduler(settings)  # "이 시각에 이 일": timers kept in the home, handed to the app that set them
-        self.builtins = [RoleContracts(), EventApprovals(), self._requests, self.events, self.scheduler]
+        self.builtins = [RoleContracts(), EventEndorsements(), self._requests, self.events, self.scheduler]
         wants = config.element_apps if config.element_apps is not None else any(isinstance(a, EventHandler) for a in apps)
         if wants:  # peers that take part in events (or ask for them) get the built-in elements' apps
             self.builtins += [el.app(settings) for el in PEER_ELEMENTS.values() if el.app]

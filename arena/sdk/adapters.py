@@ -17,7 +17,7 @@ from ..signing import SignatureError, verify_message
 
 def function_app(name: str, version: str = "1.0", *, app_id: str, ops: dict | None = None, offers: list[str] | None = None,
                  accept_role: Callable[..., Awaitable[Decision | None]] | None = None,
-                 approve_event: Callable[..., Awaitable[Decision | None]] | None = None,
+                 endorse_event: Callable[..., Awaitable[Decision | None]] | None = None,
                  on_request: Callable[..., Awaitable[None]] | None = None, profile_extra: dict | None = None,
                  start: Callable[..., Awaitable[None]] | None = None, sdk: str = "1"):
     """build an app from functions; it has only the capabilities you give it"""
@@ -30,10 +30,10 @@ def function_app(name: str, version: str = "1.0", *, app_id: str, ops: dict | No
         async def _accept(self, ctx, role, request):
             return await accept_role(ctx, role, request)
         ns["accept_role"] = _accept
-    if approve_event is not None:
-        async def _approve(self, ctx, event, request):
-            return await approve_event(ctx, event, request)
-        ns["approve_event"] = _approve
+    if endorse_event is not None:
+        async def _endorse(self, ctx, body, request):
+            return await endorse_event(ctx, body, request)
+        ns["endorse_event"] = _endorse
     if on_request is not None:
         async def _on_request(self, ctx, request, sender):
             await on_request(ctx, request, sender)

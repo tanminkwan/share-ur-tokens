@@ -9,7 +9,7 @@ from .handles import HEX64, Handles
 
 
 class LedgerView:
-    PEOPLE = ("author", "contractor", "issuer", "parties", "approvers")
+    PEOPLE = ("author", "contractor", "issuer", "parties", "endorser")
     SIGNED_BY_ALL = ("attest", "contract")  # entries with more than one signer: the ledger records them only with every signature
     SETTLED_NOTE = "원장에 있는 항목은 필요한 서명이 모두 모여 확정된 것이다(코드 확인). 원장에 있는 공동 확인에 더 받을 서명은 없다."
     MINE = ("author", "issuer")

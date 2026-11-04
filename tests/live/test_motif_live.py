@@ -1,6 +1,6 @@
 """P2-C7: the idea-contest motif with real processes and the real LLM.
 brokers = separate `python -m arena.broker` processes; peers = A2A servers; the recorder peer opens the recorder API;
-profiles, the CEO's approval, the reviewer's acceptance and scores, and the applicants' writing come from the real LLM."""
+profiles, the CEO's endorsement, the reviewer's acceptance and scores, and the applicants' writing come from the real LLM."""
 import time
 
 import pytest
@@ -18,7 +18,7 @@ from arena.peer.record_role import RecordRole
 from arena.recorder.service import RecorderService
 from arena.serve import serve_background
 from tests.conftest import make_env
-from tests.motif.doubles import APPROVER_LABEL, CONTENT_SCHEMA, OPEN, REVIEW, AcceptRole, ApproveByOwner, Judge, LLMOwner
+from tests.motif.doubles import CONTENT_SCHEMA, ENDORSER_LABEL, OPEN, REVIEW, AcceptRole, EndorseByOwner, Judge, LLMOwner
 from tests.motif.flow import CALL, apply, check_notice, found_group, open_event, review_and_adopt
 from tests.test_processes import Proc, free_port
 
@@ -68,7 +68,7 @@ class LiveWorld:
         self.start_brokers()
         self.org = await self.peer("org", [], ["사내 행사 진행 담당"], groups=[OPEN, REVIEW], identity=self.org_id)  # IntakeDesk: built in
         self.rec = await self.peer("rec", [], ["정보보안·컴플라이언스 8년차", "감사 추적을 위한 기록 보관과 열람 통제를 맡아 왔다"], record=True)
-        self.ceo = await self.peer("ceo", [ApproveByOwner()], ["대표이사", "회사 전략과 인재 육성을 책임진다"], labels=[SDS, APPROVER_LABEL],
+        self.ceo = await self.peer("ceo", [EndorseByOwner()], ["대표이사", "회사 전략과 인재 육성을 책임진다"], labels=[SDS, ENDORSER_LABEL],
                                    persona="당신은 이 회사의 대표이사입니다. 신입 사원 적응과 인재 육성은 회사의 중점 과제라서, 그와 관련된 사내 공모라면 결재합니다.")
         self.rev = await self.peer("rev", [AcceptRole("review"), Judge()], ["혁신 과제 심사 전문가 20년차", "사내 공모전 심사위원을 여러 번 맡았다"],
                                    groups=[REVIEW], persona="당신은 사내 공모 심사 전문가입니다. 심사 역할 요청은 이해 충돌이 없으면 수락하고, "
@@ -103,14 +103,14 @@ async def test_pc7_live_motif_end_to_end(live, tmp_path, procs):
         await w.boot()
         fallbacks = [e for e in w.log.tail(200) if e["kind"] == "llm"]
         o = await open_event(w)
-        assert o["approved"], o["approval"]  # the CEO persona (real LLM) approved
+        assert o["endorsed"], o["endorsement"]  # the CEO persona (real LLM) endorsed
         assert [e["type"] for e in w.ledger.chain[:2]] == ["genesis", "group"] and set(w.ledger.chain[2]["sigs"]) == {w.org.identity.pub, w.ceo.identity.pub}
         assert {e["payload"]["group_id"] for e in w.ledger.chain} == {"public", "g-reviewers"}
         for p in w.applicants:
             ns = (await p.brokers[OPEN].list_notices(p.identity))["notices"]
             n = next(x for x in ns if x["notice_id"] == o["event_id"])
             chk = await check_notice(p, n)
-            assert chk["event_ok"] and chk["approver_label_ok"] and chk["contracts_ok"], chk
+            assert chk["event_ok"] and chk["endorsed_ok"] and chk["endorser_label_ok"] and chk["contracts_ok"], chk
             content = await p.owner.write(f"다음 공모에 낼 아이디어를 한 개 쓰세요. title은 한 줄, idea는 2~3문장.\n공모: {n['text']}",
                                           "\n".join(p.area.lines()), CONTENT_SCHEMA)
             r = await apply(p, n, content)
@@ -121,7 +121,7 @@ async def test_pc7_live_motif_end_to_end(live, tmp_path, procs):
         assert audit_chain(chain) == "ok"
         assert [e["type"] for e in chain].count("feedback") == 3 and chain[1]["payload"]["founder"] == w.org.identity.pub
         c = contribution(chain)
-        assert c[w.ceo.identity.pub]["approvals"] == 1
+        assert c[w.ceo.identity.pub]["endorsements"] == 1
         profiles = (await w.org.brokers[OPEN].list_profiles(w.org.identity))["profiles"]
         assert all(p["summary"] for p in profiles) and len(profiles) == 5
         print("\nLLM fallbacks during boot:", len(fallbacks))

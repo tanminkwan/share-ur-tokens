@@ -21,6 +21,7 @@ from ..plugin import ASSISTANT_APP_ID, Decision, MessageHead
 from ..scheduler import fmt_time
 from .directory import Directory
 from .drives import Drives
+from ..endorsements import tokens_of
 from .timeline import Timeline
 from .waiting_calls import TIMER as WAITING_TIMER, WaitingCalls
 from .handles import HEX64, Handles  # noqa: F401  (HEX64 kept importable from here)
@@ -208,6 +209,7 @@ class EventAssistant:
         st = self.events[ev] = EventState(ev, "host", title, rules, out["rules_hash"], out["group_id"], rec["recorder_url"], rec["pub"], ctx.pub, ctx.url,
                                           policy=dict(policy), elements=dict(elements or {}))
         st.instruction = instruction
+        st.event_hash, st.notice = out["event_hash"], dict(out["notice"])
         st.drive = self.initial_drive(ctx)
         st.schedule = event_times(out["notice"])
         schedule_event_times(ctx, out["notice"])  # the host wakes at its own event's times too
@@ -227,14 +229,51 @@ class EventAssistant:
                                               elements=dict(notice.get("elements") or {}), schedule=event_times(notice), drive=self.initial_drive(ctx),
                                               notice_ver=notice.get("ver", 1))
             st.peers[notice["issuer_pub"]] = notice["issuer_url"]
+            st.event_hash = notice.get("event_hash", "")
+            self._read_endorsements(ctx, st, notice)
             self.save(ctx, st)
             await self.feed(ctx, ev, f"[새 공지] '{notice.get('title', '')}' (개최자 pub={notice['issuer_pub']}). 규칙과 실행 방식이 원장에 공증된 것과 같음을 확인했다.", kind="notice")
         elif st is not None and change == "updated":
             st.notice_ver = notice.get("ver", st.notice_ver)
+            self._read_endorsements(ctx, st, notice)
             await self.feed(ctx, ev, f"[공지 수정] 버전 {st.notice_ver}: {notice.get('text', '')}", kind="notice")
         elif st is not None and change == "closed" and not st.notice_closed:
             st.notice_closed = True
             await self.feed(ctx, ev, "[공지 마감] 개최자가 이 이벤트의 공지를 마감했다.", kind="notice")
+
+    def _read_endorsements(self, ctx, st, notice) -> None:
+        """a notice may carry endorsement tokens (signatures off the ledger): keep those that check out for this event"""
+        before = {e["endorser"] for e in st.endorsements}
+        for t in tokens_of(notice):
+            if t["body"]["endorser"] not in before:
+                st.endorsements.append({"endorser": t["body"]["endorser"], "how": "signature", "token": t})
+                self.timeline.note(ctx, st, "system", "endorse", f"{self.handles.handle(ctx, st, t['body']['endorser'])}이(가) 이 이벤트에 공동 서명했다(서명 확인)")
+
+    async def endorse_event(self, ctx, body, request):
+        """another peer asks me to co-sign its event: my owner decides (it puts my name on someone else's event)"""
+        st = self.events.get(body["event_id"])
+        title = st.title if st else str(request.get("title", body["event_id"]))
+        who = self.handles.handle(ctx, st, body["issuer"]) if st else body["issuer"][:12]
+        a = await ctx.owner.ask(f"{who}이(가) 이벤트 '{title}'에 공동 서명을 청합니다. 이 이벤트에 내 이름을 걸까요?",
+                                str(request.get("text", "")))
+        if st and a.yes:
+            self.timeline.note(ctx, st, "owner", "endorse", "이 이벤트에 공동 서명했다")
+        return Decision(a.yes, a.why)
+
+    async def keep_endorsement(self, ctx, st, done: dict) -> dict:
+        """an endorsement I asked for came in: remember it; a token goes onto the event's notice (re-posted)"""
+        if not done.get("ok"):
+            return done
+        endorser = done["token"]["body"]["endorser"] if done.get("token") else done.get("endorser")
+        st.endorsements.append({"endorser": endorser, "how": done["how"], **({"hash": done["hash"]} if done.get("hash") else {"token": done["token"]})})
+        if done["how"] == "signature" and st.notice:
+            st.notice = dict(st.notice, endorsements=[e["token"] for e in st.endorsements if e.get("token")],
+                             ver=st.notice.get("ver", 1) + 1)  # the broker takes an update only with a newer version
+            posted = await ctx.brokers[self.group].post_notice(ctx.identity, st.notice)
+            done = dict(done, notice_reposted=bool(posted.get("ok")))
+        self.timeline.note(ctx, st, "system", "endorse", f"{self.handles.handle(ctx, st, endorser)}이(가) 공동 서명했다({done['how']})")
+        self.save(ctx, st)
+        return done
 
     async def on_timer(self, ctx, timer):
         """the scheduler woke me at a time (P6-S3): the event's notarized schedule, or a reminder I set myself"""

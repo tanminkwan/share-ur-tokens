@@ -119,7 +119,7 @@ peer가 진짜 원장만 믿게 하려면 `.env`에 뿌리 값을 둔다: `ARENA
 | [docs/education.md](docs/education.md) | **교육 자료**: 지금의 모습을 spec → 순수 플랫폼 → 플랫폼 부가기능 → 앱 기능 순으로, 구성·동작·사용과 그림으로. 고정은 규약과 코드뿐, 구현체는 누구나 |
 | [dev/docker.md](dev/docker.md) | **Docker 배치**: API 서버 peer마다 실행 디렉토리와 docker compose, 시험용 broker, 이미지 build 분리, 주소와 proxy, broker 재연결 |
 | [dev/peer-spec.md](dev/peer-spec.md) | **peer 표준**: 세 유형(service·agent·human)과 반드시·권함·자유로 나눈 층별 규정. 누구나 peer를 만들 수 있게 |
-| [dev/protocol.md](dev/protocol.md) | **규약**(판 4): 다른 언어로 peer·broker·recorder를 만들기 위한 바이트 단위 규칙과 [시험 벡터](dev/protocol-vectors.json) |
+| [dev/protocol.md](dev/protocol.md) | **규약**(판 5): 다른 언어로 peer·broker·recorder를 만들기 위한 바이트 단위 규칙과 [시험 벡터](dev/protocol-vectors.json) |
 | [dev/chain-policy.md](dev/chain-policy.md), [dev/entry-columns.md](dev/entry-columns.md), [dev/codebook.md](dev/codebook.md) | 원장 체인 확장 정책, 원장 항목의 칸, 코드표와 판 |
 | [dev/app-guide.md](dev/app-guide.md) | **앱 개발 규약집**: 앱 구조, 능력 인터페이스, 문맥, 원장 규약, 등록과 배포, 어댑터. 외부 개발자는 `arena.sdk`만 쓴다 |
 | [dev/test-report.md](dev/test-report.md) | **테스트 결과서**: 테스트 종류와 개수, 패키지별 커버리지와 기준선, 덜 덮인 곳 |
