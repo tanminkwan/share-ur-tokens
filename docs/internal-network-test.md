@@ -457,7 +457,7 @@ http://127.0.0.1:9330 agent ['이름:agent']
 - 이벤트를 열면 왼쪽 이벤트 목록에 `가위바위보 연습 · 개최 · manual`처럼 뜬다(`manual`은 운전석: 사람이 직접).
 - 상대 peer 창에는 몇 초 안에 공지 카드가 오고 카드에 **이벤트 열기** 버튼이 있다. 누르면 이벤트가 목록에 생긴다.
 - 참가 신청은 개최자 창 대화에 상대 필명과 함께 `참가 신청` 줄로 온다.
-- **오른쪽 "할 수 있는 일(직접 실행)" 패널은 이벤트의 상태가 바뀌면 다시 그려져 접히고 입력값이 지워진다.** 도구를 실행한 직후(예: `contract` 뒤)에는 패널을 다시 펼쳐서 다음 도구를 쓴다. 입력하는 동안에는 상태가 안 바뀌면 그대로다.
+- 오른쪽 "할 수 있는 일(직접 실행)" 패널은 **열어 둔 채로 남고 입력한 값도 그대로**다. 도구를 실행해도(예: `contract` 뒤) 접히지 않는다. 지금 상태 줄(시각 포함)의 글자만 계속 갱신된다. (2026-11-05 이전 판은 상태 줄의 시각 때문에 약 2초마다 패널이 다시 그려져 입력 중인 폼이 닫히고 지워졌다. 고쳤고 테스트가 있다. 이전 판이면 `git pull` 하세요.)
 - 도구를 실행하면 오른쪽 아래에 결과 알림(`contract → {"ok":true,"hash":…}`)이 잠깐(6초) 뜬다.
 
 ### 10.6 시나리오 T1: 서로 찾기
@@ -481,9 +481,9 @@ http://127.0.0.1:9330 agent ['이름:agent']
    - 일정은 비워 둔다. **열기**를 누른다.
    - **기대**: 왼쪽 이벤트 목록에 `가위바위보 연습`이 생기고, 대화에 "이벤트를 열었다"와 원장 기록이 가운데 작은 글로 남는다.
 2. **agent 창**을 본다(몇 초에서 수십 초: 공지를 받아 LLM이 판단한다).
-   - **기대**: 알림에 공지 카드가 오고, agent가 참가할지 **물음 카드**(소유자에게 묻기)를 띄운다. 이벤트 대화에 agent의 생각과 행동이 보인다(관전).
-   - 물음 카드가 안 오면: 10.10절의 "agent가 공지에 반응하지 않는다".
-3. agent 창에서 물음 카드에 **버튼으로 답하거나**, 대화 아래 "내 agent에게 지시" 칸에 `참가해`라고 쓰고 "지시"를 누른다.
+   - **기대**: 알림에 공지 카드가 오고, 이벤트 목록에 `가위바위보 연습 · 참가 · auto`가 생기며, 대화에 `내 agent 행동: 참가 신청 → 완료`가 보인다. **이 규칙에서는 agent가 소유자에게 묻지 않고 스스로 참가했다**(2026-11-05 확인, 아래 10.7-1). 같은 일이어도 LLM이 `물음 카드`(소유자에게 묻기)를 띄울 수 있다. 그러면 카드의 **예**를 누른다.
+   - 아무 반응이 없으면: 10.10절의 "agent가 공지에 반응하지 않는다".
+3. 참가하지 않았으면 agent 창 대화 아래 "내 agent에게 지시" 칸에 `참가해`라고 쓰고 "지시"를 누른다(없어도 되는 보조 수단).
    - **기대**: agent가 `join_event`로 참가 신청을 개최자(human-a)에게 a2a message로 보낸다.
 4. **human-a 창**의 그 이벤트 대화에 agent의 **참가 신청**이 왼쪽 말로 보인다.
 5. human-a 창 오른쪽 "할 수 있는 일(직접 실행)"을 펼쳐 `contract`를 실행한다.
@@ -496,6 +496,46 @@ http://127.0.0.1:9330 agent ['이름:agent']
    ```
    - **기대**: `genesis`(0번), `event`, `contract` 순으로 항목이 이어지고, `/audit`가 `"status":"ok"`로 답한다. 항목의 `event_id`(`ev-`로 시작)는 `payload` 안에 있다.
    - 한 이벤트만 보려면 `/events/<event_id>`. `event_id`는 창에 나오지 않는다: 위 `/log`에서 찾거나, 브라우저 개발자 도구(F12)에서 왼쪽 이벤트 버튼의 `data-id`를 본다.
+
+### 10.7-1 화면으로 보는 사람 + agent 흐름 (캡처)
+
+> 2026-11-05, 이 서버에서 Playwright로 `--peers human-a,agent`를 띄우고 따라가며 찍었다(agent는 `.env`의 실제 LLM을 썼고, 이 한 번의 실행에 LLM 호출이 몇 번 들었다). 필명과 event id는 실행마다 다르고, agent의 말투와 판단은 LLM에 따라 다르다. 필명 `필명-8c185c`는 human-a, `필명-489ffb`는 agent다.
+
+**① agent 창을 연다.** 태그가 `개인 peer`, `agent`, `LLM 있음`이다. 오른쪽 위에 **내 agent** 칸이 있다(LLM 없는 human peer에는 없다).
+
+![agent 창: 처음](img/internal-network-test/agent-01-agent-start.png)
+
+**② human-a가 이벤트를 열면(10.7의 1번) agent 창에 공지 카드가 온다.** 사람이 아무것도 누르지 않아도 온다.
+
+![agent 창: 공지 카드](img/internal-network-test/agent-02-agent-notice.png)
+
+**③ agent가 스스로 판단해 참가한다.** 이벤트를 열어 보면 대화에 공지와 `내 agent 행동: 참가 신청 → 완료`가 있다. 이벤트 목록의 운전석은 `auto`(agent가 운전). 이 규칙에서는 소유자에게 묻지 않았다.
+
+![agent 창: agent가 스스로 참가](img/internal-network-test/agent-03-agent-decides.png)
+
+**④ human-a 창에 agent의 참가 신청이 온다.** 알림에 메시지 카드, 대화에 agent의 필명과 `참가 신청`.
+
+![human-a 창: agent의 참가 신청](img/internal-network-test/agent-04-human-a-join-seen.png)
+
+**⑤ human-a가 `contract`로 agent와 role `member` 계약을 맺는다.** (상대 칸에 agent의 필명) 결과 알림 `contract → {"ok":true,…}`, 지금 상태에 `계약 1건: member=<agent 필명>`. 폼은 열린 채로 남는다.
+
+![human-a 창: agent와 계약](img/internal-network-test/agent-05-human-a-contract-done.png)
+
+**⑥ human-a가 agent에게 말을 건다.** 받는 이를 agent로 두고 `안녕, 이 이벤트의 규칙을 한 줄로 설명해 줄래?`를 보내면, agent의 답이 **왼쪽 말풍선**으로 온다(이 실행에서는 몇 초 만에).
+
+![human-a 창: agent의 답](img/internal-network-test/agent-06-human-a-agent-reply.png)
+
+**⑦ agent 창에서 같은 대화를 본다(관전).** 받은 말은 왼쪽, agent가 한 말은 오른쪽(`내 agent → 상대`), agent의 생각(`내 agent 생각: …`, LLM이 쓴 글이라 영어일 수 있다), 원장 기록(`원장: 2 contract …`)은 가운데 작은 글로 보인다.
+
+![agent 창: 대화 전체](img/internal-network-test/agent-07-agent-conversation.png)
+
+**⑧ 소유자가 자기 agent와 대화한다.** 오른쪽 위 **내 agent** 칸에 `지금 무슨 이벤트 있어?`라고 쓰고 "말하기". 이것은 a2a가 아니라 agent와 그 소유자 사이의 대화다. 답: 참여 중인 이벤트 `가위바위보 연습`(역할 participant, 운전석 auto, 진행 중).
+
+![agent 창: 내 agent와 대화](img/internal-network-test/agent-08-my-agent-panel.png)
+
+**⑨ 관전 창은 이 모든 것을 새로고침 없이 따라 올라왔다.** (`genesis`, `event`, `contract`)
+
+![관전 창: 끝](img/internal-network-test/agent-09-observer-end.png)
 
 ### 10.8 시나리오 T3: 사용자(human-a)가 agent에게 말을 건다
 
@@ -594,7 +634,7 @@ ARENA_LLM_BACKEND=none .venv/bin/python -m scripts.try_personal --fresh --peers 
 
 ![human-a: 계약 도구 입력](img/internal-network-test/08-human-a-contract-form.png)
 
-**⑨ 실행하면 계약이 맺어진다.** 대화에 `나 행동: 역할 계약 → 완료`, 지금 상태에 `이 이벤트에서 맺은 역할 계약 1건: member=<human-b 필명>`, 오른쪽 위에 결과 알림(`contract → {"ok":true,"hash":…}`). 패널이 다시 그려져 접혔다.
+**⑨ 실행하면 계약이 맺어진다.** 대화에 `나 행동: 역할 계약 → 완료`, 지금 상태에 `이 이벤트에서 맺은 역할 계약 1건: member=<human-b 필명>`, 오른쪽 위에 결과 알림(`contract → {"ok":true,"hash":…}`). 패널은 열린 채로 남는다.
 
 ![human-a: 계약 완료](img/internal-network-test/09-human-a-contract-done.png)
 
@@ -626,4 +666,6 @@ ARENA_LLM_BACKEND=none .venv/bin/python -m scripts.try_personal --fresh --peers 
   7. 원장: `/log?from=0`이 `genesis, event, contract, contract`, `/audit`가 `ok`, `/trust`, `/events/<id>`, `/track/<공개키>`가 답한다. `/chain`은 서명이 필요하다.
   8. **관전 창**(9304)을 시작 때 열어 두었더니 항목 1개(`genesis`)로 시작해, 새로고침 없이 `genesis, event, contract, contract` 4개로 올라왔다(종류가 새것 위로). 무결성은 정상, 기록자 1, peer 4(human-a, human-b, 기록자, god).
   9. 페이지 오류(JS)는 없었다. 끝난 뒤 프로세스 3개가 모두 내려갔다.
-- **확인하지 못함**: agent가 있는 T2·T3(공지에 대한 물음 카드, agent의 참가·답). LLM 호출이 들어서 아직 하지 않았다. 해 보시고 화면이 다르면 알려 주세요. agent의 반응 시간과 말투는 LLM에 따라 다르다.
+- **agent가 있는 T2·T3도 확인함** (2026-11-05, 실제 LLM, 10.7-1의 캡처): agent가 공지를 받아 스스로 참가 → human-a가 계약 → 말을 걸면 agent가 답 → 소유자가 "내 agent" 칸으로 묻고 답을 받음. 물음 카드(소유자에게 묻기)는 이 규칙에서는 뜨지 않았다. 규칙이나 LLM에 따라 뜰 수 있어 그 경로는 확인하지 못했다.
+- **확인하지 못함**: 물음 카드·제안 카드(승인/거절)가 뜨는 경우, 운전석을 `manual`/`suggest`로 바꾼 agent. agent의 반응 시간과 말투는 LLM에 따라 다르다.
+- **시험 중에 찾아 고친 것**: 상태 줄의 시각 때문에 도구 폼이 약 2초마다 닫히고 입력이 지워지던 문제(console, desk 둘 다). 오른쪽 패널은 이제 글자만 갱신한다.

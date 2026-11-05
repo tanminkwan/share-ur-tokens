@@ -152,3 +152,20 @@ async def test_p6p8_the_owner_opens_an_event_with_a_schedule(eco, site, browser)
     assert "schedule" in await page.get_by_test_id("timers").inner_text()
     st = next(iter(asst(p).events.values()))
     assert st.role == "host" and st.schedule[0]["code"] == "session"
+
+
+async def test_a_half_filled_tool_form_survives_the_clock_moving_on_the_desk(eco, site, browser):
+    """the same on the owner desk: the state line carries the clock; typing in a tool form must not be wiped by the poll"""
+    from tests.conftest import FakeClock
+    p, _, url = await site()
+    p.clock = fc = FakeClock()
+    ev = await hosted(eco)
+    await p.events.watch_once(p.ctx(p.events))
+    page = await page_of(browser, url)
+    await page.get_by_test_id("item-notice").get_by_test_id("open-event").click(timeout=WAIT)
+    await page.get_by_test_id("tool-send").locator("summary").click(timeout=WAIT)
+    await page.get_by_test_id("tool-send").get_by_test_id("arg-text").fill("쓰는 중인 글")
+    before = await page.get_by_test_id("state-line").inner_text()
+    fc.tick(60)
+    await page.get_by_test_id("state-line").filter(has_not_text=before).wait_for(timeout=WAIT)
+    assert await page.get_by_test_id("tool-send").get_by_test_id("arg-text").input_value() == "쓰는 중인 글"
