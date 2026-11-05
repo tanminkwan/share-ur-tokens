@@ -72,6 +72,17 @@ class Genesis:
             s.should_exit = True
 
 
+def _god(d: str) -> tuple[Identity | None, str]:
+    """the god key in this folder, or only its public key when a ceremony keeps the key offline (god.pub, no god.key).
+    Without either, a new god key is made here: the rehearsal and test way (dev/phase8 P8-E2)"""
+    key, pub = os.path.join(d, "god.key"), os.path.join(d, "god.pub")
+    if os.path.exists(key) or not os.path.exists(pub):
+        god = Identity.load_or_create(key)
+        return god, god.pub
+    from .ceremony.offline import read_pub
+    return None, read_pub(pub)
+
+
 def _area(root: str, settings: Settings, line: str) -> LocalFolderArea:
     os.makedirs(root, exist_ok=True)
     notes = os.path.join(root, settings.area_notes_file)
@@ -84,16 +95,19 @@ def _area(root: str, settings: Settings, line: str) -> LocalFolderArea:
 async def start(settings: Settings, viewers=None) -> Genesis:
     d, host = settings.genesis_dir, settings.host
     url = settings.public_url  # what the genesis writes for others; it listens on ARENA_HOST
-    god_id = Identity.load_or_create(os.path.join(d, "god.key"))
+    god_id, god_pub = _god(d)  # god_id is None when a ceremony left only god.pub (the god key stays offline, P8-E2)
+    observer_id = Identity.load_or_create(settings.observer_key_file or os.path.join(d, "observer.key"))  # the god peer reads as this (P8-D1)
     broker = BrokerService(settings, Identity.load_or_create(os.path.join(d, "broker.key")), BM25Searcher(settings.bm25_k1, settings.bm25_b),
                            HttpNeighbors(settings.neighbor_timeout_sec), name=settings.genesis_broker_name, neighbors=[],
                            group_id=settings.genesis_group_id, store=FileBrokerStore(os.path.join(d, "broker-state.json")))
     rec_key = os.path.join(d, "recorder.key")
     rec_id = Identity.load_or_create(rec_key)
-    svc = RecorderService.build(settings, rec_id, JsonlStore(os.path.join(d, "ledger.jsonl")), readers=[god_id.pub, *settings.recorder_readers],
+    svc = RecorderService.build(settings, rec_id, JsonlStore(os.path.join(d, "ledger.jsonl")), readers=[observer_id.pub, *settings.recorder_readers],
                                 access_log_path=os.path.join(d, "recorder-access.jsonl"), key_file=rec_key)
     parent_client = RecorderClient(settings.genesis_parent_recorder_url, settings) if settings.genesis_parent_recorder_url else None
     if not svc.ledger.chain:
+        if god_id is None:
+            raise ConfigError(f"{d} has god.pub but no ledger: entry 0 needs god's signature (python -m arena.ceremony run first)")
         parent = None
         if parent_client:  # a community starting its own ledger: its start is linked into the original chain (P5-G9)
             pt = await parent_client.trust()
@@ -107,15 +121,19 @@ async def start(settings: Settings, viewers=None) -> Genesis:
             raise RuntimeError(f"genesis failed: {r['error']}")
     else:
         g, keys = svc.ledger.chain[0], current_keys(svc.ledger.chain)
-        if g["type"] != "genesis" or g["payload"].get("broker") != broker.identity.pub or keys["god"] != god_id.pub:
+        if g["type"] != "genesis" or g["payload"].get("broker") != broker.identity.pub or keys["god"] != god_pub:
             raise ConfigError("the stored ledger was not begun by this god and broker (keys follow key_rotate from the genesis)")
     if parent_client and not (await parent_client.link(svc.ledger.chain[0]["hash"])).get("ok"):
+        if god_id is None:
+            raise ConfigError("this branch is not linked into the trunk yet and the god key is offline (the ceremony links it)")
         if svc.ledger.chain[0]["payload"]["recorder"] != rec_id.pub:
             raise RuntimeError("this ledger is not linked into the original chain and its first recorder key is already retired")
         r = await link_to_parent(parent_client, god_id, rec_id, svc.ledger.chain, settings.genesis_broker_name)
         if not r.get("ok"):
             raise RuntimeError(f"could not link this ledger into the original chain: {r.get('error')}")
     if parent_client and len(svc.ledger.chain) == 1:  # entry 1 of a branch: the chain_link the trunk sealed (CP-2)
+        if god_id is None:
+            raise ConfigError("this branch has no parent_link yet and the god key is offline (the ceremony records it)")
         link = (await parent_client.link(svc.ledger.chain[0]["hash"])).get("link")
         r = await record_parent_link(svc, god_id, svc.ledger.chain, link or {})
         if not r.get("ok"):
@@ -135,10 +153,10 @@ async def start(settings: Settings, viewers=None) -> Genesis:
                     brokers=brokers(), apps=[role], home=PeerHome(os.path.join(d, "homes", "recorder"), settings))
     god_role, god_home = GodRole(settings, viewers), PeerHome(os.path.join(d, "homes", "god"), settings)
     observer = ObserverApp(god_role, settings, settings.genesis_god_web_host, settings.genesis_god_web_port,
-                           web_token(god_home, settings.genesis_god_web_token)) if settings.genesis_god_web_port else None
+                           web_token(god_home, settings.genesis_god_web_token), god_pub=god_pub) if settings.genesis_god_web_port else None
     windows = [observer] if observer else []  # the observer window opens when the god starts (ARENA_GENESIS_GOD_WEB_PORT)
-    god = Peer(god_id, settings, PeerConfig(url=urls["god"], kind="observer"), _area(os.path.join(d, "areas", "god"), settings,
-               "god: 제네시스로 만민 broker와 기록자를 만든 peer. 원장 전체를 읽어 감사하고 통계를 낸다"), NoOwner(), llm, transport, log,
+    god = Peer(observer_id, settings, PeerConfig(url=urls["god"], kind="observer"), _area(os.path.join(d, "areas", "god"), settings,
+               "관찰자: 제네시스의 관전 peer. 원장 전체를 읽어 감사하고 통계를 낸다(god 키가 아닌 관찰자 키로 읽는다)"), NoOwner(), llm, transport, log,
                brokers=brokers(), apps=[god_role, *windows], home=god_home)
     world = Genesis(god, recorder, broker, urls)
     world.servers.append(await serve_background(build_broker_app(broker), host, settings.genesis_broker_port))
@@ -149,7 +167,7 @@ async def start(settings: Settings, viewers=None) -> Genesis:
     world.servers.append(await serve_background(god.a2a_app(), host, settings.genesis_god_port))
     for p in (recorder, god):
         await p.start()
-    log.emit("genesis", god.pen, "제네시스: " + json.dumps({"god": god_id.pub, "broker": broker.identity.pub, "recorder": rec_id.pub,
+    log.emit("genesis", god.pen, "제네시스: " + json.dumps({"god": god_pub, "observer": observer_id.pub, "broker": broker.identity.pub, "recorder": rec_id.pub,
                                                         "ledger_id": svc.ledger.chain[0]["hash"], "anchor": anchor_file, **urls}))
     return world
 

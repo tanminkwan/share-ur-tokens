@@ -299,6 +299,11 @@ class Settings(EnvSettings):
     genesis_recorder_port: int = F("ARENA_GENESIS_RECORDER_PORT", 9101, int, "제네시스 기록자 peer A2A 포트")
     genesis_recorder_api_port: int = F("ARENA_GENESIS_RECORDER_API_PORT", 9102, int, "제네시스 기록자 recorder API 포트")
     genesis_god_port: int = F("ARENA_GENESIS_GOD_PORT", 9103, int, "god peer A2A 포트")
+    observer_key_file: str = F("ARENA_OBSERVER_KEY_FILE", "", str, "god peer(관전·감사·통계)가 원장 전체를 읽는 관찰자 키 파일. 비면 <제네시스 폴더>/observer.key. god 키가 아니다(P8-D1)")
+    # the root-key ceremony (dev/phase8): python -m arena.ceremony
+    ceremony_min_witnesses: int = F("ARENA_CEREMONY_MIN_WITNESSES", 2, int, "키 폐기 선언에 서명해야 하는 최소 증인 수")
+    ceremony_poll_sec: float = F("ARENA_CEREMONY_POLL_SEC", 1.0, float, "세리머니(run)가 오프라인 서명 파일이 생겼는지 보는 주기(초)")
+    ceremony_timeout_sec: float = F("ARENA_CEREMONY_TIMEOUT_SEC", 3600.0, float, "세리머니가 한 라운드의 서명을 기다리는 최대 시간(초). 지나면 멈추고, 첫 기록자 키가 사라지므로 처음부터 다시 한다")
     genesis_god_web_port: int = F("ARENA_GENESIS_GOD_WEB_PORT", 0, int, "god peer의 관전 창(observer 앱) 포트. 0이면 창을 열지 않는다")
     genesis_god_web_host: str = F("ARENA_GENESIS_GOD_WEB_HOST", "127.0.0.1", str, "관전 창이 듣는 주소(기본: 이 기계 안에서만. 다른 PC의 브라우저로 보려면 0.0.0.0)")
     genesis_god_web_token: str = F("ARENA_GENESIS_GOD_WEB_TOKEN", "", str, "관전 창의 토큰. 비면 god의 홈 폴더에 무작위로 만든다")

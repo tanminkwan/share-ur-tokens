@@ -5,7 +5,7 @@ import dataclasses
 
 import pytest
 
-from arena.codebook import builtin_document, document_hash
+from arena.codebook import VERSION, builtin_document, document_hash
 from arena.ledger import contribution
 from arena.peer.foundation_role import FoundationRole
 from tests.test_assistant import RULES, asst, ctx, eco, settle  # noqa: F401  (eco is a fixture)
@@ -21,7 +21,7 @@ async def foundation(e, documents=None):
     return f
 
 
-def ref(f, version="1.0"):
+def ref(f, version=VERSION):
     role = next(a for a in f.apps if isinstance(a, FoundationRole))
     return {"entry": role.published[version], "publisher": f.identity.pub, "version": version}
 
@@ -30,24 +30,24 @@ async def test_the_foundation_publishes_the_builtin_edition_and_hands_out_its_do
     f = await foundation(eco)
     r = ref(f)
     v = eco.svc.verify(r["entry"])
-    assert v["type"] == "codebook" and v["publisher"] == f.identity.pub and v["version"] == "1.0"
+    assert v["type"] == "codebook" and v["publisher"] == f.identity.pub and v["version"] == VERSION
     got = await f.handle({"op": "codebook.get"})
     assert got["ok"] and got["content_hash"] == v["content_hash"] == document_hash(builtin_document())
     assert "submission" in got["document"]["codes"]["purposes"] and "a2a" in got["document"]["codes"]["connections"]
     assert "코드표 판" in (await f.advertise())["offers"]
-    assert eco.svc.codes()["builtin"] == {"name": "agent-arena", "version": "1.0"}
+    assert eco.svc.codes()["builtin"] == {"name": "agent-arena", "version": VERSION}
 
 
 async def test_editions_are_unique_and_a_new_one_needs_a_higher_version(eco):
     f = await foundation(eco)
     role = next(a for a in f.apps if isinstance(a, FoundationRole))
     first = ref(f)["entry"]
-    role.published.pop("1.0")
-    assert "already published" in (await role.publish(f.ctx(role), REC, "1.0"))["error"]
+    role.published.pop(VERSION)
+    assert "already published" in (await role.publish(f.ctx(role), REC, VERSION))["error"]
     role.documents["0.9"] = dict(builtin_document(version="0.9"))
     assert "higher version" in (await role.publish(f.ctx(role), REC, "0.9", supersedes=first))["error"]
-    role.documents["1.1"] = dict(builtin_document(version="1.1"))
-    assert (await role.publish(f.ctx(role), REC, "1.1", supersedes=first))["ok"]
+    role.documents["9.0"] = dict(builtin_document(version="9.0"))
+    assert (await role.publish(f.ctx(role), REC, "9.0", supersedes=first))["ok"]
 
 
 async def test_an_event_may_follow_an_edition_and_its_publisher_gains_standing(eco):

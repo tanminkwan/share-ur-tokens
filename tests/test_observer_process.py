@@ -26,7 +26,11 @@ async def test_the_god_s_window_on_a_real_genesis(tmp_path, procs):
     snap = v["snapshot"]
     assert v["ok"] and snap["stats"]["entries"] == 1 and snap["stats"]["by_type"] == {"genesis": 1} and snap["integrity"]["agree"]
     assert [e["type"] for e in snap["recent"]] == ["genesis"] and snap["recent"][0]["seq"] == 0
-    assert snap["stats"]["genesis"]["god"] == me["pub"] and v["names"][me["pub"]] == me["pen"]  # the window is the god's own
+    god = snap["stats"]["genesis"]["god"]  # P8-D1, D3: the window reads as the observer key, not as god, and says so
+    assert god != me["pub"] and me["god"]["pub"] == god and me["reads_as"] == "observer"
+    observer = (tmp_path / "genesis" / "observer.key").read_text().strip()
+    from arena.crypto import Identity
+    assert Identity.from_hex(observer).pub == me["pub"]
 
 
 async def test_no_window_unless_the_port_is_set(tmp_path, procs):

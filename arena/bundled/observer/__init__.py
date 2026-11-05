@@ -14,9 +14,10 @@ from .api import build_observer_api
 class ObserverApp(LocalWebApp):
     name, version, app_id = "bundled.observer", "1.0", "025781c4-5cf0-401b-a4bc-5c3d2f7709fb"
 
-    def __init__(self, god, settings, host: str, port: int, token: str, kind: str = "observer"):
+    def __init__(self, god, settings, host: str, port: int, token: str, kind: str = "observer", god_pub: str | None = None):
         super().__init__(host, port, token)
         self.god, self.s, self.kind = god, settings, kind  # god: the GodRole whose snapshot this window shows
+        self.god_pub = god_pub  # entry 0's god key; the window reads as the observer key, not as god (P8-D3)
         self._ctx = None
 
     def web_app(self, ctx):
@@ -31,7 +32,10 @@ class ObserverApp(LocalWebApp):
 
     def me(self) -> dict:
         c = self._ctx
-        return {"pen": c.pen, "pub": c.identity.pub, "operator": "observer", "llm": False, **kind_view(self.kind)}
+        god = {"pub": self.god_pub, "pen": self.pen(self.god_pub)} if self.god_pub else None
+        reads_as = "god" if self.god_pub == c.identity.pub else "observer"
+        return {"pen": c.pen, "pub": c.identity.pub, "operator": "observer", "llm": False, "god": god, "reads_as": reads_as,
+                **kind_view(self.kind)}
 
     async def view(self) -> dict:
         """the snapshot for the window, with a pen name for every public key it mentions (the window shows names, not keys)"""
