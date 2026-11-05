@@ -167,7 +167,7 @@ flowchart TB
 
 | 무리 | type | 한 줄 |
 |---|---|---|
-| 세상과 신뢰 | `genesis`, `key_rotate`, `chain_link`, `parent_link` | 0번 entry, recorder · god key rotation, branch chain 연결(trunk 쪽, branch 쪽) |
+| 세상과 신뢰 | `genesis`, `key_rotate`, `chain_link`, `parent_link`, `delegate`, `undelegate` | 0번 entry, recorder · god key rotation, branch chain 연결(trunk 쪽, branch 쪽. trunk는 founding pass나 god의 `approver`가 있는 `chain_link`만 받는다), god의 delegate 지정과 철회(trunk만) |
 | 모임 | `group` | broker group 선언(closed group 포함). 원장 없이 시작한 group이 나중에 원장을 붙일 때도 이 entry |
 | event | `event`, `contract`, `assign`, `attest`, `close`, `endorse` | 선언, 역할 계약, 당사자 배정, 공동 확인, 종료, 선언 뒤 공동 서명(선택) |
 | 내용 | `publish`, `reveal`, `share`, `feedback` | content hash 등록, 등록한 값 공개, 전달, 판정 |
@@ -196,6 +196,7 @@ flowchart TB
 - trunk는 하나다. branch는 trunk에서만 갈라지고, branch에서 다시 branch가 나지 않는다(증명은 언제나 한 단계).
 - branch chain은 `parent_link`(#1)를 남기기 전에는 다른 entry를 받지 않는다.
 - trunk에서 보면 branch 하나는 `chain_link` entry 하나다.
+- `chain_link`에는 허락이 정확히 하나 들어간다: delegate(sphinx)가 그 branch god key에 준 **founding pass**(`pass`), 또는 trunk의 지금 god이 직접 서명한 **`approver`**. pass는 서명, `founder` = `child_god`, 기한, 서명한 key 계보의 처음 key가 지금 delegate인지, 처음 쓰는지를 원장이 확인한다. 몇 개까지 줄지는 원장이 세지 않는다(foundation의 policy, sphinx가 지킨다). `dev/founding/design.md`
 - **원장 보관**: 쓰기는 recorder를 통해서만 한다. 보관과 조회는 누구나 할 수 있다(`GET /log`). trunk chain은 transparency log 방식을 따르기로 했다(Merkle tree, checkpoint, witness, external anchoring. 모두 **계획**). closed community의 branch chain은 central DB를 써도 된다.
 - **첫 key**: #0을 seal한 첫 recorder key는 operating key로 넘긴 뒤 없애기를 권한다.
 - **off-ledger content**: 원장에는 hash만 둔다. 어디에 있는지는 `ref`(storage, proof)로 적을 수 있고, 거꾸로 **책이 원장을 가리킨다**(3.8절).
@@ -319,11 +320,26 @@ sequenceDiagram
     G->>R: #0 genesis {god, broker, recorder, group_id} (god signature)
     R->>R: seal. 이 entry의 hash = ledger_id
     G->>G: root values 파일 trust-anchor.md (genesis hash, god의 첫 key)
-    G->>B: broker, recorder, god peer가 profile 게시
+    G->>B: broker, recorder, observer peer가 profile 게시
     Note over G,R: branch chain이면 #0에 parent, trunk에 chain_link, #1에 parent_link
 ```
 
-**사용**: `python -m arena.genesis`(settings `ARENA_GENESIS_*`). `ARENA_GENESIS_PARENT_RECORDER_URL`을 주면 branch chain의 genesis가 된다. **진짜 원장(기준 네트워크의 genesis)은 아직 만들지 않았다.** 테스트와 시험 실행은 매번 첫 원장을 새로 만든다.
+**사용**: `python -m arena.genesis`(settings `ARENA_GENESIS_*`). 시험용이라 god key까지 이 기계에 자동으로 만든다. `ARENA_GENESIS_PARENT_RECORDER_URL`을 주면 branch chain의 genesis가 되고, founding pass(`ARENA_GENESIS_FOUNDING_PASS_FILE`)가 있어야 trunk에 연결된다. **진짜 원장(기준 네트워크의 genesis)은 아직 만들지 않았다.** 테스트와 시험 실행은 매번 첫 원장을 새로 만든다.
+
+**ceremony(진짜 원장의 길, `dev/phase8`)**: `python -m arena.ceremony`.
+
+```mermaid
+flowchart LR
+    A["god-key<br/>(offline machine)"] --> B["run<br/>round마다 request 파일"]
+    B <--> S["sign<br/>(offline, 사람이 읽고 yes)"]
+    B --> C["#0 seal: first recorder key는 memory에만<br/>→ key_rotate로 operating key<br/>→ delegate들<br/>→ first key 소멸"]
+    C --> D["arena.genesis가 그 폴더를 이어 받음<br/>(god.pub만, god.key 없음)"]
+    C --> W["witness ×2 → publish(retirement) → verify"]
+```
+
+- `key_rotate` payload에 `ledger_id`가 들어가서 #0을 seal한 뒤에야 만들 수 있다. 그래서 offline 서명은 round로 오간다(trunk 2, branch 3).
+- god peer(감사·통계)와 observer 창은 god key가 아니라 **observer key**(`observer.key`)로 원장을 읽는다. observer key는 아무것도 승인하지 못한다.
+- 나중에: genesis를 멈추고 `rotate`(operating key 교체), `rotate-god`, `delegate-request`/`delegate`(god의 delegate 지정·철회). god은 언제나 offline에서 서명한다.
 
 ## 2.3 broker
 
@@ -637,15 +653,15 @@ sequenceDiagram
 
 | peer | 하는 일 | 실행 |
 |---|---|---|
-| foundation peer | 기본 codebook edition을 원장에 기록하고 문서를 내준다(`codebook.get`) | `python -m arena.peers.foundation` |
+| foundation peer | 기본 codebook edition을 원장에 기록하고 문서를 내준다(`codebook.get`). branch 창설 policy(대리인 하나가 기간당 줄 pass 수, pass 기한)를 서명해 내준다(`founding.policy`, 원장에는 남기지 않음) | `python -m arena.peers.foundation` |
 | key peer | 암호화된 key backup 보관, 미리 정해 둔 recovery에 서명. private key는 보지 않는다(`key.info`, `key.backup.put/get`, `key.recover`) | `python -m arena.peers.key_peer` |
 | app store peer | publisher signature가 맞는 app package를 보관하고 app id로 내준다(`app_get`, `app_list`, `app_publish`) | `python -m arena.peers.app_store` |
 | link peer | 원장이 가리키는 영구 link를 맡는다. 실제 위치는 게시자가 자기 key로 서명해 바꾸고, 원장은 그대로다(`link.info`, `link.set`, `link.get`, `link.history`) | `python -m arena.peers.link_peer` |
 | search peer | embedding(bge-m3) 벡터로 peer 찾기 | `python -m arena.peers.search` |
 | service peer template | spec 파일 하나로 API peer를 만든다(Python 함수나 기존 HTTP API, signed receipt, 결과를 원장에 남기는 op) | `python -m arena.peers.service --spec spec.json` |
-| sphinx peer | 가지 그룹을 만들려는 사람의 신청을 받는다. 그 peer의 사람이 신청자를 플랫폼 밖(영상 통화, 대면)에서 만나 OK하면 founder key에만 쓰이는 founding pass를 준다. 기간당 발급 상한(`sphinx.info`, `sphinx.apply`, `sphinx.status`). 신청자는 `python -m arena.groups apply`, `pass` | `python -m arena.peers.sphinx`(human mode) |
+| sphinx peer | 가지 그룹을 만들려는 사람의 신청을 받는다. 그 peer의 사람이 신청자를 플랫폼 밖(영상 통화, 대면)에서 만나 OK하면 founder key에만 쓰이는 founding pass를 준다. 기간당 발급 상한과 pass 기한은 foundation의 policy를 받아 지킨다(없으면 자기 settings). trunk에서 자기가 delegate인지 확인해 사람의 창(notice card)과 신청자에게 알린다(`sphinx.info`, `sphinx.apply`, `sphinx.status`). 신청자는 `python -m arena.groups apply`, `pass` | `python -m arena.peers.sphinx`(human mode) |
 
-플랫폼 시설의 role app(`god_role`, `record_role`)은 genesis가 띄운다.
+플랫폼 시설의 role app(`god_role`, `record_role`)은 genesis가 띄운다. `ARENA_GENESIS_GOD_WEB_PORT`를 주면 observer peer가 **관전 창**(`arena/bundled/observer`: 원장 entry, 최근 entry, 무결성, event, peer 실적, 열람 기록, 스스로 갱신)을 연다.
 
 **container로 띄우기**(`dev/docker.md`): API 서버 peer는 서로 다른 곳에서 따로 운영되므로 peer마다 실행 디렉토리(`deploy/<peer>/`)에 `docker-compose.yml`과 `.env.example`이 있다. 이미지는 하나이고 `deploy/build.sh`가 build한다(compose에는 build가 없다). 시험용 broker는 `deploy/test-broker/`(genesis). peer는 broker에 연결될 때까지 간격을 늘려 가며 계속 시도한다(`Presence`). 듣는 주소(`ARENA_HOST`)와 남에게 알리는 주소(`ARENA_PUBLIC_HOST`)는 따로다.
 
@@ -911,10 +927,12 @@ sequenceDiagram
 flowchart LR
     subgraph NOW["되어 있음"]
         N1["1~5단계: 플랫폼 완성"]
-        N2["6단계: elements, service peer, connection kinds, codebook, schedule, peer spec, desk · chat UI, private envelope, branch link, peer keys, works registry, slow answers as A2A tasks, size caps, link peer"]
+        N2["6단계: elements, service peer, connection kinds, codebook, schedule, peer spec, desk · chat · console UI, private envelope, branch link, peer keys, works registry, slow answers as A2A tasks, size caps, link peer, endorse, broker group without a ledger, sphinx"]
+        N3["8단계: root key ceremony, first key 소멸, retirement declaration, observer key"]
+        N4["branch founding: delegate, founding pass on chain_link, foundation policy"]
     end
     subgraph NEXT["다음 후보"]
-        X2["6-N broker group without a ledger"]
+        X2["FG-E: trunk 원장의 group 정리"]
         X3["6-E notice subscription, matching, decision basis"]
     end
     subgraph LATER["7단계와 그 뒤"]
@@ -925,7 +943,7 @@ flowchart LR
     NOW --> NEXT --> LATER
 ```
 
-**사용자 결정이 필요한 것**: 기준 네트워크 god private key 보관과 운영 위치, trunk chain이 믿는 recorder 목록을 내는 절차(CP-18), root values가 없는 peer의 기본 동작(CP-3), `ref` 위치를 공개 정보에 보일지(CP-5), ledger_id만으로 recorder 찾기(CP-11), identity certificate 모양(6-K4).
+**사용자 결정이 필요한 것**: 기준 네트워크 god key를 누가 보관하고 어디서 운영할지(방식은 offline 암호화 보관으로 정함), ceremony의 witness를 누구로 할지, trunk chain이 믿는 recorder 목록을 내는 절차(CP-18), root values가 없는 peer의 기본 동작(CP-3), `ref` 위치를 공개 정보에 보일지(CP-5), ledger_id만으로 recorder 찾기(CP-11), identity certificate 모양(6-K4).
 
 ---
 
