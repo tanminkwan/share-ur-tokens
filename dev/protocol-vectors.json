@@ -128,5 +128,71 @@
     "input_hex": "efbbbfe18492e185a1e186abe18480e185b3e186af20e1848ee185a5e186ba20e1848ce185aee186af0d0ae18483e185aee186afe1848de185a220e1848ce185aee186af0de18489e185a6e186bae1848de185a220e1848ce185aee186af0a",
     "bytes_hex": "ed959ceab88020ecb2ab20eca4840aeb9198eca7b820eca4840aec858beca7b820eca4840a",
     "hash": "b88bcad0d9bbf58135c3900cf04b38752393a2cf4f223090e0e3084c01931549"
+  },
+  "ceremony_request": {
+    "_note": "P8-A3: request hash = sha256(canon(request)); signatures = ed25519(canon(item payload)) per item, by each key in signers",
+    "request": {
+      "format": "arena-ceremony-request",
+      "version": 1,
+      "round": 1,
+      "chain": "trunk",
+      "ledger_id": null,
+      "god": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+      "items": [
+        {
+          "name": "genesis",
+          "type": "genesis",
+          "payload": {
+            "group_id": "public",
+            "god": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+            "broker": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "recorder": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "signers": [
+            "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
+          ]
+        }
+      ],
+      "made_at": 1800000000.0
+    },
+    "request_hash": "f4df94d145c4bf5e3651b30e535e98ccbdd0a2d0b54739ef1f9ba0e6a467c0d5",
+    "signatures": {
+      "format": "arena-ceremony-signatures",
+      "version": 1,
+      "round": 1,
+      "request": "f4df94d145c4bf5e3651b30e535e98ccbdd0a2d0b54739ef1f9ba0e6a467c0d5",
+      "signer": "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+      "sigs": {
+        "genesis": "a4e817d240a21aefc830f4c87e322629e012143a43d317b5f181413859d3a38ad75bd0c3386d325c3688aacbd1345870004052f7eb2909f713b17fb8147a930a"
+      }
+    }
+  },
+  "key_retirement": {
+    "_note": "P8-C2: declaration hash = sha256(canon(body)) (the ledger keeps this, publish + purpose retirement); each witness signs canon(body)",
+    "declaration": {
+      "format": "arena-key-retirement",
+      "version": 1,
+      "body": {
+        "key": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "role": "recorder",
+        "ledger_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "handover": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "head": {
+          "seq": 1,
+          "hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        },
+        "method": "memory-only",
+        "at": 1800000100.0,
+        "witnesses": [
+          "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "note": "rehearsal"
+      },
+      "sigs": {
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664": "3580c0f1c42aae4c7129c9c76c4895d17a224b635f146422437c533562805058678116a804af4e91fd17063029ce236720045b77195b656983ad04ede8e7bf01"
+      }
+    },
+    "declaration_hash": "338eb75fc77c8cbc357db202ac67d58b6fac157adbc024eb30b8e8b185af98f3"
   }
 }

@@ -20,10 +20,10 @@ TOKEN = "obs-ui-t0ken"
 async def observer_site(setup):
     servers = []
 
-    async def open_site(poll_ms=150):
+    async def open_site(poll_ms=150, god_pub=None):
         role, ov = setup["role"], setup["ov"]
         role.settings = dataclasses.replace(ov.settings, observer_poll_ms=poll_ms, god_cache_sec=0.0)  # no cache: every poll reads again
-        app = ObserverApp(role, role.settings, "127.0.0.1", 0, TOKEN)
+        app = ObserverApp(role, role.settings, "127.0.0.1", 0, TOKEN, god_pub=god_pub)
         app._ctx = ov.ctx(role)
         port = free_port()
         servers.append(await serve_background(build_observer_api(app, TOKEN), "127.0.0.1", port))
@@ -87,3 +87,13 @@ async def test_it_has_the_one_look_and_the_observer_background(observer_site, br
     assert look["page"] == ("rgb(15, 23, 18)" if dark else "rgb(238, 247, 240)")  # the green of arena.css, light and dark
     assert "Noto Sans KR" in look["font"]
     await shot(page, f"observer-{'dark' if dark else 'light'}")
+
+
+async def test_p8d3_the_window_says_it_reads_as_the_observer_key_not_as_god(observer_site, browser):
+    from arena.crypto import Identity
+    god = Identity.generate().pub  # entry 0's god, kept offline: not the key this window reads with
+    _, url = await observer_site(god_pub=god)
+    page = await open_window(browser, url, TOKEN)
+    tag = page.get_by_test_id("reads-as")
+    await tag.wait_for(timeout=WAIT)
+    assert await tag.inner_text() == "관찰자 키로 봄 · god 키 아님" and god[:6] in (await tag.get_attribute("title"))

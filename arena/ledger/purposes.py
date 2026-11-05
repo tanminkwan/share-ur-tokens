@@ -79,3 +79,10 @@ register_purpose(Purpose("submission", ("share",), "이벤트 제출: 참가자�
                          _in_event("submission")))
 register_purpose(Purpose("evaluation", ("share",), "평가 건넴: 개최자가 계약한 평가자에게 평가할 것을 넘겼다(평가 요소가 확인)",
                          _in_event("evaluation")))
+def _retirement(chain, e):
+    if e["payload"].get("label") is not None:
+        return "retirement: a declaration's hash is registered as it is, without a label"
+
+
+register_purpose(Purpose("retirement", ("publish",), "키 폐기 선언의 hash: 증인들이 서명한 원장 밖 선언(arena-key-retirement)이 이 시각에 이미 있었다. "
+                         "내용 확인은 python -m arena.ceremony verify(dev/phase8/design.md 5)", _retirement))

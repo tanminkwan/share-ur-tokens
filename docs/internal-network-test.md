@@ -109,6 +109,12 @@ python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 genesis는 **한 프로세스가 한꺼번에** 한다: god 키, broker 키, 첫 기록자 키를 만들고, god이 서명한 **0번 항목(`genesis`)**을 원장에 기록한 뒤 broker·recorder·god의 서버를 연다. 별도의 "0번 원장 만들기" 명령은 없다. 처음 켜면 만들어지고, 이후에는 저장된 원장을 이어 쓴다(다른 키로는 시작하지 않는다).
 
+> **두 가지 길** (2026-11-05, 8단계):
+> - **시험용(이 절)**: genesis가 처음 켤 때 god 키까지 이 서버에 자동으로 만든다. 내부망 시험은 이것으로 충분하다.
+> - **세리머니**: god 키는 네트워크 없는 기계에서 만들고 서명만 옮기며, 첫 기록자 키는 디스크에 쓰지 않고 넘긴 뒤 없앤다. `python -m arena.ceremony god-key` → `run` ↔ `sign`(라운드 2번) → 그 폴더를 `ARENA_GENESIS_DIR`로 genesis를 켠다. 절차와 파일은 `dev/phase8/design.md`, `dev/protocol.md` 4.10. 진짜 원장은 release 때 이 길로만 만든다.
+>
+> 어느 길이든 god peer(관전 창)는 이제 god 키가 아니라 **관찰자 키**(`<genesis 폴더>/observer.key`)로 원장을 읽는다. 관전 창 맨 위의 필명이 관찰자의 것이고, `관찰자 키로 봄 · god 키 아님` 태그가 붙는다.
+
 ```bash
 cd deploy/test-broker
 cat > .env <<'EOF'

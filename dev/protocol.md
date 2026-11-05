@@ -194,7 +194,7 @@ pass = {format: "arena-founding-pass", version: 1, body: {founder, sphinx, issue
 | `chain_link` | `child_god`, `child_recorder` | `child_ledger_id`(새 체인의 제네시스 해시), `child_god`, `child_recorder`(새 체인의 첫 기록자 키), `name`, `branch_point`(새 체인 0번 기록의 `parent.branch_point`와 같은 값. 원래 체인의 원장이 이 지점이 자기 기록인지 확인), `nonce`. 원래 체인에 남긴다. 한 체인은 한 번만 |
 | `parent_link` | `god`(가지 체인의 god) | `god`, `link`(원래 체인이 봉인한 `chain_link` 항목 전체: 해시와 봉인 포함). **가지 체인의 1번 기록**이고 한 번만. 원장이 그 항목의 해시를 다시 계산하고, 봉인 서명, 이 체인의 제네시스 해시·god·첫 기록자 키, 원래 체인 식별자와 갈라진 지점이 0번 기록과 같은지 본다. 이 기록 전에는 가지 체인이 다른 기록을 받지 않는다 |
 
-**코드 칸과 자유 영역**: 위 표의 칸과 공통 칸(`group_id`, `ledger_id`, `event_id`, `purpose`, `nonce`)이 원장이 확인하는 코드 칸이다. payload의 나머지는 자유 영역으로, 원장이 읽지 않고 공개 확인에도 보이지 않는다(서명 범위 안이라 바꿀 수는 없다). 목적 코드 `purpose`는 등록된 값만 받는다. 지금 코드: `authorship`(`publish`, 저작 내용과 그 시점의 증명, 이름표 없음), `commit`(`publish`, 봉인 등록, 이름표 있음), `delivery`(`share`, 자료 전달), `submission`(`share`, 이벤트 제출, 이벤트 필수), `evaluation`(`share`, 평가 건넴, 이벤트 필수). 칸 정책 전체: [entry-columns.md](entry-columns.md).
+**코드 칸과 자유 영역**: 위 표의 칸과 공통 칸(`group_id`, `ledger_id`, `event_id`, `purpose`, `nonce`)이 원장이 확인하는 코드 칸이다. payload의 나머지는 자유 영역으로, 원장이 읽지 않고 공개 확인에도 보이지 않는다(서명 범위 안이라 바꿀 수는 없다). 목적 코드 `purpose`는 등록된 값만 받는다. 지금 코드: `authorship`(`publish`, 저작 내용과 그 시점의 증명, 이름표 없음), `commit`(`publish`, 봉인 등록, 이름표 있음), `delivery`(`share`, 자료 전달), `submission`(`share`, 이벤트 제출, 이벤트 필수), `evaluation`(`share`, 평가 건넴, 이벤트 필수), `retirement`(`publish`, 키 폐기 선언의 hash, 이름표 없음, 4.10절). 칸 정책 전체: [entry-columns.md](entry-columns.md).
 
 정책(`policy`)의 키와 뜻은 [phase5/requirements.md](phase5/requirements.md)와 백서 9장에 있다. 실행 방식 `mode`는 `assistant` · `app` · `app_or_assistant`, 앱 목록 `apps`의 각 칸은 `{id(UUID), name, version, hash?, required?}`.
 
@@ -337,6 +337,22 @@ sequenceDiagram
         I->>B: notice 다시 내기 (endorsements: [token], ver + 1)
     end
 ```
+
+### 4.10 뿌리 키 세리머니의 파일 (8단계, CP-6)
+
+뿌리 키(god 키, 첫 기록자 키)를 만들고 없애는 세리머니가 주고받는 파일이다. 원장 항목이 아니라 원장 밖 문서이고, 모두 정규 JSON으로 hash·서명한다. 도구: `python -m arena.ceremony`(`dev/phase8/design.md`). 시험 벡터: `protocol-vectors.json`의 `ceremony_request`, `key_retirement`.
+
+| 문서 | 모양 | hash·서명 |
+|---|---|---|
+| 서명 요청 | `{format: "arena-ceremony-request", version: 1, round, chain: "trunk"·"branch", ledger_id(1라운드는 null), god, items: [{name, type, payload, signers}], made_at}` | 요청 hash = `sha256(canon(요청 전체))` |
+| 서명 | `{format: "arena-ceremony-signatures", version: 1, round, request(요청 hash), signer, sigs: {item name: sig}}` | `sig` = signer 키의 `ed25519(canon(item.payload))`. 그 키가 `signers`에 있는 항목만 |
+| 폐기 선언 | `{format: "arena-key-retirement", version: 1, body: {key, role: "recorder"·"god", ledger_id, handover, head: {seq, hash}, method: "memory-only"·"file-wiped", at, witnesses, note}, sigs: {witness: sig}}` | 선언 hash = `sha256(canon(body))`(원장에 남는 값). 각 증인이 `canon(body)`에 서명 |
+
+- **라운드**: god이 서명할 `key_rotate` payload에 `ledger_id`가 들어가므로 0번을 봉인한 뒤에야 만들 수 있다. 뿌리 체인은 2라운드(`genesis`; `key_rotate`), 가지 체인은 3라운드(`genesis`; `chain_link` + `key_rotate`; `parent_link`).
+- **god 키 넘기기**는 요청 항목의 `signers`에 옛 god과 새 god 둘을 적고, 두 키가 각자 서명 파일을 낸다.
+- **폐기 선언의 원장 기록**: 증인 하나가 `publish`(`author` = 그 증인, `content_hash` = 선언 hash, `purpose: "retirement"`, 이름표 없음)로 남긴다. 원장은 선언 내용을 보지 않는다.
+- **선언 확인**(누구나): 모양과 증인 수(`ARENA_CEREMONY_MIN_WITNESSES`, 기본 2), 모든 증인의 서명, 기록자 `/health`의 `ledger_id`, `/trust`의 `rotations`에 `handover`가 있고 그 항목이 `key`를 넘긴 것인지(그 뒤 다시 지금 키가 된 적 없음), `/entries/{head.hash}`, `/content/{선언 hash}`의 목적 `retirement`와 author가 증인 중 하나인지.
+- **관찰자 키**: genesis의 god peer(원장 전체 열람·감사·통계)는 god 키가 아니라 관찰자 키(`ARENA_OBSERVER_KEY_FILE`)로 읽는다. 관찰자 키는 어떤 항목도 승인하지 못한다.
 
 ## 5. broker
 

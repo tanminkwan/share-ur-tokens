@@ -246,3 +246,20 @@ sequenceDiagram
 ## 10. 구현 순서
 
 1. 형식(`formats.py`)과 테스트 벡터 → 2. `rotate_key` 변경, 목적 코드·코드표 1.1 → 3. `offline.py`(`god-key`, `sign`) → 4. `run.py`(뿌리) → 5. genesis 변경(god.pub, 관찰자 키)과 관전 창 태그 → 6. `retire.py`(`witness`, `publish`, `verify`) → 7. 실제 프로세스 리허설(뿌리) → 8. 가지 → 9. `rotate`·`rotate-god` → 10. 문서와 `test-results.md`.
+
+## 11. 구현하며 정한 것 (2026-11-05)
+
+설계와 달라졌거나 설계에 없던 것. 모두 테스트가 있다.
+
+| 무엇 | 설계 | 구현 |
+|---|---|---|
+| 요청 항목의 서명자 | 요청에 `god` 하나 | 항목마다 `signers`(공개키 목록). god 키 넘기기는 옛 god과 새 god 둘이 각자 서명 파일을 낸다(3.1의 `god`은 그대로 둔다: 그 라운드의 god) |
+| 서명 파일 | `god` field | `signer` field(그 파일에 서명한 키). 한 라운드에 서명 파일 여럿(`round-N.signatures*.json`)을 받는다 |
+| 틀린 서명 파일 | 다시 기다림 | 파일을 `.refused`로 이름을 바꿔 치우고, 이유를 실행 기록(`signatures-refused`)과 화면에 남기고 계속 기다린다 |
+| 증인 | 선언 초안에서 정함 | `run --witness`로 세리머니 **시작 전에** 정한다(최소 수 미달이면 키를 하나도 만들지 않고 멈춤) |
+| 운영 키 넘기기(`rotate`) | 멈춘 기록자의 폴더에서 | 새 운영 키를 `recorder.next.key`(0600)에 잠깐 두고, 넘김이 기록되면 `recorder.key`에 쓰고 지운다 |
+| god 키 넘기기(`rotate-god`) | | 기록 뒤 `god.pub`을 새 키로 바꾼다(`arena.genesis`가 원장을 이 값과 대조한다) |
+| genesis의 전체 열람 허용 | 관찰자 키를 더함 | 관찰자 키와 `ARENA_RECORDER_READERS`만. god 키는 더 이상 넣지 않는다(god 키는 읽지도 않는다) |
+| `retirement` 목적 코드의 확인 | label 없음 | 같음. 거절 이유를 `retirement`의 말로 낸다 |
+| 운영 키 백업 안내 | 9절 | `run`이 끝날 때 화면에 낸다 |
+| 기존 헬퍼 | | `chain_link_payload`, `parent_link_payload`를 `arena/ledger/trust.py`에서 떼어 냈다(세리머니는 god 서명을 따로 받으므로). 기존 `link_to_parent`, `record_parent_link`는 이를 쓴다 |

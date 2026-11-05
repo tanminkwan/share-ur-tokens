@@ -66,8 +66,8 @@ class RecorderService:
                 return {"ok": False, "error": err}
             old = self.identity
             self.ledger.identity = self.identity = new
+        del old  # the handed-over key is kept nowhere (P8-B2): retiring it is the ceremony's work, not a file left behind
         if self.key_file:
-            old.save(f"{self.key_file}.retired-{entry['seq']}")
             new.save(self.key_file)
         return {"ok": True, "seq": entry["seq"], "hash": entry["hash"], "seal": entry["seal"], "recorder": new.pub}
 

@@ -59,3 +59,15 @@ def test_content_form_vector():
     x = V["content_form"]
     raw = bytes.fromhex(x["input_hex"])
     assert form_bytes(x["form"], raw).hex() == x["bytes_hex"] and content_hash_of(raw, x["form"]) == x["hash"]
+
+
+def test_p8_ceremony_vectors_match_the_code():
+    """dev/phase8 design 3: a signing request, its hash and the god's signature; a retirement declaration, its hash and a witness's signature"""
+    from arena.ceremony import formats as F
+    me = Identity.from_hex(V["private_key_hex"])
+    c = V["ceremony_request"]
+    assert F.request_hash(c["request"]) == c["request_hash"] and F.sign(c["request"], me) == c["signatures"]
+    assert F.collect(c["request"], [c["signatures"]])[1] is None
+    r = V["key_retirement"]
+    assert F.declaration_hash(r["declaration"]) == r["declaration_hash"]
+    assert verify(me.pub, r["declaration"]["body"], r["declaration"]["sigs"][me.pub])

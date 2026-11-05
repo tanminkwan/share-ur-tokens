@@ -119,18 +119,27 @@ async def link_to_parent(parent, god, recorder_identity, chain: list[dict], name
         return {"ok": False, "error": f"parent recorder: {pt.get('error')}"}
     if "parent" in pt["genesis"]["payload"]:
         return {"ok": False, "error": "only the trunk (the root chain) takes branch links; a branch chain cannot start a branch"}
-    g = chain[0]
-    p = {"child_ledger_id": g["hash"], "child_god": god.pub, "child_recorder": recorder_identity.pub, "name": name,
-         "branch_point": (g["payload"].get("parent") or {}).get("branch_point"),
-         "group_id": pt["genesis"]["payload"]["group_id"], "ledger_id": pt["ledger_id"], "nonce": g["hash"][:16]}
+    p = chain_link_payload(pt, chain, god.pub, recorder_identity.pub, name)
     return await parent.record("chain_link", p, {god.pub: god.sign(p), recorder_identity.pub: recorder_identity.sign(p)})
+
+
+def chain_link_payload(parent_doc: dict, chain: list[dict], god_pub: str, recorder_pub: str, name: str) -> dict:
+    """what the new chain's god and first recorder sign into the parent chain (a ceremony gets god's signature offline)"""
+    g = chain[0]
+    return {"child_ledger_id": g["hash"], "child_god": god_pub, "child_recorder": recorder_pub, "name": name,
+            "branch_point": (g["payload"].get("parent") or {}).get("branch_point"),
+            "group_id": parent_doc["genesis"]["payload"]["group_id"], "ledger_id": parent_doc["ledger_id"], "nonce": g["hash"][:16]}
 
 
 async def record_parent_link(recorder, god, chain: list[dict], link: dict) -> dict:
     """entry 1 of a branch chain: the chain_link the trunk sealed (CP-2). Before it the branch takes nothing else"""
-    g = chain[0]
-    p = {"group_id": g["payload"]["group_id"], "ledger_id": g["hash"], "god": god.pub, "link": link}
+    p = parent_link_payload(chain, god.pub, link)
     return await recorder.record("parent_link", p, {god.pub: god.sign(p)})
+
+
+def parent_link_payload(chain: list[dict], god_pub: str, link: dict) -> dict:
+    g = chain[0]
+    return {"group_id": g["payload"]["group_id"], "ledger_id": g["hash"], "god": god_pub, "link": link}
 
 
 def anchor_block(chain: list[dict]) -> str:

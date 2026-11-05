@@ -11,6 +11,8 @@ export class HeaderView {
     replace(this.root,
       h('span', { class: 'pen', testid: 'me-pen' }, me.pen),
       h('span', { class: 'tag kind', testid: 'me-kind' }, me.kind_label),
+      h('span', { class: 'tag', testid: 'reads-as', title: me.god ? `god: ${me.god.pen}` : '' },
+        me.reads_as === 'god' ? 'god 키로 봄' : '관찰자 키로 봄 · god 키 아님'),
       h('span', { class: 'tag', testid: 'refresh-state' }, error ? '연결 끊김, 다시 시도 중' : `자동 갱신 · ${pollMs / 1000}초마다`),
       h('span', { class: 'tag', testid: 'last-update' }, lastOk ? `마지막 갱신 ${clock(lastOk)}` : '아직 받지 못함'));
   }

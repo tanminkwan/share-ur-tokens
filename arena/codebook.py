@@ -3,6 +3,7 @@ event or profile may say it follows an edition (by its ledger entry), and an edi
 The foundation peer (arena/peer/foundation_role.py) publishes this document as an edition; anyone may publish another."""
 from __future__ import annotations
 
+from .ceremony.formats import METHODS as RETIREMENT_METHODS
 from .connections import CONNECTION_KINDS
 from .crypto import canon, h
 from .ledger.codebook import implemented_codes
@@ -10,7 +11,7 @@ from .ledger.purposes import PURPOSES
 from .ledger.refs import CONTENT_FORMS, PROOF_METHODS, STORAGE_KINDS
 from .ledger.schedule import TIME_CODES
 
-NAME, VERSION = "agent-arena", "1.0"
+NAME, VERSION = "agent-arena", "1.1"  # 1.1 (2026-11-05): purpose retirement, retirement methods
 
 
 def builtin_document(name: str = NAME, version: str = VERSION) -> dict:
@@ -23,7 +24,8 @@ def builtin_document(name: str = NAME, version: str = VERSION) -> dict:
                                          for k, c in sorted(CONNECTION_KINDS.items())},
                          **{kind: {c: {"description": x.description} for c, x in sorted(table.items())}
                             for kind, table in (("storage_kinds", STORAGE_KINDS), ("proof_methods", PROOF_METHODS),
-                                                ("content_forms", CONTENT_FORMS))}}}
+                                                ("content_forms", CONTENT_FORMS))},
+                         "retirement_methods": {c: {"description": d} for c, d in sorted(RETIREMENT_METHODS.items())}}}
 
 
 def document_hash(doc: dict) -> str:
