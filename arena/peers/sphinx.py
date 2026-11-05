@@ -14,6 +14,8 @@ from . import personal
 def build(s: Settings):
     if s.personal_mode != "human":
         raise ConfigError(f"스핑크스는 사람이 정한다: {s.key_of('personal_mode')}=human 으로 띄운다")
+    if s.sphinx_foundation_url and not s.sphinx_foundation_pub:
+        raise ConfigError(f"{s.key_of('sphinx_foundation_url')}를 주면 {s.key_of('sphinx_foundation_pub')}(그 foundation의 공개키)도 준다")
     return personal.build(s, extra_apps=[SphinxRole(s)], kind="sphinx")
 
 

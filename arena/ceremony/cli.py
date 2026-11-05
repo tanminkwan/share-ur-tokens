@@ -4,7 +4,8 @@
     god-key  --out DIR                                     the god key, sealed with a passphrase (god-key.json), and god.pub
     sign     --key god-key.json --request R --out S        show the request, ask, sign
   ceremony machine:
-    run      --god-pub FILE --out DIR --witness PUB --witness PUB [--parent URL --name NAME] [--note TEXT]
+    run      --god-pub FILE --out DIR --witness PUB --witness PUB [--delegate PUB ...] [--note TEXT]
+             branch: --parent URL --name NAME (--pass FILE | --approver PUB)
   witnesses and anyone:
     witness  --declaration F (--home DIR | --key-file F)   a named witness signs the retirement declaration
     publish  --declaration F (--home | --key-file) --recorder URL     its hash on the ledger (publish + retirement)
@@ -12,6 +13,7 @@
   later, on a stopped genesis folder:
     rotate-request --dir DIR  /  rotate --dir DIR --request R --signatures S        operating recorder key -> next
     rotate-god-request --dir DIR --new-god-pub FILE  /  rotate-god --dir DIR --request R --signatures S1 S2
+    delegate-request --dir DIR --delegate PUB [--undo]  /  delegate --dir DIR --request R --signatures S
 
 Passphrases are asked for, or read from the environment variable named by --passphrase-env (scripts, tests). They and
 the private keys are never printed. Imports are per command, so the offline commands load no networking code."""
@@ -46,6 +48,9 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--parent", help="the trunk recorder's API address: this ceremony starts a branch chain")
     c.add_argument("--name", help="the branch's name in its chain_link")
     c.add_argument("--note", default="")
+    c.add_argument("--delegate", action="append", default=[], help="a key god delegates to give founding passes (trunk; repeat)")
+    c.add_argument("--pass", dest="pass_file", help="branch: the founding pass for this god (python -m arena.groups pass --out)")
+    c.add_argument("--approver", help="branch: the trunk god's public key, which signs the chain_link offline instead of a pass")
     for name in ("witness", "publish"):
         c = sub.add_parser(name)
         c.add_argument("--declaration", required=True)
@@ -60,10 +65,14 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--recorder", required=True)
     c = sub.add_parser("rotate-request")
     c.add_argument("--dir", required=True)
+    c = sub.add_parser("delegate-request")
+    c.add_argument("--dir", required=True)
+    c.add_argument("--delegate", required=True)
+    c.add_argument("--undo", action="store_true", help="take the delegation back (undelegate)")
     c = sub.add_parser("rotate-god-request")
     c.add_argument("--dir", required=True)
     c.add_argument("--new-god-pub", required=True)
-    for name in ("rotate", "rotate-god"):
+    for name in ("rotate", "rotate-god", "delegate"):
         c = sub.add_parser(name)
         c.add_argument("--dir", required=True)
         c.add_argument("--request", required=True)
@@ -125,8 +134,10 @@ def command(a, s: Settings, out=sys.stdout, ask=input) -> dict:
         if a.parent:
             from ..recorder.client import RecorderClient
             parent = RecorderClient(a.parent, s)
+        pass_doc = _json(a.pass_file) if a.pass_file else None
         return asyncio.run(run(s, read_pub(a.god_pub), a.out, a.witness, parent=parent, parent_url=a.parent, name=a.name, note=a.note,
-                               say=lambda m: out.write(m + "\n") or out.flush()))
+                               say=lambda m: out.write(m + "\n") or out.flush(), delegates=a.delegate, pass_doc=pass_doc,
+                               approver=a.approver))
     if a.command == "witness":
         from . import formats as F
         d, me = _json(a.declaration), _identity(a, s)
@@ -149,11 +160,14 @@ def command(a, s: Settings, out=sys.stdout, ask=input) -> dict:
     from . import rotate
     if a.command == "rotate-request":
         return rotate.recorder_request(s, a.dir)
+    if a.command == "delegate-request":
+        return rotate.delegate_request(s, a.dir, a.delegate, a.undo)
     if a.command == "rotate-god-request":
         from .offline import read_pub
         return rotate.god_request(s, a.dir, read_pub(a.new_god_pub))
     docs = [_json(p) for p in a.signatures]
-    return asyncio.run((rotate.recorder_apply if a.command == "rotate" else rotate.god_apply)(s, a.dir, _json(a.request), docs))
+    apply = {"rotate": rotate.recorder_apply, "rotate-god": rotate.god_apply, "delegate": rotate.delegate_apply}[a.command]
+    return asyncio.run(apply(s, a.dir, _json(a.request), docs))
 
 
 def main(argv=None) -> None:

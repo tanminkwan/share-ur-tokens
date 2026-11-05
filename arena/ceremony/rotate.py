@@ -69,6 +69,34 @@ async def recorder_apply(settings, folder: str, req: dict, docs: list[dict], clo
     return {"ok": True, "entry": r["hash"], "seq": r["seq"], "old": old, "new": nxt.pub}
 
 
+def delegate_request(settings, folder: str, delegate_pub: str, undo: bool = False, clock=time.time) -> dict:
+    """god names a delegate after the ceremony, or takes one back (undo), signed offline (dev/founding design 5)"""
+    from .run import delegate_payload
+    svc = _service(settings, folder)
+    chain = svc.ledger.chain
+    god = current_keys(chain)["god"]
+    kind = "undelegate" if undo else "delegate"
+    p = delegate_payload(settings, god, delegate_pub, chain[0]["hash"], undo)
+    req = F.request(_next_round(folder), _chain_kind(chain), chain[0]["hash"], god, [F.item(kind, kind, p, [god])], clock())
+    CeremonyLog(os.path.join(folder, LOG), clock).write("request-written", round=req["round"], request=F.request_hash(req), items=[kind])
+    return {"ok": True, "request": _write(folder, req), "kind": kind, "delegate": delegate_pub}
+
+
+async def delegate_apply(settings, folder: str, req: dict, docs: list[dict], clock=time.time) -> dict:
+    got, err = F.collect(req, docs)
+    if err:
+        return {"ok": False, "error": err}
+    x = req["items"][0]
+    if x["type"] not in ("delegate", "undelegate"):
+        return {"ok": False, "error": "not a delegation request"}
+    r = await _service(settings, folder).record(x["type"], x["payload"], got[x["name"]])
+    if not r["ok"]:
+        return r
+    CeremonyLog(os.path.join(folder, LOG), clock).write("delegated", hash=r["hash"], seq=r["seq"], delegate=x["payload"]["delegate"],
+                                                         undo=x["type"] == "undelegate")
+    return {"ok": True, "entry": r["hash"], "seq": r["seq"], "kind": x["type"], "delegate": x["payload"]["delegate"]}
+
+
 def god_request(settings, folder: str, new_god_pub: str, clock=time.time) -> dict:
     """the god key to a new one (when the god key leaked): both the old and the new god key sign offline"""
     svc = _service(settings, folder)

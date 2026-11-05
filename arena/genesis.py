@@ -72,6 +72,18 @@ class Genesis:
             s.should_exit = True
 
 
+def _allowance(settings: Settings) -> tuple[dict | None, Identity | None]:
+    """what lets the trunk take this branch (dev/founding design 4): a founding pass for this god, or, in a test on one
+    machine, the trunk god's own key"""
+    if settings.genesis_founding_pass_file:
+        with open(settings.genesis_founding_pass_file, encoding="utf-8") as f:
+            return json.load(f), None
+    if settings.genesis_parent_approver_key_file:
+        return None, Identity.load(settings.genesis_parent_approver_key_file)
+    raise ConfigError("a branch needs a founding pass (ARENA_GENESIS_FOUNDING_PASS_FILE) or the trunk god's approval "
+                      "(ARENA_GENESIS_PARENT_APPROVER_KEY_FILE, tests on one machine)")
+
+
 def _god(d: str) -> tuple[Identity | None, str]:
     """the god key in this folder, or only its public key when a ceremony keeps the key offline (god.pub, no god.key).
     Without either, a new god key is made here: the rehearsal and test way (dev/phase8 P8-E2)"""
@@ -109,6 +121,8 @@ async def start(settings: Settings, viewers=None) -> Genesis:
         if god_id is None:
             raise ConfigError(f"{d} has god.pub but no ledger: entry 0 needs god's signature (python -m arena.ceremony run first)")
         parent = None
+        if parent_client:
+            _allowance(settings)  # before entry 0: a branch the trunk will not take is not begun
         if parent_client:  # a community starting its own ledger: its start is linked into the original chain (P5-G9)
             pt = await parent_client.trust()
             if not pt.get("ok"):
@@ -128,7 +142,8 @@ async def start(settings: Settings, viewers=None) -> Genesis:
             raise ConfigError("this branch is not linked into the trunk yet and the god key is offline (the ceremony links it)")
         if svc.ledger.chain[0]["payload"]["recorder"] != rec_id.pub:
             raise RuntimeError("this ledger is not linked into the original chain and its first recorder key is already retired")
-        r = await link_to_parent(parent_client, god_id, rec_id, svc.ledger.chain, settings.genesis_broker_name)
+        pass_doc, approver = _allowance(settings)
+        r = await link_to_parent(parent_client, god_id, rec_id, svc.ledger.chain, settings.genesis_broker_name, pass_doc, approver)
         if not r.get("ok"):
             raise RuntimeError(f"could not link this ledger into the original chain: {r.get('error')}")
     if parent_client and len(svc.ledger.chain) == 1:  # entry 1 of a branch: the chain_link the trunk sealed (CP-2)

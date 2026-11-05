@@ -93,7 +93,7 @@ peer의 비밀키 백업은 기기 안에서 소유자의 암호문구로 잠근
 pass = {format: "arena-founding-pass", version: 1, body: {founder, sphinx, issued_at, until, nonce}, sig}   # sig: sphinx 키가 body에
 ```
 
-증명서는 그 `founder` 키에만 쓰인다(양도 불가). 확인: `arena/ledger/founding.py`의 `pass_error`. 뿌리 원장이 `chain_link`에서 증명서를 요구하는 규칙은 아직 없다(FG-C3).
+증명서는 그 `founder` 키에만 쓰인다(양도 불가). 확인: `arena/ledger/founding.py`의 `pass_error`. 뿌리 원장은 `chain_link`에서 이 증명서(또는 뿌리의 지금 god 승인)를 요구한다(4.4절 `chain_link`, `delegate`). 스핑크스가 따르는 기준(상한, 증명서 기한)은 foundation이 서명해 내는 문서 `{format: "arena-founding-policy", version: 1, body: {foundation, cap: {count, days}, pass_days, issued_at}, sig}`(op `founding.policy`)이고, 원장에는 남지 않는다. 원장은 상한을 세지 않고 증명서의 `until`만 본다.
 
 ## 3. broker·recorder에 보내는 HTTP 서명 요청
 
@@ -125,6 +125,7 @@ pass = {format: "arena-founding-pass", version: 1, body: {founder, sphinx, issue
 | `GET /access-log` | 예(허용된 키만) | 접근 기록 |
 | `GET /trust` | 아니요 | 신뢰 문서: `ledger_id`, 제네시스 항목 전체, 모든 `key_rotate` 항목 전체, 지금 기록자 키, `head`(`{seq, hash}`: 마지막 기록. 지금 갈라지는 가지의 갈라진 지점), 가지 체인이면 `parent_link`(1번 기록 전체)(4.5절) |
 | `GET /links/{ledger_id}` | 아니요 | 그 커뮤니티 체인을 이 원장에 연결한 `chain_link` 항목 전체 |
+| `GET /delegates` | 아니요 | 지금 위임된 god의 대리인들: `[{delegate, scope, entry, seq, current}]`(`current`: 그 키 계보의 지금 키). 가지 체인은 빈 목록 |
 | `GET /key/{pub}` | 아니요 | peer 키의 상태: `status`(`current` · `retired` · `unknown`), `current`(그 신원의 지금 키), `lineage`(처음 키부터 지금 키까지), 지금 키의 `next`(약속한 다음 키의 해시)와 `recovery`(복구 담당 키 peer) |
 | `GET /log?from=N&limit=M` | 아니요 | **공개 기록 흐름**: N번부터 항목들을 공개 모양(봉투 없음)으로. 누구나 가져가 해시 사슬, 봉인, 공개 서명을 확인한다. 답 `{entries, next, size}` |
 | `GET /codebooks` | 아니요 | 이 원장의 판 기록(`codebook`) 전체. 가지 체인이 뿌리의 판을 옮겨 적을 때 쓴다 |
@@ -191,7 +192,9 @@ pass = {format: "arena-founding-pass", version: 1, body: {founder, sphinx, issue
 | `codebook` | `publisher` | `publisher`, `name`, `version`(`x.y`), `content_hash`(코드표 문서의 해시), `codes`(`entry_types`·`purposes`·`elements`·`time_codes`·`connections` 목록), 선택 `supersedes`(앞 판의 기록 해시), 선택 `local`(가지 체인만: `{"purposes": {"x-<커뮤니티>.<코드>": {types, description}}}`, 그 체인 안에서만 쓰는 자체 목적 코드). **옮겨 적기**(가지 체인만): `{copier, copied: 뿌리의 판 기록 전체}`, 서명자 `copier`. 원장이 옮긴 기록의 해시·판을 낸 이의 서명·봉인·뿌리 식별자를 확인하고, 그 뒤 이벤트는 뿌리 판 기록의 해시로 판을 가리킨다. 같은 낸 이·이름·번호는 한 번만, 같은 표의 새 판은 번호가 더 커야 함([codebook.md](codebook.md)) |
 | `key_commit` | `pub` | `pub`, `next`(다음 키의 약속: 다음 공개키 16진 문자열의 UTF-8 바이트에 대한 SHA-256), 선택 `recovery`(복구에 서명할 수 있는 키 peer 공개키 목록, 최대 `ARENA_KEY_RECOVERY_MAX`, 자기 자신은 안 됨). 키마다 한 번, 이미 이어받기에 든 키는 안 됨 |
 | `peer_rotate` | `new`, 복구면 `recoverer`도 | `old`(지금 키), `new`, `next`(new 다음 키의 약속), `by`(`next`: new의 해시가 old가 약속한 `next`와 같아야 함 · `recovery`: `recoverer`가 old 신원의 `recovery`에 있어야 함), 선택 `recovery`(새 복구 담당), `nonce`. **이 기록 뒤로 원장은 `old`가 서명한 어떤 기록도 받지 않는다**. 기록자의 실적 조회(`GET /track`)는 그 신원의 모든 키를 합쳐 센다 |
-| `chain_link` | `child_god`, `child_recorder` | `child_ledger_id`(새 체인의 제네시스 해시), `child_god`, `child_recorder`(새 체인의 첫 기록자 키), `name`, `branch_point`(새 체인 0번 기록의 `parent.branch_point`와 같은 값. 원래 체인의 원장이 이 지점이 자기 기록인지 확인), `nonce`. 원래 체인에 남긴다. 한 체인은 한 번만 |
+| `chain_link` | `child_god`, `child_recorder`, `approver`가 있으면 그 키도 | `child_ledger_id`(새 체인의 제네시스 해시), `child_god`, `child_recorder`(새 체인의 첫 기록자 키), `name`, `branch_point`(새 체인 0번 기록의 `parent.branch_point`와 같은 값. 원래 체인의 원장이 이 지점이 자기 기록인지 확인), `nonce`, 그리고 **정확히 하나**: `pass`(통과 증명서 전체: 서명이 맞고, `founder`가 `child_god`, 기록 시각이 `issued_at`~`until` 안, 서명한 키의 계보 처음 키가 지금 `delegate`되어 있고 그 키가 계보의 지금 키, 같은 `nonce`의 증명서를 처음 씀) 또는 `approver`(뿌리의 지금 god 키). 원래 체인에 남긴다. 한 체인은 한 번만 |
+| `delegate` | `god` | `god`(지금 god 키), `delegate`(대리인 공개키), `scope`(`found_branch`), `nonce`. 뿌리 체인에만. 같은 키는 철회 전까지 한 번 |
+| `undelegate` | `god` | `god`, `delegate`(지금 위임된 키), `nonce`. 뿌리 체인에만 |
 | `parent_link` | `god`(가지 체인의 god) | `god`, `link`(원래 체인이 봉인한 `chain_link` 항목 전체: 해시와 봉인 포함). **가지 체인의 1번 기록**이고 한 번만. 원장이 그 항목의 해시를 다시 계산하고, 봉인 서명, 이 체인의 제네시스 해시·god·첫 기록자 키, 원래 체인 식별자와 갈라진 지점이 0번 기록과 같은지 본다. 이 기록 전에는 가지 체인이 다른 기록을 받지 않는다 |
 
 **코드 칸과 자유 영역**: 위 표의 칸과 공통 칸(`group_id`, `ledger_id`, `event_id`, `purpose`, `nonce`)이 원장이 확인하는 코드 칸이다. payload의 나머지는 자유 영역으로, 원장이 읽지 않고 공개 확인에도 보이지 않는다(서명 범위 안이라 바꿀 수는 없다). 목적 코드 `purpose`는 등록된 값만 받는다. 지금 코드: `authorship`(`publish`, 저작 내용과 그 시점의 증명, 이름표 없음), `commit`(`publish`, 봉인 등록, 이름표 있음), `delivery`(`share`, 자료 전달), `submission`(`share`, 이벤트 제출, 이벤트 필수), `evaluation`(`share`, 평가 건넴, 이벤트 필수), `retirement`(`publish`, 키 폐기 선언의 hash, 이름표 없음, 4.10절). 칸 정책 전체: [entry-columns.md](entry-columns.md).
@@ -352,6 +355,7 @@ sequenceDiagram
 - **god 키 넘기기**는 요청 항목의 `signers`에 옛 god과 새 god 둘을 적고, 두 키가 각자 서명 파일을 낸다.
 - **폐기 선언의 원장 기록**: 증인 하나가 `publish`(`author` = 그 증인, `content_hash` = 선언 hash, `purpose: "retirement"`, 이름표 없음)로 남긴다. 원장은 선언 내용을 보지 않는다.
 - **선언 확인**(누구나): 모양과 증인 수(`ARENA_CEREMONY_MIN_WITNESSES`, 기본 2), 모든 증인의 서명, 기록자 `/health`의 `ledger_id`, `/trust`의 `rotations`에 `handover`가 있고 그 항목이 `key`를 넘긴 것인지(그 뒤 다시 지금 키가 된 적 없음), `/entries/{head.hash}`, `/content/{선언 hash}`의 목적 `retirement`와 author가 증인 중 하나인지.
+- **위임과 가지 허락**: `run --delegate PUB`(뿌리, 반복)는 2라운드에 `delegate-N` 항목을 넘김과 함께 서명받아 넘김 뒤에 기록한다. 나중에는 멈춘 genesis 폴더에서 `delegate-request [--undo]` → `sign` → `delegate`. 가지 세리머니(`--parent`)는 `--pass FILE`(이 god의 통과 증명서) 또는 `--approver PUB`(뿌리 god: `chain_link` 항목의 `signers`에 더해져 따로 서명 파일을 낸다) 가운데 하나가 있어야 시작한다.
 - **관찰자 키**: genesis의 god peer(원장 전체 열람·감사·통계)는 god 키가 아니라 관찰자 키(`ARENA_OBSERVER_KEY_FILE`)로 읽는다. 관찰자 키는 어떤 항목도 승인하지 못한다.
 
 ## 5. broker

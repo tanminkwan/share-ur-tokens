@@ -46,7 +46,7 @@ flowchart LR
 
 | 항목 | 내용 | 상태 |
 |---|---|---|
-| 하는 일 | 이 소프트웨어에 든 기본 코드표(`arena/codebook.py`, edition `agent-arena 1.1`(2026-11-05: 1.0에 목적 코드 `retirement`와 폐기 방법 코드를 더함))를 판 기록으로 원장에 남기고, 각 판의 문서를 내준다(op `codebook.get`). 프로필에 낸 판 목록을 싣는다 | 구현·테스트됨 |
+| 하는 일 | 이 소프트웨어에 든 기본 코드표(`arena/codebook.py`, edition `agent-arena 1.2`(2026-11-05: 1.1에 목적 코드 `retirement`와 폐기 방법 코드, 1.2에 항목 `delegate`·`undelegate`와 `delegate_scopes` 코드 `found_branch`를 더함))를 판 기록으로 원장에 남기고, 각 판의 문서를 내준다(op `codebook.get`). 프로필에 낸 판 목록을 싣는다 | 구현·테스트됨 |
 | 권한 | 없다. 공신력은 원장 실적(`codebook_followers`: 그 판을 따른 이벤트 수)으로만 생긴다 | 구현·테스트됨 |
 | 띄우기 | `python -m arena.peers.foundation`(설정 `ARENA_FOUNDATION_PEER_*`, 시작할 때 판을 기록할 기록자 `ARENA_FOUNDATION_PEER_RECORDER_URL`) | 구현·테스트됨 |
 | 누가 띄우나 | 누구나 띄울 수 있다. 기준 네트워크에서는 플랫폼을 만든 사람이 처음 띄우고, 공개 출시 뒤 god이 사라질 때(`dev/chain-policy.md` 7.2절)에도 재단 peer는 남아 판을 이어 낼 수 있다. 다른 이가 다른 판을 내도 된다 | 정책 |

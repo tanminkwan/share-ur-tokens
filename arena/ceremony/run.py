@@ -23,7 +23,7 @@ from . import formats as F
 from .offline import GOD_PUB
 
 STEPS = ("keys-made", "request-written", "signatures-taken", "signatures-refused", "sealed", "chain-linked", "parent-linked",
-         "rotated", "first-key-gone", "anchor-written", "declaration-drafted")
+         "rotated", "delegated", "first-key-gone", "anchor-written", "declaration-drafted")
 LEDGER, RECORDER_KEY, BROKER_KEY, OBSERVER_KEY = "ledger.jsonl", "recorder.key", "broker.key", "observer.key"
 ANCHOR, DECLARATION, LOG, ROUNDS = "trust-anchor.md", "retirement.json", "ceremony-log.jsonl", "rounds"
 
@@ -106,12 +106,41 @@ def _witnesses(witnesses: list[str], settings) -> list[str]:
     return w
 
 
+def delegate_payload(settings, god_pub: str, delegate: str, ledger_id: str, undo: bool = False) -> dict:
+    """god names (or takes back) a key that may give founding passes (dev/founding design 1.1)"""
+    return {"god": god_pub, "delegate": delegate, **({} if undo else {"scope": "found_branch"}), "group_id": settings.genesis_group_id,
+            "ledger_id": ledger_id, "nonce": os.urandom(8).hex()}
+
+
+def _allowance(god_pub: str, parent, pass_doc, approver, delegates) -> None:
+    """checked before any key is made: a branch needs a pass for this god or the trunk god's approval; delegates are the trunk's"""
+    if parent is None:
+        if pass_doc is not None or approver:
+            raise Aborted("--pass and --approver are for a branch ceremony (--parent)")
+        return
+    if delegates:
+        raise Aborted("god's delegates live on the trunk: --delegate is for the trunk ceremony")
+    if (pass_doc is None) == (not approver):
+        raise Aborted("a branch needs exactly one of a founding pass (--pass) or the trunk god's approval (--approver)")
+    if pass_doc is not None:
+        from ..ledger.founding import pass_error
+        err = pass_error(pass_doc, founder=god_pub)
+        if err:
+            raise Aborted(f"the founding pass: {err}")
+
+
 async def run(settings, god_pub: str, folder: str, witnesses: list[str], parent=None, parent_url: str | None = None,
               name: str | None = None, note: str = "", clock: Callable[[], float] = time.time, sleep=asyncio.sleep,
-              say: Callable[[str], None] = print) -> dict:
-    """parent: the trunk's RecorderAPI when this ceremony starts a branch chain (with its address, parent_url)"""
+              say: Callable[[str], None] = print, delegates: list[str] = (), pass_doc: dict | None = None,
+              approver: str | None = None) -> dict:
+    """parent: the trunk's RecorderAPI when this ceremony starts a branch chain (with its address, parent_url). A branch
+    is allowed by pass_doc (a founding pass for god_pub) or approver (the trunk god, who signs the chain_link offline too).
+    delegates: keys god names to give founding passes, recorded after the handover (trunk only)"""
     _fresh(folder)
     w = _witnesses(witnesses, settings)
+    _allowance(god_pub, parent, pass_doc, approver, list(delegates))
+    if len(set(delegates)) != len(delegates) or god_pub in delegates or not all(F._hex64(x) for x in delegates):
+        raise Aborted("delegates are distinct public keys, not the god key")
     log = CeremonyLog(os.path.join(folder, LOG), clock)
     rounds = Rounds(folder, settings, log, clock, sleep, say)
     chain_kind = "branch" if parent is not None else "trunk"
@@ -143,15 +172,17 @@ async def run(settings, god_pub: str, folder: str, witnesses: list[str], parent=
     # round 2: (a branch's chain_link) and the handover to the operating key
     rot = svc.rotation_request("recorder", operating.pub)
     items = [F.item("key_rotate", "key_rotate", rot, [god_pub])]
+    dels = [delegate_payload(settings, god_pub, d, ledger_id) for d in delegates]
+    items += [F.item(f"delegate-{i + 1}", "delegate", p, [god_pub]) for i, p in enumerate(dels)]
     link_p = None
     if par is not None:
-        link_p = chain_link_payload(pdoc, chain, god_pub, first.pub, name or "branch")
-        items.insert(0, F.item("chain_link", "chain_link", link_p, [god_pub]))
+        link_p = chain_link_payload(pdoc, chain, god_pub, first.pub, name or "branch", pass_doc, approver)
+        items.insert(0, F.item("chain_link", "chain_link", link_p, [god_pub, *([approver] if approver else [])]))
     req = F.request(2, chain_kind, ledger_id, god_pub, items, clock())
     rounds.write(req)
     sigs = await rounds.wait(req)
     if link_p is not None:
-        r = await parent.record("chain_link", link_p, {god_pub: sigs["chain_link"][god_pub], first.pub: first.sign(link_p)})
+        r = await parent.record("chain_link", link_p, {**sigs["chain_link"], first.pub: first.sign(link_p)})
         if not r.get("ok"):
             raise Aborted(f"the trunk refused the chain_link: {r.get('error')}")
         log.write("chain-linked", hash=r["hash"], seq=r["seq"])
@@ -168,6 +199,11 @@ async def run(settings, god_pub: str, folder: str, witnesses: list[str], parent=
         raise Aborted(f"the handover was refused: {r['error']}")
     handover = r["hash"]
     log.write("rotated", hash=handover, seq=r["seq"], old=first.pub, new=operating.pub)
+    for i, p in enumerate(dels):  # god's delegates, after the handover (FG-A6)
+        r = await svc.record("delegate", p, {god_pub: sigs[f"delegate-{i + 1}"][god_pub]})
+        if not r["ok"]:
+            raise Aborted(f"delegate {p['delegate'][:12]} refused: {r['error']}")
+        log.write("delegated", hash=r["hash"], seq=r["seq"], delegate=p["delegate"])
 
     # the first key goes only once the ledger shows it handed over (P8-C1)
     chain = svc.ledger.chain
@@ -190,4 +226,5 @@ async def run(settings, god_pub: str, folder: str, witnesses: list[str], parent=
     say(f"keep a copy of {RECORDER_KEY} offline, encrypted: losing the operating recorder key stops the chain until phase 7 "
         "(dev/chain-policy.md 7.1)")
     return {"ok": True, "chain": chain_kind, "ledger_id": ledger_id, "god": god_pub, "first_recorder": first_pub, "recorder": operating.pub,
-            "broker": broker.pub, "observer": observer.pub, "entries": len(chain), "handover": handover, "folder": folder}
+            "broker": broker.pub, "observer": observer.pub, "entries": len(chain), "handover": handover, "folder": folder,
+            "delegates": list(delegates)}

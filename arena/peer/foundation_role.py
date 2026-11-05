@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from ..codebook import builtin_document, document_hash
 from ..crypto import h
+from ..ledger.founding import make_policy, policy_body
 from .plugin import BaseApp
 
 
@@ -20,13 +21,19 @@ class FoundationRole(BaseApp):
         self.published: dict[str, str] = {}   # version -> codebook entry hash
 
     def offers(self):
-        return ["코드표 판"]
+        return ["코드표 판", "가지 창설 기준"]
 
     def profile_extra(self):
         return {"codebook_editions": [{"name": d["name"], "version": v, "entry": self.published.get(v)} for v, d in sorted(self.documents.items())]}
 
     def ops(self):
-        return {"codebook.get": self._get}
+        return {"codebook.get": self._get, "founding.policy": self._policy}
+
+    async def _policy(self, ctx, msg, head):
+        """the founding policy a sphinx should follow (FG-F6): signed now, never on a ledger (the ledger does not enforce it)"""
+        b = policy_body(ctx.pub, self.s.foundation_founding_cap_count, self.s.foundation_founding_cap_days,
+                        self.s.foundation_founding_pass_days, ctx.clock())
+        return {"ok": True, "policy": make_policy(b, ctx.sign(b))}
 
     async def start(self, ctx) -> None:
         self.published = dict(ctx.state.load().get("published", {}))

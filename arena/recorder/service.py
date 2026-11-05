@@ -87,6 +87,11 @@ class RecorderService:
         from ..ledger.codebook import implemented_codes
         return {"ok": True, "implemented": implemented_codes(), "builtin": {"name": NAME, "version": VERSION}}
 
+    def delegates(self) -> dict:
+        """public (FG-F1): god's delegates as the trunk stands, each with the current key of its line (a branch has none)"""
+        from ..ledger.delegation import delegates_view
+        return {"ok": True, "delegates": delegates_view(self.ledger.chain)}
+
     def trust(self) -> dict:
         """public: what anyone needs to prove the current keys from the root of trust (P5-G5)"""
         chain = self.ledger.chain

@@ -44,6 +44,9 @@ def build_recorder_app(svc: RecorderService) -> Starlette:
     async def key(r: Request):
         return reply(svc.key(r.path_params["pub"]), fail_status=404)
 
+    async def delegates(_):
+        return reply(svc.delegates())
+
     async def link(r: Request):
         return reply(svc.link(r.path_params["ledger_id"]), fail_status=404)
 
@@ -74,6 +77,7 @@ def build_recorder_app(svc: RecorderService) -> Starlette:
         Route("/events/{event_id}", guarded(event_entries), methods=["GET"]),
         Route("/trust", guarded(trust), methods=["GET"]),
         Route("/links/{ledger_id}", guarded(link), methods=["GET"]),
+        Route("/delegates", guarded(delegates), methods=["GET"]),
         Route("/key/{pub}", guarded(key), methods=["GET"]),
         Route("/content/{content_hash}", guarded(content), methods=["GET"]),
         Route("/codes", guarded(codes), methods=["GET"]),

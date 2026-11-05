@@ -380,6 +380,9 @@ def _link_shape(chain, e, now, s):
     return branch_point_error(p.get("branch_point"))
 
 
+LINK_CHECKS: list = []  # more chain_link rules registered by other modules (delegation.py: the founding pass or approver)
+
+
 def _link_rule(chain, e, now, s):
     if is_branch(chain):  # branches grow only from the trunk (user 2026-11-02, dev/chain-policy.md)
         return "only the trunk (the root chain) takes branch links; a branch chain cannot start a branch"
@@ -388,6 +391,17 @@ def _link_rule(chain, e, now, s):
     bp = e["payload"]["branch_point"]
     if bp["seq"] >= len(chain) or chain[bp["seq"]]["hash"] != bp["hash"]:
         return "the branch point is not an entry of this chain"
+    return next((err for err in (check(chain, e, now, s) for check in LINK_CHECKS) if err), None)
+
+
+def _link_public(p, c):
+    out = {k: p.get(k) for k in ("child_ledger_id", "child_god", "child_recorder", "name", "branch_point")}
+    if "approver" in p:
+        out["approver"] = p["approver"]
+    body = (p.get("pass") or {}).get("body") if isinstance(p.get("pass"), dict) else None
+    if isinstance(body, dict):  # how this branch was allowed: which delegate's pass (no person is named, FG-D1)
+        out["founding"] = {k: body.get(k) for k in ("sphinx", "issued_at", "until", "nonce")}
+    return out
 
 
 def _parent_link_shape(chain, e, now, s):
@@ -479,8 +493,9 @@ for _t in (
               counters={"revealed": 0}, contribute=_count("revealed", "author")),
     EntryType("assign", fields=_f("issuer subjects"), signers=lambda p: [p.get("issuer")], event_ref="required", shape=_assign_shape, rules=(_assign_rule,),
               public=lambda p, c: {"issuer": p["issuer"], "subjects": p["subjects"]}),
-    EntryType("chain_link", fields=_f("child_ledger_id child_god child_recorder name branch_point"), signers=lambda p: [p.get("child_god"), p.get("child_recorder")], unique_nonce=True, shape=_link_shape, rules=(_link_rule,),
-              public=lambda p, c: {k: p.get(k) for k in ("child_ledger_id", "child_god", "child_recorder", "name", "branch_point")}),
+    EntryType("chain_link", fields=_f("child_ledger_id child_god child_recorder name branch_point pass approver"),
+              signers=lambda p: [p.get("child_god"), p.get("child_recorder"), *([p.get("approver")] if "approver" in p else [])],
+              unique_nonce=True, shape=_link_shape, rules=(_link_rule,), public=_link_public),
     EntryType("parent_link", fields=_f("god link"), signers=lambda p: [p.get("god")], shape=_parent_link_shape, rules=(_parent_link_rule,),
               public=lambda p, c: {"god": p["god"], "link_hash": p["link"].get("hash"), "link_seq": p["link"].get("seq"),
                                    "link_seal": p["link"].get("seal")}),

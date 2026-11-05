@@ -111,7 +111,8 @@ def current_keys_of(doc: dict) -> dict:
     return keys_at(doc, doc["head"]["seq"] + 1)
 
 
-async def link_to_parent(parent, god, recorder_identity, chain: list[dict], name: str) -> dict:
+async def link_to_parent(parent, god, recorder_identity, chain: list[dict], name: str, pass_doc: dict | None = None,
+                         approver=None) -> dict:
     """the new community's god and first recorder sign a chain_link into the parent chain (P5-G9), repeating the branch
     point their genesis names (CP-1)"""
     pt = await parent.trust()
@@ -119,16 +120,21 @@ async def link_to_parent(parent, god, recorder_identity, chain: list[dict], name
         return {"ok": False, "error": f"parent recorder: {pt.get('error')}"}
     if "parent" in pt["genesis"]["payload"]:
         return {"ok": False, "error": "only the trunk (the root chain) takes branch links; a branch chain cannot start a branch"}
-    p = chain_link_payload(pt, chain, god.pub, recorder_identity.pub, name)
-    return await parent.record("chain_link", p, {god.pub: god.sign(p), recorder_identity.pub: recorder_identity.sign(p)})
+    p = chain_link_payload(pt, chain, god.pub, recorder_identity.pub, name, pass_doc, approver.pub if approver else None)
+    sigs = {god.pub: god.sign(p), recorder_identity.pub: recorder_identity.sign(p), **({approver.pub: approver.sign(p)} if approver else {})}
+    return await parent.record("chain_link", p, sigs)
 
 
-def chain_link_payload(parent_doc: dict, chain: list[dict], god_pub: str, recorder_pub: str, name: str) -> dict:
-    """what the new chain's god and first recorder sign into the parent chain (a ceremony gets god's signature offline)"""
+def chain_link_payload(parent_doc: dict, chain: list[dict], god_pub: str, recorder_pub: str, name: str,
+                       pass_doc: dict | None = None, approver: str | None = None) -> dict:
+    """what the new chain's god and first recorder sign into the parent chain (a ceremony gets god's signature offline).
+    The trunk takes it with a founding pass for this god (pass_doc) or its own current god's approval (approver: that key
+    signs too), dev/founding/design.md 1.2"""
     g = chain[0]
     return {"child_ledger_id": g["hash"], "child_god": god_pub, "child_recorder": recorder_pub, "name": name,
             "branch_point": (g["payload"].get("parent") or {}).get("branch_point"),
-            "group_id": parent_doc["genesis"]["payload"]["group_id"], "ledger_id": parent_doc["ledger_id"], "nonce": g["hash"][:16]}
+            "group_id": parent_doc["genesis"]["payload"]["group_id"], "ledger_id": parent_doc["ledger_id"], "nonce": g["hash"][:16],
+            **({"pass": pass_doc} if pass_doc is not None else {}), **({"approver": approver} if approver else {})}
 
 
 async def record_parent_link(recorder, god, chain: list[dict], link: dict) -> dict:

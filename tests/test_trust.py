@@ -182,7 +182,8 @@ class Child(Net):
         p = {"group_id": self.s.genesis_group_id, "god": self.god.pub, "broker": Identity.generate().pub, "recorder": self.rec.pub,
              "parent": par}
         assert (await self.svc.record("genesis", p, {self.god.pub: self.god.sign(p)}))["ok"]
-        self.link = await link_to_parent(parent, self.god, self.rec, self.svc.ledger.chain, "child community")
+        self.link = await link_to_parent(parent, self.god, self.rec, self.svc.ledger.chain, "child community",
+                                         approver=self.parent.god)  # the trunk's god allows it (FG-C4); passes: tests/test_delegation.py
         if finish and self.link.get("ok"):
             entry = (await parent.link(self.ledger_id))["link"]
             assert (await record_parent_link(self.svc, self.god, self.svc.ledger.chain, entry))["ok"]
@@ -196,7 +197,8 @@ async def test_p5g9_a_community_chain_is_proven_through_its_link_in_the_original
     link = await InMemoryRecorderClient(net.svc).link(child.ledger_id)
     e = link["link"]
     assert e["type"] == "chain_link" and e["payload"]["child_ledger_id"] == child.ledger_id
-    assert set(e["sigs"]) == {child.god.pub, child.rec.pub}  # signed with the new chain's private keys, not just named
+    assert set(e["sigs"]) == {child.god.pub, child.rec.pub, net.god.pub}  # the new chain's own keys signed, not just named,
+    assert e["payload"]["approver"] == net.god.pub  # and the trunk's god allowed it (FG-C4)
     parent_doc, child_doc = await InMemoryRecorderClient(net.svc).trust(), await InMemoryRecorderClient(child.svc).trust()
     ok, why, keys = verify_linked(child_doc, parent_doc, e, **net.anchor)
     assert ok and keys == {"recorder": child.rec.pub, "god": child.god.pub}
@@ -210,7 +212,8 @@ async def test_p5g9_a_community_chain_is_proven_through_its_link_in_the_original
     assert "signature" in (await net.svc.record("chain_link", p, {child.god.pub: child.god.sign(p)}))["error"]
     # one link per community chain
     again = dict(e["payload"], nonce="other")
-    assert "already" in (await net.svc.record("chain_link", again, {child.god.pub: child.god.sign(again), child.rec.pub: child.rec.sign(again)}))["error"]
+    assert "already" in (await net.svc.record("chain_link", again, {child.god.pub: child.god.sign(again), child.rec.pub: child.rec.sign(again),
+                                                                    net.god.pub: net.god.sign(again)}))["error"]
 
 
 async def test_p5g9_a_peer_anchored_at_the_original_trusts_a_linked_community_recorder(tmp_path, settings, net):
