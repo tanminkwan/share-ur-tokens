@@ -1,13 +1,13 @@
 # 테스트 결과서
 
-> 2026-11-05 기준(8단계 뿌리 키 세리머니까지, 요약 표와 3절만 갱신. 패키지별 표는 2026-11-04 값). 사용자: "test 철저히 하고 coverage 관리도 해. test 결과서도 작성해." 이 문서는 플랫폼 전체 테스트의 현황, 커버리지와 그 기준선, 이번에 더한 테스트, 아직 덜 덮인 곳과 그 이유를 적는다. 단계별 결과(실제 LLM 실행 포함)는 `dev/phaseN/test-results.md`에 있다.
+> 2026-11-05 기준(8단계 뿌리 키 세리머니, 가지 그룹 창설 경로 2차까지, 요약 표와 3절만 갱신. 패키지별 표는 2026-11-04 값). 사용자: "test 철저히 하고 coverage 관리도 해. test 결과서도 작성해." 이 문서는 플랫폼 전체 테스트의 현황, 커버리지와 그 기준선, 이번에 더한 테스트, 아직 덜 덮인 곳과 그 이유를 적는다. 단계별 결과(실제 LLM 실행 포함)는 `dev/phaseN/test-results.md`에 있다.
 
 ## 1. 한 줄 요약
 
 | 항목 | 값 |
 |---|---|
-| 실제 LLM 없이 도는 테스트 | **551개**: 550개 통과, 1개(실제 docker 실행, `ARENA_TEST_DOCKER=1`일 때만)는 건너뜀(약 70초) |
-| 커버리지(줄 + 분기, 테스트가 띄운 하위 프로세스 포함) | **94.4%**(문장 9,219 가운데 8,834, 분기 2,640 가운데 2,384) |
+| 실제 LLM 없이 도는 테스트 | **570개**: 569개 통과, 1개(실제 docker 실행, `ARENA_TEST_DOCKER=1`일 때만)는 건너뜀(약 70초) |
+| 커버리지(줄 + 분기, 테스트가 띄운 하위 프로세스 포함) | **94.4%**(문장 9,465 가운데 9,070, 분기 2,742 가운데 2,477) |
 | 기준선(이보다 낮아지면 실패) | **92%**(`.coveragerc`의 `fail_under`) |
 | 실제 LLM 테스트(`tests/live`, 따로 돌림) | 11개. 이번에는 돌리지 않았다(LLM 사용을 줄이기로 한 결정, 마지막 실행 결과는 `dev/phase6/test-results.md`) |
 
@@ -34,6 +34,7 @@ scripts/coverage.sh                                     # 같은 테스트 + 커
 | **실제 프로세스** | 10 | 제네시스, 두 broker, recorder 재시작, 견본 개인 peer(사람 모드)의 창구 화면, 서비스 peer의 api 묶음과 영수증, 재단 peer의 코드표 판 기록 | `tests/test_processes.py`, `tests/test_runner_processes.py` |
 | **화면(Playwright headless Chromium)** | 8 | 창구 화면 5(토큰, 손으로 참가, 물음과 글, 제안 승인·거절, 일정 넣어 이벤트 열기), 대화 화면 3(말하고 답 받기, 물음 카드, 토큰) | `tests/ui/` |
 | **뿌리 키 세리머니** | 25 | 형식과 서명 확인, 첫 기록자 키가 어떤 파일에도 없음, 틀린 서명·시간 초과·증인 부족, 폐기 선언의 확인, 키 교체, 관찰자 키, 실제 프로세스 리허설(뿌리, 가지) | `tests/test_ceremony_*.py`, `dev/phase8/test-results.md` |
+| **가지 그룹 창설 경로** | 19 | 위임·철회, `chain_link`의 증명서와 god 승인, 대리인의 키 이어받기, foundation 기준과 스핑크스의 집행, 세리머니의 위임과 가지 허락, 실제 프로세스로 처음부터 끝까지 | `tests/test_delegation.py`, `test_founding_policy.py`, `test_ceremony_delegation.py`, `test_founding_process.py`, `dev/founding/test-results.md` |
 | 규약 시험 벡터 | 3 | 정규 JSON, 서명, 해시, 서명 요청 머리, 원장 항목 해시(판 3의 봉투 포함)를 바이트 단위로 | `tests/test_protocol_vectors.py`, `dev/protocol-vectors.json` |
 | 층 구분 | 3 | 플랫폼에 앱의 말이 없음, 아래층(원장·기록자·broker)이 위층을 import하지 않음 | `tests/test_layering.py` |
 | 실제 LLM | 11 | 가위바위보 한 판·리그전, 요소를 켠 한 판, 검색 peer와 임베딩 | `tests/live/`(따로) |

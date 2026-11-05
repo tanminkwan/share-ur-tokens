@@ -271,7 +271,8 @@ async def test_p5g9_a_community_genesis_process_links_into_the_original_chain(tm
     root_api = f"http://127.0.0.1:{ports['api']}"
     child_env = make_env(tmp_path, ARENA_GENESIS_DIR=str(tmp_path / "child"), ARENA_GENESIS_BROKER_PORT=ports["broker2"],
                          ARENA_GENESIS_RECORDER_PORT=ports["rec2"], ARENA_GENESIS_RECORDER_API_PORT=ports["api2"], ARENA_GENESIS_GOD_PORT=ports["god2"],
-                         ARENA_RECORDER_REQUIRE_GROUP="true", ARENA_GENESIS_PARENT_RECORDER_URL=root_api, ARENA_GENESIS_BROKER_NAME="team-a")
+                         ARENA_RECORDER_REQUIRE_GROUP="true", ARENA_GENESIS_PARENT_RECORDER_URL=root_api, ARENA_GENESIS_BROKER_NAME="team-a",
+                         ARENA_GENESIS_PARENT_APPROVER_KEY_FILE=str(tmp_path / "root" / "god.key"))  # one machine: the trunk god allows it (FG-C4)
     b = Proc("arena.genesis", child_env, tmp_path)
     procs.append(b)
     b.wait_up(f"http://127.0.0.1:{ports['god2']}", path="/.well-known/agent-card.json")

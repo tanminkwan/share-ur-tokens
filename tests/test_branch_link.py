@@ -108,7 +108,7 @@ async def test_cp1_the_recorder_key_that_counts_is_the_one_valid_at_the_branch_p
     assert (await child.svc.record("genesis", p, {child.god.pub: child.god.sign(p)}))["ok"]
     new, r = await net.rotate_recorder()
     assert r["ok"]
-    assert (await link_to_parent(parent, child.god, child.rec, child.svc.ledger.chain, "late"))["ok"]
+    assert (await link_to_parent(parent, child.god, child.rec, child.svc.ledger.chain, "late", approver=net.god))["ok"]
     link = (await parent.link(child.ledger_id))["link"]
     assert link["seal"]["pub"] == new.pub and par["recorder"] == net.rec.pub
     assert (await record_parent_link(child.svc, child.god, child.svc.ledger.chain, link))["ok"]

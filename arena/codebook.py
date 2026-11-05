@@ -7,11 +7,12 @@ from .ceremony.formats import METHODS as RETIREMENT_METHODS
 from .connections import CONNECTION_KINDS
 from .crypto import canon, h
 from .ledger.codebook import implemented_codes
+from .ledger.delegation import DELEGATE_SCOPES
 from .ledger.purposes import PURPOSES
 from .ledger.refs import CONTENT_FORMS, PROOF_METHODS, STORAGE_KINDS
 from .ledger.schedule import TIME_CODES
 
-NAME, VERSION = "agent-arena", "1.1"  # 1.1 (2026-11-05): purpose retirement, retirement methods
+NAME, VERSION = "agent-arena", "1.2"  # 1.1 (2026-11-05): purpose retirement, retirement methods; 1.2: delegate, undelegate, delegate scopes
 
 
 def builtin_document(name: str = NAME, version: str = VERSION) -> dict:
@@ -25,7 +26,8 @@ def builtin_document(name: str = NAME, version: str = VERSION) -> dict:
                          **{kind: {c: {"description": x.description} for c, x in sorted(table.items())}
                             for kind, table in (("storage_kinds", STORAGE_KINDS), ("proof_methods", PROOF_METHODS),
                                                 ("content_forms", CONTENT_FORMS))},
-                         "retirement_methods": {c: {"description": d} for c, d in sorted(RETIREMENT_METHODS.items())}}}
+                         "retirement_methods": {c: {"description": d} for c, d in sorted(RETIREMENT_METHODS.items())},
+                         "delegate_scopes": {c: {"description": d} for c, d in sorted(DELEGATE_SCOPES.items())}}}
 
 
 def document_hash(doc: dict) -> str:

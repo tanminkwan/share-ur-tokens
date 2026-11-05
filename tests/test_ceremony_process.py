@@ -27,14 +27,14 @@ def cli(env, cwd, *args, ok=True) -> dict:
     return out
 
 
-def sign_round(env, tmp, offline, folder, n, key="god-key.json"):
+def sign_round(env, tmp, offline, folder, n, key="god-key.json", suffix=""):
     req = os.path.join(folder, "rounds", f"round-{n}.request.json")
     end = time.time() + 30
     while not os.path.exists(req):
         assert time.time() < end, f"round {n} request never appeared"
         time.sleep(0.05)
     return cli(env, tmp, "sign", "--key", os.path.join(offline, key), "--request", req, "--out",
-               req.replace("request", "signatures"), "--yes", "--passphrase-env", "CEREMONY_PASS")
+               req.replace("request", "signatures" + suffix), "--yes", "--passphrase-env", "CEREMONY_PASS")
 
 
 def genesis_env(tmp, folder, ports):
@@ -139,20 +139,25 @@ async def test_p8e4_branch_ceremony_links_into_a_running_trunk(tmp_path, procs):
     offline, folder = str(tmp_path / "offline"), str(tmp_path / "branch")
     god = cli(env, tmp_path, "god-key", "--out", offline, "--passphrase-env", "CEREMONY_PASS")["god"]
     w = [Identity.generate().pub for _ in range(2)]
+    # the trunk god approves this branch offline too (FG-C4): its key sealed into a backup on the offline side
+    from arena.keys.backup import seal_backup
+    trunk_god = Identity.load(str(trunk_dir / "god.key"))
+    json.dump(seal_backup(trunk_god, PASS, s := Settings.load(env=env, dotenv_path=None)), open(os.path.join(offline, "trunk-god-key.json"), "w"))
     run = Proc("arena.ceremony", env, tmp_path, args=["run", "--god-pub", os.path.join(offline, "god.pub"), "--out", folder, "--witness", w[0],
-                                                      "--witness", w[1], "--parent", trunk, "--name", "team-a"])
+                                                      "--witness", w[1], "--parent", trunk, "--name", "team-a", "--approver", trunk_god.pub])
     procs.append(run)
     for n, items in ((1, ["genesis"]), (2, ["chain_link", "key_rotate"]), (3, ["parent_link"])):
         assert sign_round(env, tmp_path, offline, folder, n)["signed"] == items
+        if n == 2:
+            assert sign_round(env, tmp_path, offline, folder, n, key="trunk-god-key.json", suffix="-trunk")["signed"] == ["chain_link"]
     assert run.p.wait(60) == 0, run.p.stdout.read().decode()
 
     from arena.ledger import JsonlStore
     raw = JsonlStore(os.path.join(folder, "ledger.jsonl")).load()
     assert [e["type"] for e in raw] == ["genesis", "parent_link", "key_rotate"]
-    s = Settings.load(env=env, dotenv_path=None)
     T = RecorderClient(trunk, s)
     link = (await T.link(raw[0]["hash"]))["link"]
-    assert link["payload"]["child_god"] == god and link["payload"]["name"] == "team-a"
+    assert link["payload"]["child_god"] == god and link["payload"]["name"] == "team-a" and link["payload"]["approver"] == trunk_god.pub
     assert link["payload"]["child_recorder"] == raw[0]["payload"]["recorder"] != raw[2]["payload"]["new"]  # the first key signed it, then went
 
     bp = {k: free_port() for k in ("broker", "rec", "api", "god", "web")}

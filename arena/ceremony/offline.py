@@ -46,7 +46,8 @@ def read_pub(path: str) -> str:
 
 
 SHOWN = {"genesis": ("group_id", "god", "broker", "recorder", "parent"), "key_rotate": ("role", "old", "new", "god", "ledger_id"),
-         "chain_link": ("name", "child_ledger_id", "child_god", "child_recorder", "branch_point", "ledger_id"),
+         "chain_link": ("name", "child_ledger_id", "child_god", "child_recorder", "branch_point", "ledger_id", "approver", "pass"),
+         "delegate": ("god", "delegate", "scope", "ledger_id"), "undelegate": ("god", "delegate", "ledger_id"),
          "parent_link": ("god", "ledger_id", "link")}
 
 
@@ -54,6 +55,8 @@ def _short(v) -> str:
     if isinstance(v, str):
         return v if len(v) <= 20 else v[:16] + "…"
     if isinstance(v, dict):
+        if isinstance(v.get("body"), dict):  # a founding pass: who signed it, for whom
+            return "{" + ", ".join(f"{k}: {_short(v['body'].get(k))}" for k in ("sphinx", "founder") if k in v["body"]) + "}"
         return "{" + ", ".join(f"{k}: {_short(x)}" for k, x in v.items() if k in ("ledger_id", "seq", "hash", "recorder")) + "}"
     return json.dumps(v, ensure_ascii=False)
 
