@@ -1,6 +1,6 @@
 # 가지 그룹 생성 자격: god 대리인의 미션 (요구사항)
 
-> 2026-11-04 초안, 브랜치 `sim-group-rights-20261104`. 구현 전이다. 상태 표시: **정함**(사용자가 정함), **제안**(정하지 않았고 제안값을 적음), **미정**(사용자 결정 필요).
+> 2026-11-04 초안, 브랜치 `sim-group-rights-20261104`. 2026-11-05 구현 2차 범위와 결정(3-2절), 브랜치 `founding-path-20261105`. 상태 표시: **정함**(사용자가 정함), **제안**(정하지 않았고 제안값을 적음), **미정**(사용자 결정 필요).
 
 ## 0. 여기까지 정한 것
 
@@ -38,12 +38,12 @@ sequenceDiagram
 
 | 번호 | 요구사항 | 상태 |
 |---|---|---|
-| FG-A1 | 새 항목 `delegate`: god이 서명하고 뿌리 원장에만 기록한다. 칸: `delegate`(대리인 공개키), `scope`(코드: 지금은 `found_branch` 하나), `cap`(`{count, days}`: 기간당 발급 상한), `until`(위임 기한), `next_key_hash`(대리인의 다음 키 해시) | 제안 |
+| FG-A1 | 새 항목 `delegate`: god이 서명하고 뿌리 원장에만 기록한다. field: `delegate`(대리인 공개키), `scope`(코드: 지금은 `found_branch` 하나). **상한·기한은 원장에 두지 않는다**(FG-A5) | 정함(2026-11-05, 3-2절) |
 | FG-A2 | 위임은 그때의 god 키가 서명해 원장에 기록된 것만 인정한다. 원장은 `key_rotate`의 승인처럼 `delegate`도 지금 god 키(`current_keys`)의 서명만 받으므로, god 키를 폐기한 뒤에는 새 위임이 생기지 않고, 날짜를 앞당긴 가짜 위임도 원장에 끼워 넣을 수 없다. 원장 밖 위임 문서는 인정하지 않는다 | 정함(원칙), 제안(모양) |
-| FG-A3 | 대리인은 약속한 다음 키로 스스로 키를 이어받는다(`peer_rotate`와 같은 방식). god이 없어도 키를 바꿀 수 있고, 지금 키만 훔친 사람은 넘겨받지 못한다 | 제안 |
-| FG-A4 | 대리인 수와 함께 서명하는 수: 한 명의 서명으로 발급할지, n명 가운데 k명이 서명해야 발급할지 | **미정** (제안: 처음에는 대리인 2명, 1명 서명) |
-| FG-A5 | 기간당 상한과 위임 기한의 값 | **미정** (제안: 30일에 20개, 기한 2년) |
-| FG-A6 | 위임은 세리머니(CP-6) 순서 안에 들어간다: 가지 기록 → 운영 키로 넘김 → **대리인 위임 기록** → god 첫 키 폐기 | 제안 |
+| FG-A3 | 대리인은 약속한 다음 키로 스스로 키를 이어받는다. **6-K의 키 이어받기(`key_commit`, `peer_rotate`)를 그대로 쓴다**: 원장은 증명서에 서명한 키의 lineage 처음 키가 위임된 키인지 본다. god이 없어도 키를 바꿀 수 있고, 지금 키만 훔친 사람은 넘겨받지 못한다 | 제안(3-2절) |
+| FG-A4 | 대리인 수와 함께 서명하는 수 | **정함**(사용자 2026-11-05): 대리인 2명(`delegate` 항목 둘), 증명서는 1명 서명 |
+| FG-A5 | 기간당 상한과 위임 기한 | **정함**(사용자 2026-11-05: "지금은 그냥 제약 없이 하되, 추후 기준 변화가 가능하자. foundation에서 결정하고 스핑크스(api의 logic이 담당)가 집행하게"): 원장은 상한·기한을 강제하지 않는다. 기준은 foundation이 정해 내고, 스핑크스가 자기 코드로 집행한다(3-2절 FG-F) |
+| FG-A6 | 위임은 세리머니(CP-6) 순서 안에 들어간다: 가지 기록 → 운영 키로 넘김 → **대리인 위임 기록** → god 첫 키 폐기 | 제안(3-2절: `ceremony run --delegate`, 나중 추가는 `ceremony delegate-request`/`delegate`) |
 
 ### 2-B. 미션 묶음
 
@@ -64,9 +64,9 @@ sequenceDiagram
 |---|---|---|
 | FG-C1 | 통과 증명서: `{format: "arena-founding-pass", version, founder, delegate, issued_at, until, nonce}`에 대리인이 서명한다. 원장 밖 토큰이고, 쓰일 때 `chain_link` 안에 들어가 원장에 남는다 | 제안 |
 | FG-C2 | **양도 불가**: 증명서의 `founder`는 `chain_link`의 `child_god`과 같아야 한다. 다른 키는 쓸 수 없다 | 정함(모의 실험의 원칙), 제안(모양) |
-| FG-C3 | 뿌리 원장이 `chain_link`에서 확인하는 것: 증명서 모양과 서명, 그 대리인의 위임이 원장에 있고 기한 안이며 범위에 `found_branch`가 있음, 발급 시각이 위임 기한과 증명서 기한 안, 같은 증명서(`nonce`)를 처음 씀, 그 대리인의 기간당 상한 안(원장의 `chain_link`를 세어 확인) | 제안 |
-| FG-C4 | 증명서 없는 `chain_link`는 받지 않는다(제네시스 세리머니가 만드는 처음 가지만 예외: god이 직접 서명) | 제안 |
-| FG-C5 | 증명서 기한의 값(발급 뒤 며칠 안에 가지를 만들어야 하나) | **미정** (제안: 30일) |
+| FG-C3 | 뿌리 원장이 `chain_link`에서 확인하는 것: 증명서 모양과 서명, 서명한 키(의 lineage 처음 키)의 `delegate`가 원장에 있고 범위에 `found_branch`가 있음, 증명서의 `founder`가 `child_god`, 기록하는 시각이 증명서 기한(`issued_at` ≤ 지금 < `until`) 안, 같은 증명서(`nonce`)를 처음 씀. **대리인의 기간당 상한은 원장이 세지 않는다**(FG-A5) | 제안(3-2절) |
+| FG-C4 | 증명서 없는 `chain_link`는 받지 않는다. **예외: 뿌리의 지금 god 키가 직접 서명**(정함, 사용자 2026-11-05). god 키가 살아 있는 동안(세리머니·리허설·시험)만 쓸 수 있고, god이 사라지면 증명서 길만 남는다 | 정함 |
+| FG-C5 | 증명서 기한의 값 | 정함(FG-A5와 같이): foundation의 기준, 스핑크스가 증명서의 `until`로 집행. 원장은 증명서에 적힌 `until`만 본다 |
 
 ### 2-D. 기록과 개인정보
 
@@ -115,6 +115,51 @@ sequenceDiagram
 아직 아닌 것: FG-A(god의 `delegate` 기록, 스핑크스 키의 다음 키 약속), FG-B2(통화 예약을 플랫폼이 다룸: 지금은 스핑크스의 사람이 신청자의 연락처로 직접 연락), FG-B4(무작위 지시는 사람이 통화에서 함), FG-C3·C4(뿌리 원장이 `chain_link`에서 증명서를 요구), FG-E.
 
 테스트: `tests/test_sphinx.py`(9개: 증명서, 신청 검사, 승인, 거절과 시간 초과의 구별, 상한, 재시작, 사람 없는 peer, 신청자 명령, 실행), `tests/test_sphinx_processes.py`(진짜 제네시스 위의 실제 프로세스: 스핑크스 peer가 broker에 보이고, 신청자 명령으로 a2a 신청, 사람의 창 API에서 승인, 신청자 명령으로 증명서를 받아 확인), `tests/test_deploy.py`(`deploy/sphinx-peer`).
+
+## 3-2. 구현 2차 범위 (2026-11-05)
+
+사용자: "가지 그룹 창설 경로로 진행해". 결정: FG-A4(대리인 2명, 1명 서명), FG-A5(원장은 상한·기한을 강제하지 않음, 기준은 foundation, 집행은 스핑크스), FG-C4(지금 god의 직접 서명은 예외), FG-E는 이번에 하지 않음.
+
+```mermaid
+sequenceDiagram
+    participant G as god (오프라인, 세리머니)
+    participant T as 뿌리 원장
+    participant F as foundation peer
+    participant S as 스핑크스 (대리인)
+    participant A as 신청자 (가지 god 키)
+    G->>T: delegate {delegate: 스핑크스 키, scope: found_branch} (×2)
+    F-->>S: 가지 창설 기준 (상한, 증명서 기한) — 서명된 문서
+    A->>S: sphinx.apply
+    S->>S: 사람이 만나 정함, 기준 안인지 스핑크스 코드가 확인
+    S-->>A: 통과 증명서 {founder, sphinx, issued_at, until, nonce}
+    A->>T: chain_link {…, pass} (가지 god·첫 기록자 서명)
+    T->>T: pass 서명·위임·founder = child_god·기한·처음 씀
+```
+
+### FG-F. 이번에 더하는 요구사항
+
+| 번호 | 요구사항 | 상태 |
+|---|---|---|
+| FG-F1 | **`delegate` 항목**(FG-A1): 뿌리 원장에만(가지 원장은 거부), 서명자는 지금 god 키(`current_keys`). 같은 키를 두 번 위임하지 않는다. 대리인 수에 원장 상한은 두지 않는다(2명은 세리머니의 약속) | 제안 |
+| FG-F2 | **위임 철회**: god 키가 살아 있는 동안 `delegate`를 거두는 길(`undelegate`, god 서명). 거둔 뒤 그 대리인의 새 증명서는 받지 않는다(이미 만든 가지는 그대로) | 제안 |
+| FG-F3 | **`chain_link`의 전용 field `pass`**(FG-C3) 또는 **`approver`**(FG-C4: 지금 god 키, 그 키가 서명자에 더해짐). 둘 다 없으면 거부, 둘 다 있으면 거부 | 제안 |
+| FG-F4 | **가지 god이 증명서를 쓰는 길**: `arena.genesis`(가지)는 `ARENA_GENESIS_FOUNDING_PASS_FILE`의 증명서를 `chain_link`에 넣는다. `ceremony run --parent`는 `--pass FILE`. 신청자 명령 `python -m arena.groups pass --out`이 만든 파일을 그대로 쓴다 | 제안 |
+| FG-F5 | **세리머니에 위임 기록**(FG-A6): `ceremony run --delegate PUB`(반복)이면 2라운드에 `delegate` 항목을 함께 서명받아 넘김 뒤 기록한다. 세리머니 뒤에 더하려면 멈춘 genesis 폴더에서 `ceremony delegate-request`/`delegate`(god 오프라인 서명, `rotate`와 같은 방식) | 제안 |
+| FG-F6 | **가지 창설 기준은 foundation이 낸다**(FG-A5): foundation peer가 서명한 기준 문서 `{format: "arena-founding-policy", version, body: {cap: {count, days}, pass_days, issued_at}, sig}`를 op `founding.policy`로 내준다. 값은 foundation의 설정(`ARENA_FOUNDATION_FOUNDING_*`). **원장에는 남기지 않는다**(원장이 집행하지 않으므로) | 제안 |
+| FG-F7 | **스핑크스가 기준을 집행**: 스핑크스는 설정된 foundation peer(`ARENA_SPHINX_FOUNDATION_URL`, 그 공개키 `ARENA_SPHINX_FOUNDATION_PUB`)에서 기준을 받아(서명 확인, `ARENA_SPHINX_POLICY_REFRESH_SEC`마다 다시) 상한과 증명서 기한으로 쓴다. 받지 못하면 지금처럼 자기 설정(`ARENA_SPHINX_CAP_*`, `_PASS_DAYS`)으로. `sphinx.info`와 창이 지금 쓰는 기준과 출처(foundation·자기 설정)를 보인다 | 제안 |
+| FG-F8 | **스핑크스는 자기가 위임되었는지 안다**: 뿌리 원장에서 자기 키(lineage)의 `delegate`를 찾아 `sphinx.info`와 창에 "위임됨/위임 안 됨"을 보인다. 위임되지 않은 스핑크스도 증명서는 낼 수 있지만, 뿌리 원장이 받지 않는다고 신청자에게 알린다 | 제안 |
+| FG-F9 | **시험**: 원장 단위(위임, 철회, 증명서의 모든 거절 이유, god 예외, 가지 원장의 거부), 세리머니에 위임, 진짜 제네시스 위의 실제 프로세스(세리머니로 뿌리+대리인 → foundation 기준 → 스핑크스 peer → 신청 → 사람 승인(창 API) → 증명서 → 가지 genesis가 증명서로 연결) | 제안 |
+
+### 바뀌는 기존 동작
+
+- 지금은 누구나 뿌리에 `chain_link`를 남겨 가지를 만들 수 있다. 앞으로는 **증명서나 지금 god의 서명**이 있어야 한다. 기존의 가지 테스트와 리허설은 god 예외(FG-F3 `approver`)나 증명서로 고친다.
+- 시험용으로 뿌리와 가지를 한 기계에서 띄우는 길(`arena.genesis` + `ARENA_GENESIS_PARENT_RECORDER_URL`)은 증명서 파일이 있어야 연결된다(FG-F4). 뿌리 god 키가 같은 기계에 있는 시험은 `approver`로.
+
+### 이번에 하지 않는 것
+
+- FG-E(뿌리 원장의 `group` 금지, `groups attach`가 가지를 가리키게)
+- FG-B2(통화 예약을 플랫폼이 다룸), FG-B4(무작위 지시), FG-B7·B8(다른 미션, 접근성), FG-D3(거절 수 공개)
+- 대리인의 교체 절차(god이 사라진 뒤): 7단계 증인, CP-8
 
 ## 4. 아직 다루지 않는 것
 
