@@ -437,6 +437,10 @@ http://127.0.0.1:9330 agent ['이름:agent']
 - **왼쪽**: 요약(원장 항목 수, 서명한 peer, event, 닫힌 event, 종류별 개수, 역할 계약), **무결성**(god이 직접 검증한 결과: `정상: …` 또는 `경고: 변조 또는 기록자 사이 불일치`, 기록자 행에 상태·항목 수·head), 원장 열람 기록(이 창 자신의 읽기는 뺀 다른 peer의 시도).
 - **가운데**: 최근 원장 항목(새로운 것이 위: 번호, 종류, 서명한 peer의 필명, event, 시각, hash 앞부분)과 event 표(연 peer, 공동 서명, 열림/닫힘).
 - **오른쪽**: peer별 강점(자기소개)과 실적(계약, 등록, 받음).
+처음 띄웠을 때의 관전 창(항목 1개: `genesis`):
+
+![관전 창: 처음](img/internal-network-test/01-observer-start.png)
+
 - **기대(시나리오와 함께)**: 처음엔 항목 1개(`genesis`). 이벤트를 열면 `event`, 계약하면 `contract`가 **사람이 아무것도 누르지 않아도** 위에 올라온다.
 
 ### 10.5 화면 읽는 법 (console)
@@ -555,6 +559,60 @@ ARENA_LLM_BACKEND=none .venv/bin/python -m scripts.try_personal --fresh --peers 
 
 - human-a console `:9313`, human-b console `:9323`. 두 창을 열고, 10.7절의 1, 4, 5번(이벤트 열기, 참가 신청 확인, `contract`)과 10.8절의 2번(말 보내기)을 **사람 둘이서** 한다. agent 대신 human-b 창에서 이벤트 `가위바위보 연습`을 열고 오른쪽 "할 수 있는 일"의 `join_event`를 실행하면 된다.
 - 2026-11-05에 이 순서를 헤드리스 브라우저로 끝까지 따라가 확인했다(아래). 관전 창도 같이 열어 두고 새로고침 없이 갱신되는지 확인했다.
+
+### 10.12-1 화면으로 보는 사람-사람 흐름 (캡처)
+
+> 2026-11-05, 이 서버에서 Playwright(헤드리스 Chromium, 1400×900, 밝은 화면)로 위 10.12절 순서를 따라가며 찍었다. 필명(`필명-a6a111` = human-a, `필명-b139cc` = human-b)과 event id는 실행마다 달라진다. 사용자가 직접 할 때도 같은 화면이 나와야 한다. 다르면 알려 주세요.
+
+**① 관전 창을 먼저 켜 둔다.** (위 10.4-1의 그림) 항목 1개로 시작한다.
+
+**② human-a 창을 연다.** 맨 위에 필명, `개인 peer`, `human`, `LLM 없음`. 이벤트도 알림도 아직 없다.
+
+![human-a 창: 처음](img/internal-network-test/02-human-a-start.png)
+
+**③ human-a가 "이벤트 열기"를 채운다.** 제목 `가위바위보 연습`, 종류 `game`, 규칙 `참가 신청을 하면 개최자가 member 역할로 계약한다`, 역할 `member`. 일정은 비워 둔다. **열기**를 누른다.
+
+![human-a: 이벤트 열기 폼](img/internal-network-test/03-human-a-host-form.png)
+
+**④ 이벤트가 열렸다.** 왼쪽 목록에 `가위바위보 연습 · 개최 · manual`이 생기고 가운데 대화에 `나 내 지시: 규칙대로 진행한다`가 뜬다. 오른쪽에 운전석, 지금 상태, "할 수 있는 일"이 나온다.
+
+![human-a: 이벤트가 열림](img/internal-network-test/04-human-a-event-opened.png)
+
+**⑤ human-b 창에 공지 카드가 온다.** (몇 초 안, 자동) 왼쪽 `이벤트` 아래에 `가위바위보 연습 · 참가`, `알림`에 공지 카드와 **이벤트 열기** 버튼. 맨 위의 `열린 알림 1`도 같이 본다.
+
+![human-b: 공지 카드](img/internal-network-test/05-human-b-notice-card.png)
+
+**⑥ human-b가 `join_event`를 실행한다.** 이벤트를 열고 오른쪽 "할 수 있는 일(직접 실행)" → `참가 신청 join_event`를 펼쳐 **실행**.
+
+![human-b: 참가 신청 도구](img/internal-network-test/06-human-b-join-form.png)
+
+**⑦ human-b의 대화에 `나 행동: 참가 신청 → 완료`.**
+
+![human-b: 참가 신청을 함](img/internal-network-test/07-human-b-joined.png)
+
+**⑧ human-a 창에 참가 신청이 온다.** 대화에 `필명-b139cc` 말풍선 `참가 신청`, 알림에 메시지 카드. 오른쪽 "할 수 있는 일" → `역할 계약 contract`를 펼쳐 역할 `member`, 상대(필명)에 human-b의 필명을 붙여 넣는다.
+
+![human-a: 계약 도구 입력](img/internal-network-test/08-human-a-contract-form.png)
+
+**⑨ 실행하면 계약이 맺어진다.** 대화에 `나 행동: 역할 계약 → 완료`, 지금 상태에 `이 이벤트에서 맺은 역할 계약 1건: member=<human-b 필명>`, 오른쪽 위에 결과 알림(`contract → {"ok":true,"hash":…}`). 패널이 다시 그려져 접혔다.
+
+![human-a: 계약 완료](img/internal-network-test/09-human-a-contract-done.png)
+
+**⑩ human-a가 human-b에게 말을 보낸다.** 대화 아래 받는 이를 human-b로 두고 `안녕하세요, 계약했습니다`를 보내면, human-b 창 대화에 **왼쪽 말풍선**으로 뜬다.
+
+![human-b: 받은 말](img/internal-network-test/10-human-b-message-received.png)
+
+**⑪ 같은 peer와 같은 role로 한 번 더 계약하면 거절되지 않는다.** 계약이 2건이 된다.
+
+![human-a: 두 번째 계약도 받아들여짐](img/internal-network-test/11-human-a-second-contract-accepted.png)
+
+**⑫ 거절되는 경우.** role을 `referee`(이벤트가 허용하지 않은 역할)로 하면 대화에 `나 행동: 역할 계약 → 실패: role referee not offered`가 남고 오른쪽 위에 빨간 알림(`contract → {"ok":false,"error":"role referee not offered"}`)이 뜬다.
+
+![human-a: 허용하지 않은 role은 거절](img/internal-network-test/12-human-a-refused-role.png)
+
+**⑬ 그동안 관전 창은 새로고침 없이 올라왔다.** `genesis, event, contract, contract` 4개, 무결성 정상.
+
+![관전 창: 끝](img/internal-network-test/13-observer-end.png)
 
 ### 10.13 이 절에서 확인한 것과 못 한 것
 
