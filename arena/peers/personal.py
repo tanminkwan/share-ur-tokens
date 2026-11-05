@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
-import secrets
 import time
 
 from ..a2a import A2ATransport
@@ -19,6 +17,7 @@ from ..bundled.chat import ChatApp
 from ..bundled.console import ConsoleApp
 from ..bundled.desk_web import DeskWebApp
 from ..bundled.owner_service import OwnerService
+from ..bundled.web import web_token as shared_web_token
 from ..config import ConfigError, Settings
 from ..events import EventLog
 from ..llm import build_llm, llm_available
@@ -35,15 +34,7 @@ WINDOWS = ("console", "desk", "chat")
 
 
 def web_token(s: Settings, home: PeerHome) -> str:
-    if s.personal_web_token:
-        return s.personal_web_token
-    p = home.path("web-token")
-    if not os.path.exists(p):
-        with open(p, "w", encoding="utf-8") as f:
-            f.write(secrets.token_urlsafe(24))
-        os.chmod(p, 0o600)
-    with open(p, encoding="utf-8") as f:
-        return f.read().strip()
+    return shared_web_token(home, s.personal_web_token)
 
 
 def build(s: Settings, extra_apps: list = (), kind: str = "personal") -> tuple[Peer, OwnerService, str]:

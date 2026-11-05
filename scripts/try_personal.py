@@ -5,6 +5,7 @@
     .venv/bin/python -m scripts.try_personal --peers human-a,agent   # choose the peers: human-a, human-b, agent (default: human-a,human-b)
     .venv/bin/python -m scripts.try_personal --web-host 0.0.0.0   # open the windows to other machines (default 127.0.0.1)
 
+The god's observer window (a screen that refreshes itself) opens at base-port + 4 (default 9304).
 Everything lives under --dir (default data/try). Ctrl-C stops all. The windows' addresses (with their token) are printed."""
 from __future__ import annotations
 
@@ -60,7 +61,8 @@ def main(argv=None) -> int:
         shutil.rmtree(d)
     d.mkdir(parents=True, exist_ok=True)
     gen = {"ARENA_GENESIS_DIR": str(d / "genesis"), "ARENA_GENESIS_BROKER_PORT": str(b), "ARENA_GENESIS_RECORDER_PORT": str(b + 1),
-           "ARENA_GENESIS_RECORDER_API_PORT": str(b + 2), "ARENA_GENESIS_GOD_PORT": str(b + 3), "ARENA_RECORDER_REQUIRE_GROUP": "true"}
+           "ARENA_GENESIS_RECORDER_API_PORT": str(b + 2), "ARENA_GENESIS_GOD_PORT": str(b + 3), "ARENA_RECORDER_REQUIRE_GROUP": "true",
+           "ARENA_GENESIS_GOD_WEB_PORT": str(b + 4), "ARENA_GENESIS_GOD_WEB_HOST": a.web_host}  # the observer window: base + 4
     procs = [spawn("arena.genesis", gen, d / "genesis.log")]
     wait_up(f"http://127.0.0.1:{b + 3}/.well-known/agent-card.json")
     for name, mode, llm, port in peers:
@@ -83,6 +85,14 @@ def main(argv=None) -> int:
                 break
             time.sleep(0.5)
         print(f"  {name:8} ({mode}) 콘솔: http://{host}:{port + 3}/#token={tok}", flush=True)  # the integrated window, both modes
+    tok = None
+    for _ in range(60):  # the observer window (the god's screen, refreshes itself)
+        p = d / "genesis" / "homes" / "god" / "web-token"
+        if p.exists():
+            tok = p.read_text().strip()
+            break
+        time.sleep(0.5)
+    print(f"  {'god':8} (관전)  관전 창: http://{host}:{b + 4}/#token={tok}", flush=True)
     print(f"기록: {d}/*.log   멈추기: Ctrl-C", flush=True)
     try:
         signal.pause()

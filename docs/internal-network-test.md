@@ -47,8 +47,9 @@ flowchart LR
 |---|---|---|---|---|
 | 1 | `PEER_HOST` | `BROKER_HOST` | **9100** | broker: 프로필 게시, peer 찾기, 공지 |
 | 2 | `PEER_HOST` | `BROKER_HOST` | **9101** | 제네시스 기록자 A2A |
-| 3 | `PEER_HOST` | `BROKER_HOST` | **9102** | recorder API (원장 기록·조회, `/health`, `/trust`, `/chain`) |
+| 3 | `PEER_HOST` | `BROKER_HOST` | **9102** | recorder API (원장 기록·조회. 누구나: `/health`, `/trust`, `/log`, `/audit`, `/events/<id>`, `/track/<공개키>`. 허용된 키만: `/chain`, `/access-log`) |
 | 4 | `PEER_HOST` | `BROKER_HOST` | **9103** | god A2A (god에게 말 걸기, 관전·통계) |
+| 4-1 | 브라우저 PC | `BROKER_HOST` | **9104** | god(관전 peer)의 **관전 창**(스스로 갱신하는 화면). `ARENA_GENESIS_GOD_WEB_PORT=9104`를 줬을 때만 열린다 |
 | 5 | `BROKER_HOST` | `PEER_HOST` | **9180** | 사람 peer의 A2A(기본값): god·기록자가 답을 돌려주거나 알릴 때 |
 | 6 | 브라우저 PC | `PEER_HOST` | **9183** | 사람의 창(console) |
 | 7 | 시험하는 사람의 PC | `BROKER_HOST` | 9100, 9102 | `curl`로 상태 확인(선택, 시험 PC에서만) |
@@ -79,6 +80,7 @@ flowchart LR
 ```text
 # BROKER_HOST로 들어오는 것 (출발: PEER_HOST, SPECIAL_HOST들)
 9100/tcp  9101/tcp  9102/tcp  9103/tcp
+9104/tcp  (출발: 브라우저 PC)                      # 관전 창
 # PEER_HOST(10.10.10.78)로 들어오는 것
 9180/tcp  (출발: BROKER_HOST, SPECIAL_HOST들)      # peer A2A
 9183/tcp  (출발: 브라우저 PC)                      # console 창
@@ -115,6 +117,8 @@ ARENA_HOST=0.0.0.0                  # 모든 곳에서 듣기
 ARENA_PUBLIC_HOST=<BROKER_HOST 주소>   # profile과 recorder 주소에 적혀 남이 찾아올 주소 (0.0.0.0을 쓰면 안 됨)
 ARENA_RECORDER_REQUIRE_GROUP=true
 ARENA_GENESIS_DIR=/app/data/genesis
+ARENA_GENESIS_GOD_WEB_PORT=9104       # god의 관전 창 (0이면 열지 않음)
+ARENA_GENESIS_GOD_WEB_HOST=0.0.0.0     # 다른 PC의 브라우저로 보려면 (기본 127.0.0.1: 이 서버 안에서만)
 EOF
 docker compose up -d
 docker compose logs -f              # "제네시스: {...}" 줄이 보이면 끝
@@ -129,13 +133,24 @@ ARENA_KEY_STORE=file .venv/bin/python -m arena.genesis
 
 > `ARENA_PUBLIC_HOST`를 빠뜨리면 profile에 `127.0.0.1`이 적혀 다른 서버의 peer가 닿지 못한다. 가장 흔한 실수다.
 
+### 4.0 관전 창 (god의 화면)
+
+genesis의 god(관전 peer, 녹색 바탕)는 **스스로 갱신하는 관전 창**을 열 수 있다. 원장 항목 수와 종류, 최근 항목(새로운 것이 위), 기록자 사본 무결성, event, peer별 강점과 실적, 원장 열람 기록을 보여 주고 `ARENA_OBSERVER_POLL_MS`(기본 3초)마다 새로고침 없이 갱신한다. 쓰기와 개입은 없고 읽기만 한다.
+
+```bash
+docker compose exec genesis cat /app/data/genesis/homes/god/web-token     # 토큰
+# 브라우저: http://<BROKER_HOST>:9104/#token=<토큰>
+```
+
+위 `.env`의 `ARENA_GENESIS_GOD_WEB_PORT`를 주지 않으면 창이 열리지 않는다(기본 0).
+
 ### 4.1 0번 원장이 만들어졌는지 확인
 
 ```bash
 # 컨테이너 안의 genesis 폴더 (named volume). 키는 파일(0600)로 있다
 docker compose exec genesis cat /app/data/genesis/trust-anchor.md
 curl -s http://<BROKER_HOST>:9102/health
-curl -s http://<BROKER_HOST>:9102/chain | head -c 600          # 0번 항목: type=genesis
+curl -s "http://<BROKER_HOST>:9102/log?from=0" | head -c 600      # 0번 항목: type=genesis (/chain은 허용된 키만 읽는다)
 curl -s http://<BROKER_HOST>:9102/trust | head -c 600
 curl -s http://<BROKER_HOST>:9103/.well-known/agent-card.json | head -c 300    # god이 떠 있는지
 ```
@@ -236,7 +251,7 @@ docker exec arena-peer-a cat /app/data/home/web-token
 ### S1. 최초 broker와 0번 원장
 
 1. 4절대로 genesis를 새로 띄운다(`down -v` 뒤).
-2. **기대**: 로그에 `제네시스: {...}`, `trust-anchor.md` 생성, `/chain`의 첫 항목이 `type: genesis`, 그 해시가 `trust-anchor.md`의 "제네시스 해시"와 같다. god·broker·recorder 공개키가 서로 다르다.
+2. **기대**: 로그에 `제네시스: {...}`, `trust-anchor.md` 생성, `/log?from=0`의 첫 항목이 `type: genesis`, 그 해시가 `trust-anchor.md`의 "제네시스 해시"와 같다. god·broker·recorder 공개키가 서로 다르다.
 3. genesis를 `docker compose restart`로 한 번 재시작한다. **기대**: 새 원장을 만들지 않고 같은 제네시스 해시로 이어서 연다.
 4. 제네시스 해시와 god 공개키를 이 문서 끝의 기록란에 적는다.
 
@@ -253,14 +268,14 @@ docker exec arena-peer-a cat /app/data/home/web-token
 
 1. peer A의 console에서 "이벤트 열기"로 제목·종류·규칙을 쓰고 연다. **기대**: 원장 기록이 남고 peer B 창에 공지 카드가 온다.
 2. peer B에서 `join_event`를 실행한다. **기대**: A 창 대화에 참가 신청이 보인다.
-3. A에서 `contract`(role `member`, B의 필명)를 실행한다. **기대**: 원장에 계약이 남고, `BROKER_HOST:9102`의 `/events/<event_id>`로 조회된다.
+3. A에서 `contract`(role `member`, B의 필명)를 실행한다. **기대**: 원장에 계약이 남는다(`/log?from=0`에 `contract` 항목, `/audit`가 `ok`).
 4. A와 B가 대화 칸으로 말을 주고받는다. **기대**: 상대 창에 말풍선. 한 번의 a2a message로 간다.
-5. 원장이 거절해야 하는 일(역할이 없는 peer의 행동)을 해 본다. **기대**: 거절 사유가 창 오른쪽 위에 뜬다.
+5. 거절되는 일을 해 본다: A에서 `contract`를 role `referee`(이벤트가 허용하지 않은 역할)로 실행. **기대**: `role referee not offered`(2026-11-05 확인). 없는 필명(`필명-000000`)으로 실행하면 `아무도 가리키지 않는 필명 …`. 같은 peer와 같은 role로 **한 번 더** 계약하면 거절되지 않고 계약 2건이 된다(2026-11-05 확인: 중복 방지 없음).
 
 ### S4. god과 recorder 관찰
 
 1. `curl -s http://<BROKER_HOST>:9102/audit` — 원장 전체 감사. **기대**: 이상 없음으로 답한다.
-2. `curl -s "http://<BROKER_HOST>:9102/track/<내 필명>"` — 내 기록. **기대**: S2~S3의 내 항목이 나온다.
+2. `curl -s "http://<BROKER_HOST>:9102/track/<공개키>"` — 공개키 하나의 실적 집계(개수만). 공개키는 `/log?from=0`의 `event` 항목에서 `payload.issuer`(개최자 키). **기대**: `events`, `roles` 등의 개수가 나온다(없는 키는 0).
 3. god 쪽 관전(`ARENA_GOD_VIEWERS`에 올린 공개키만 볼 수 있다)은 필요할 때 설정한다.
 
 ### S5. 특수 peer (필요한 만큼, 하나씩)
@@ -320,7 +335,7 @@ peer와 broker의 서명에는 시각이 들어간다. 서버 사이의 시계�
 
 ## 9. 아직 확인하지 못한 것
 
-- 이 문서의 `curl` 확인 경로 중 `/profiles`, `/health`, `/chain`, `/audit`, `/trust`, `/track`, `/events`는 코드의 라우트에서 확인했지만, 인증 조건(`guarded`)이 이 망에서 어떻게 작동하는지는 돌려 보지 않았다. 401/403이 나오면 알려 주세요.
+- `/health`, `/log`, `/audit`, `/trust`, `/events/<id>`, `/track/<공개키>`는 이 서버에서 직접 확인했다(서명 없이 열린다). `/chain`은 **서명된 요청과 허용된 키가 필요**해서 일반 `curl`로는 `signed request required`가 나온다. `/profiles`(broker)는 서명 없이 열린다.
 - recorder API(9102)를 사람 peer가 직접 부르는지(원장 기록·조회)는 코드상 `RecorderClient`가 쓰이는 것으로 보고 열도록 했다. 시험에서 9102 없이도 되는지 확인하면 규칙을 줄일 수 있다.
 - 견본 개인 peer용 `deploy/` compose는 없다(5.2절의 `docker run`으로 대신함). 필요하면 추가한다.
 
@@ -336,11 +351,12 @@ peer와 broker의 서명에는 시각이 들어간다. 서버 사이의 시계�
 
 | 이름 | 종류 | 누가 운전하나 | A2A | console 창 | home(키·상태) |
 |---|---|---|---|---|---|
-| genesis | broker + 첫 기록자 + god | (자동) | broker 9300, 기록자 9301, god 9303 | 없음 | `data/try/genesis` |
+| genesis | broker + 첫 기록자 + god | (자동) | broker 9300, 기록자 9301, god 9303 | **관전 창 9304**(god의 화면, 스스로 갱신) | `data/try/genesis` |
 | **human-a** | 사람 peer | **사용자**(console에서 직접) | 9310 | **9313** | `data/try/human-a` |
 | **agent** | agent peer | LLM 비서(사용자는 옆에서 지켜보고 물음에 답함) | 9330 | **9333** | `data/try/agent` |
 
-- 기록자 API는 9302다. 모두 `127.0.0.1`에서만 듣는다(이 서버 안). **브라우저가 다른 PC에 있을 때만** console 포트(9313, 9333)를 그 PC에서 이 서버로 열면 된다.
+- 기록자 API는 9302다. 모두 `127.0.0.1`에서만 듣는다(이 서버 안). **브라우저가 다른 PC에 있을 때만** console 포트(9313, 9333)와 관전 창(9304)을 그 PC에서 이 서버로 열면 된다.
+- **관전 창(9304)은 사용자가 계속 켜 두고 보는 화면**이다. 두 peer가 일하는 동안 원장 항목, 계약, 이벤트가 새로고침 없이 올라온다(3초마다). 나머지 두 창은 사람 역할을 하는 창이다.
 - 사용자는 두 창을 모두 연다. human-a 창에서 사람으로서 말하고 행동하고, agent 창에서는 agent의 이벤트와 물음 카드를 본다.
 - agent peer만 LLM을 쓴다(`.env`의 `ARENA_LLM_*`). human-a는 LLM이 없다(`ARENA_LLM_BACKEND=none`). genesis와 agent는 시작할 때 프로필 요약을 만드느라 LLM을 몇 번 부를 수 있다.
 
@@ -384,11 +400,12 @@ cd ~/projects/sut
 에이전트 아레나 시험 세계가 떴다. 화면:
   human-a  (human) 콘솔: http://<이 기계의 주소>:9313/#token=<토큰>
   agent    (agent) 콘솔: http://<이 기계의 주소>:9333/#token=<토큰>
+  god      (관전)  관전 창: http://<이 기계의 주소>:9304/#token=<토큰>
 기록: .../data/try/*.log   멈추기: Ctrl-C
 ```
 
-- 주소의 `<이 기계의 주소>`를 `hostname -I`로 본 주소로 바꿔 브라우저 두 탭에 연다. 토큰은 출력된 것을 그대로 쓴다. 토큰은 열자마자 주소창에서 지워지고 그 탭에만 남는다.
-- 토큰을 잃었으면: `cat data/try/human-a/web-token`, `cat data/try/agent/web-token`.
+- 주소의 `<이 기계의 주소>`를 `hostname -I`로 본 주소로 바꿔 브라우저 탭 **세 개**에 연다(관전 창은 한쪽 모니터에 계속 켜 둔다). 토큰은 출력된 것을 그대로 쓴다. 토큰은 열자마자 주소창에서 지워지고 그 탭에만 남는다.
+- 토큰을 잃었으면: `cat data/try/human-a/web-token`, `cat data/try/agent/web-token`, `cat data/try/genesis/homes/god/web-token`(관전 창).
 - 이 터미널은 계속 열어 둔다(프로세스가 앞에서 돈다). 끊어져도 돌게 하려면 `tmux new -s arena`로 들어가서 띄운다.
 - 멈추기: 그 터미널에서 **Ctrl-C**. 한 번에 3개가 다 내려간다. 터미널을 잃었으면 10.9절.
 
@@ -396,11 +413,11 @@ cd ~/projects/sut
 
 ```bash
 cd ~/projects/sut
-ss -ltn | grep -E ':93[0-3][0-9]'                      # 9300~9303, 9310, 9313, 9330, 9333 이 보인다
+ss -ltn | grep -E ':93[0-3][0-9]'                      # 9300~9304, 9310, 9313, 9330, 9333 이 보인다
 curl -s --noproxy '*' http://127.0.0.1:9302/health     # 기록자 API
 curl -s --noproxy '*' http://127.0.0.1:9300/profiles | python3 -c "import json,sys; [print(p['url'],p['operator'],p.get('labels')) for p in json.load(sys.stdin)['profiles']]"
 cat data/try/genesis/trust-anchor.md                   # 0번 원장의 뿌리 값
-curl -s --noproxy '*' http://127.0.0.1:9302/chain | head -c 500    # 첫 항목 type: genesis
+curl -s --noproxy '*' "http://127.0.0.1:9302/log?from=0" | head -c 500    # 첫 항목 type: genesis
 ```
 
 **기대** (`/profiles`): 네 줄이 나온다.
@@ -414,6 +431,14 @@ http://127.0.0.1:9330 agent ['이름:agent']
 
 `human`, `agent`가 한 줄씩 있으면 두 peer가 broker에 올라간 것이다. 없으면 `data/try/human-a.log`, `data/try/agent.log`의 끝을 본다(10.10절).
 
+### 10.4-1 관전 창 읽는 법 (녹색 바탕, 맨 위 태그 `관전 peer`)
+
+- **맨 위**: god의 필명, `관전 peer` 태그, `자동 갱신 · 3초마다`, `마지막 갱신 HH시 MM분 SS초`. 마지막 갱신 시각이 3초마다 바뀌면 살아 있는 것이다. 서버가 멈추거나 연결이 끊기면 `연결 끊김, 다시 시도 중`으로 바뀌고, 다시 닿으면 저절로 돌아온다.
+- **왼쪽**: 요약(원장 항목 수, 서명한 peer, event, 닫힌 event, 종류별 개수, 역할 계약), **무결성**(god이 직접 검증한 결과: `정상: …` 또는 `경고: 변조 또는 기록자 사이 불일치`, 기록자 행에 상태·항목 수·head), 원장 열람 기록(이 창 자신의 읽기는 뺀 다른 peer의 시도).
+- **가운데**: 최근 원장 항목(새로운 것이 위: 번호, 종류, 서명한 peer의 필명, event, 시각, hash 앞부분)과 event 표(연 peer, 공동 서명, 열림/닫힘).
+- **오른쪽**: peer별 강점(자기소개)과 실적(계약, 등록, 받음).
+- **기대(시나리오와 함께)**: 처음엔 항목 1개(`genesis`). 이벤트를 열면 `event`, 계약하면 `contract`가 **사람이 아무것도 누르지 않아도** 위에 올라온다.
+
 ### 10.5 화면 읽는 법 (console)
 
 - **맨 위**: 내 필명(공개키 앞부분), peer 종류 이름표(개인). 색으로만 구분하지 않고 이름표가 같이 있다.
@@ -421,6 +446,15 @@ http://127.0.0.1:9330 agent ['이름:agent']
 - **가운데**: 고른 이벤트의 대화. 받은 말은 왼쪽, 내 peer가 한 말은 오른쪽, 그 밖의 일(행동과 결과, agent의 생각, 공지, 원장, 예약)은 가운데 작은 글. 아래 칸에서 받는 이를 고르고 말을 쓰고 "보내기"를 누르면 상대 peer에게 a2a message 한 번이 간다.
 - **오른쪽**: 운전석, 지금 상태, 일정과 예약, "할 수 있는 일(직접 실행)", 규칙.
 - **agent 창에만**: 오른쪽 위 "내 agent" 칸(내 agent와 대화), 대화 아래 "내 agent에게 지시" 칸.
+
+### 10.5-1 화면에서 알아 둘 것 (2026-11-05 헤드리스 브라우저로 확인)
+
+- 필명의 모양은 `필명-` 뒤에 여섯 자리다(예: `필명-0d3663`). 맨 위 필명을 그대로 복사해 `contract`의 `peer` 칸에 붙인다.
+- 이벤트를 열면 왼쪽 이벤트 목록에 `가위바위보 연습 · 개최 · manual`처럼 뜬다(`manual`은 운전석: 사람이 직접).
+- 상대 peer 창에는 몇 초 안에 공지 카드가 오고 카드에 **이벤트 열기** 버튼이 있다. 누르면 이벤트가 목록에 생긴다.
+- 참가 신청은 개최자 창 대화에 상대 필명과 함께 `참가 신청` 줄로 온다.
+- **오른쪽 "할 수 있는 일(직접 실행)" 패널은 이벤트의 상태가 바뀌면 다시 그려져 접히고 입력값이 지워진다.** 도구를 실행한 직후(예: `contract` 뒤)에는 패널을 다시 펼쳐서 다음 도구를 쓴다. 입력하는 동안에는 상태가 안 바뀌면 그대로다.
+- 도구를 실행하면 오른쪽 아래에 결과 알림(`contract → {"ok":true,"hash":…}`)이 잠깐(6초) 뜬다.
 
 ### 10.6 시나리오 T1: 서로 찾기
 
@@ -453,10 +487,11 @@ http://127.0.0.1:9330 agent ['이름:agent']
    - **기대**: "지금 상태"가 갱신되고, 대화에 계약과 원장 기록이 남는다.
 6. 서버에서 원장을 확인한다.
    ```bash
-   curl -s --noproxy '*' http://127.0.0.1:9302/events/<event_id> | head -c 800
+   curl -s --noproxy '*' "http://127.0.0.1:9302/log?from=0" | python3 -m json.tool | grep -E '"type"|event_id'
+   curl -s --noproxy '*' http://127.0.0.1:9302/audit
    ```
-   `<event_id>`는 이벤트 열기가 남긴 대화 가운데 줄 또는 창의 이벤트 제목 옆에서 본다. 못 찾으면 `curl -s --noproxy '*' http://127.0.0.1:9302/chain | python3 -m json.tool | tail -60`으로 마지막 항목들을 본다.
-   - **기대**: genesis(0번) 뒤에 이벤트 열기, 계약 항목이 이어진다. agent의 참가와 계약이 서명과 함께 남는다.
+   - **기대**: `genesis`(0번), `event`, `contract` 순으로 항목이 이어지고, `/audit`가 `"status":"ok"`로 답한다. 항목의 `event_id`(`ev-`로 시작)는 `payload` 안에 있다.
+   - 한 이벤트만 보려면 `/events/<event_id>`. `event_id`는 창에 나오지 않는다: 위 `/log`에서 찾거나, 브라우저 개발자 도구(F12)에서 왼쪽 이벤트 버튼의 `data-id`를 본다.
 
 ### 10.8 시나리오 T3: 사용자(human-a)가 agent에게 말을 건다
 
@@ -466,7 +501,7 @@ http://127.0.0.1:9330 agent ['이름:agent']
 3. agent 창의 같은 이벤트 대화에도 human-a의 말(왼쪽)과 agent의 답(오른쪽), agent의 생각(가운데)이 보인다.
 4. agent 창 "내 agent" 칸에서 `지금 무슨 이벤트 있어?`라고 묻는다. **기대**: 이벤트 `가위바위보 연습`을 말한다. 이것은 a2a가 아니라 agent와 그 소유자 사이의 대화다.
 5. human-a 창에서 `send`(할 수 있는 일)로 G에게 구조화된 메시지를 하나 보낸다. **기대**: agent 창에 도착하고 agent가 반응한다.
-6. 원장이 거절해야 하는 일을 해 본다: human-a에서 이미 계약된 peer G에게 `contract`를 한 번 더 실행. **기대**: 거절 사유가 창 오른쪽 위에 뜬다(상태가 바뀌지 않는다).
+6. 거절되는 일을 해 본다: human-a에서 `contract`를 role `referee`(이벤트가 허용하지 않은 역할)로 실행. **기대**: 알림에 `role referee not offered`가 뜬다. 없는 필명으로 하면 `아무도 가리키지 않는 필명 …`. (같은 peer와 같은 role로 다시 계약하는 것은 거절되지 않는다. 계약이 2건이 된다.)
 
 ### 10.9 정리
 
@@ -510,7 +545,27 @@ kill -TERM <위에서 scripts.try_personal의 PID>      # 자식 3개가 같이 
 | T1 / T2 / T3 결과 | |
 | 막힌 점 | |
 
-### 10.12 이 절에서 확인한 것과 못 한 것
+### 10.12 LLM 없이 사람 둘로만 해 보기 (T2의 사람-사람 판)
 
-- **확인함** (2026-11-05, 이 서버): `--peers human-a,agent --web-host 0.0.0.0`으로 띄우면 genesis(9300~9303)와 human-a(A2A 9310, console 9313), agent(A2A 9330, console 9333)가 뜨고, console 두 개만 `0.0.0.0`에서 듣고 나머지는 `127.0.0.1`에서 듣는다. `/profiles`에 기록자, god, human-a, agent 네 줄이 올라온다. SIGTERM으로 3개가 다 내려가는 것을 확인했다.
-- **확인하지 못함**: 브라우저로 직접 연 T2, T3의 모든 화면 동작. 이벤트 열기, 물음 카드, `contract`, 말풍선의 흐름은 `dev/try-personal-peer.md`와 화면 코드(`arena/bundled/console`, `arena/peer/assistant/tools.py`)를 읽고 쓴 것이다. 버튼 이름이나 순서가 다르면 알려 주세요. agent의 반응 시간과 말투는 LLM에 따라 다르다.
+agent 없이 같은 흐름(이벤트 열기 → 공지 → 참가 신청 → 계약 → 말 주고받기)만 보려면 토큰이 들지 않는다. **genesis도 시작할 때 프로필 요약에 LLM을 쓰므로, 아예 안 쓰려면 앞에 `ARENA_LLM_BACKEND=none`을 붙인다.**
+
+```bash
+ARENA_LLM_BACKEND=none .venv/bin/python -m scripts.try_personal --fresh --peers human-a,human-b --web-host 0.0.0.0
+```
+
+- human-a console `:9313`, human-b console `:9323`. 두 창을 열고, 10.7절의 1, 4, 5번(이벤트 열기, 참가 신청 확인, `contract`)과 10.8절의 2번(말 보내기)을 **사람 둘이서** 한다. agent 대신 human-b 창에서 이벤트 `가위바위보 연습`을 열고 오른쪽 "할 수 있는 일"의 `join_event`를 실행하면 된다.
+- 2026-11-05에 이 순서를 헤드리스 브라우저로 끝까지 따라가 확인했다(아래). 관전 창도 같이 열어 두고 새로고침 없이 갱신되는지 확인했다.
+
+### 10.13 이 절에서 확인한 것과 못 한 것
+
+- **확인함** (2026-11-05, 이 서버, `ARENA_LLM_BACKEND=none`, human-a와 human-b, 헤드리스 Chromium):
+  1. 두 창이 열리고 필명이 서로 다르다. human-a의 종류 이름표는 `개인 peer`, 운전은 `human`.
+  2. human-a에서 "이벤트 열기"로 연다 → 목록에 `가위바위보 연습 · 개최 · manual`.
+  3. human-b 창에 공지 카드와 "이벤트 열기" 버튼이 온다(몇 초 안) → `join_event` 실행 → human-b 대화에 `참가 신청 → 완료`.
+  4. human-a 대화에 human-b의 필명과 `참가 신청` 줄이 온다 → `contract`(role `member`, human-b 필명) 실행 → 상태 줄에 `이 이벤트에서 맺은 역할 계약 1건: member=<필명>`.
+  5. human-a의 `say-to` 목록에 human-b 필명이 있다 → 말 보내기 → human-a에는 오른쪽(`나 →`), human-b에는 왼쪽으로 뜬다.
+  6. 거절: role `referee` → `role referee not offered`, 없는 필명 → `아무도 가리키지 않는 필명 …`. 같은 peer와 같은 role의 두 번째 계약은 **거절되지 않는다**(계약 2건).
+  7. 원장: `/log?from=0`이 `genesis, event, contract, contract`, `/audit`가 `ok`, `/trust`, `/events/<id>`, `/track/<공개키>`가 답한다. `/chain`은 서명이 필요하다.
+  8. **관전 창**(9304)을 시작 때 열어 두었더니 항목 1개(`genesis`)로 시작해, 새로고침 없이 `genesis, event, contract, contract` 4개로 올라왔다(종류가 새것 위로). 무결성은 정상, 기록자 1, peer 4(human-a, human-b, 기록자, god).
+  9. 페이지 오류(JS)는 없었다. 끝난 뒤 프로세스 3개가 모두 내려갔다.
+- **확인하지 못함**: agent가 있는 T2·T3(공지에 대한 물음 카드, agent의 참가·답). LLM 호출이 들어서 아직 하지 않았다. 해 보시고 화면이 다르면 알려 주세요. agent의 반응 시간과 말투는 LLM에 따라 다르다.

@@ -80,7 +80,7 @@ description: 에이전트 아레나(Agent Arena)의 모든 웹 화면(사람의 
 
 ## 점검
 
-- **화면 테스트**: `.venv/bin/python -m pytest tests/ui`. `tests/ui/test_ui_identity.py`가 세 창이 같은 값(강조색, 바탕, 글꼴)을 쓰는지, peer 종류가 바탕과 태그로 나오는지, 어두운 화면을 확인한다. 새 창을 만들면 이 테스트에 그 창을 더한다.
+- **화면 테스트**: `.venv/bin/python -m pytest tests/ui`. `tests/ui/test_ui_identity.py`가 세 창이 같은 값(강조색, 바탕, 글꼴)을 쓰는지, peer 종류가 바탕과 태그로 나오는지, 어두운 화면을 확인한다. 새 창을 만들면 이 테스트에 그 창을 더한다. 관전 창(`arena/bundled/observer`, god peer의 화면)은 `tests/ui/test_observer_ui.py`가 같은 값과 녹색 바탕, 스스로 갱신하는 것을 확인한다.
 - **눈으로 보기**: `ARENA_UI_SHOTS=<폴더> .venv/bin/python -m pytest tests/ui/test_ui_identity.py`가 창마다 밝은·어두운 스크린샷을 남긴다. 겹친 글, 넘친 칸, 버튼 높이를 본다.
 - **대비 계산**: 색 값을 바꾸면 글자 대비를 다시 계산한다(WCAG 상대 휘도). 본문·보조 글·강조 글은 4.5:1 이상이어야 한다. 그래프 색이 필요하면 dataviz skill의 `scripts/validate_palette.js`를 쓴다.
 - 금지 확인: 창 CSS나 JS에서 `#` 색 값 검색(`grep -n "#[0-9a-fA-F]\{3,6\}" arena/bundled/*/static -r`). arena.css 밖에서 나오면 디자인 값으로 옮긴다.

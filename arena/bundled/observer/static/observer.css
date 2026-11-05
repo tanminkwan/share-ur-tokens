@@ -1,0 +1,10 @@
+/* the observer window: the shared look (arena.css); only its layout here */
+@import url('/common/arena.css');
+main.observer { grid-template-columns: minmax(300px, 1.2fr) minmax(420px, 2.2fr) minmax(280px, 1.4fr); }
+.observer .col > div { margin-bottom: var(--sp-4); }
+.observer .scroll { max-height: 38vh; overflow: auto; }
+.observer .stat-row { display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-4); }
+.observer .stat b { display: block; font-size: var(--fs-lg); font-variant-numeric: tabular-nums; }
+.observer .strengths { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.observer .col { min-width: 0; }
+.observer th, .observer td { white-space: nowrap; }  /* a pen name or a time never breaks in two; a wide table scrolls */

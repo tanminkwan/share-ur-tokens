@@ -264,6 +264,7 @@ class Settings(EnvSettings):
     god_viewers: list[str] = F("ARENA_GOD_VIEWERS", [], _list, "관전 결과를 볼 수 있는 공개키(쉼표 구분)")
     god_cache_sec: float = F("ARENA_GOD_CACHE_SEC", 1.0, float, "관전 결과 캐시(초)")
     god_top_flows: int = F("ARENA_GOD_TOP_FLOWS", 5, int, "공유 흐름 상위 개수")
+    god_recent: int = F("ARENA_GOD_RECENT", 20, int, "관전 결과에 싣는 최근 원장 항목 개수")
     # phase 4: public area by address, direct requests, track records, capability labels
     area_cache_sec: float = F("ARENA_AREA_CACHE_SEC", 60.0, float, "URL 공개 영역을 다시 가져오기 전 캐시(초)")
     area_http_token: str | None = F("ARENA_AREA_HTTP_TOKEN", None, _opt, "URL 공개 영역 인증 토큰(Bearer, 비면 인증 없음)")
@@ -298,6 +299,10 @@ class Settings(EnvSettings):
     genesis_recorder_port: int = F("ARENA_GENESIS_RECORDER_PORT", 9101, int, "제네시스 기록자 peer A2A 포트")
     genesis_recorder_api_port: int = F("ARENA_GENESIS_RECORDER_API_PORT", 9102, int, "제네시스 기록자 recorder API 포트")
     genesis_god_port: int = F("ARENA_GENESIS_GOD_PORT", 9103, int, "god peer A2A 포트")
+    genesis_god_web_port: int = F("ARENA_GENESIS_GOD_WEB_PORT", 0, int, "god peer의 관전 창(observer 앱) 포트. 0이면 창을 열지 않는다")
+    genesis_god_web_host: str = F("ARENA_GENESIS_GOD_WEB_HOST", "127.0.0.1", str, "관전 창이 듣는 주소(기본: 이 기계 안에서만. 다른 PC의 브라우저로 보려면 0.0.0.0)")
+    genesis_god_web_token: str = F("ARENA_GENESIS_GOD_WEB_TOKEN", "", str, "관전 창의 토큰. 비면 god의 홈 폴더에 무작위로 만든다")
+    observer_poll_ms: int = F("ARENA_OBSERVER_POLL_MS", 3000, int, "관전 창이 새 값을 가져오는 주기(밀리초). 원장 읽기 캐시(ARENA_GOD_CACHE_SEC)보다 짧으면 같은 값을 다시 본다")
     # the basic assistant: the primordial way to hold or join an event (natural-language rules + generic tools)
     assistant_max_steps: int = F("ARENA_ASSISTANT_MAX_STEPS", 8, int, "기본 비서가 입력 하나에 쓰는 최대 단계 수")
     assistant_transcript_max: int = F("ARENA_ASSISTANT_TRANSCRIPT_MAX", 60, int, "기본 비서가 LLM에 보여 주는 최근 기록 줄 수")

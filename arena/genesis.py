@@ -26,6 +26,8 @@ from .recorder.client import RecorderClient
 from .llm import NoLLM, build_llm
 from .peer.area import LocalFolderArea
 from .peer.god_role import GodRole
+from .bundled.observer import ObserverApp
+from .bundled.web import web_token
 from .peer.home import PeerHome
 from .peer.node import Peer, PeerConfig
 from .peer.owner import NoOwner
@@ -131,9 +133,13 @@ async def start(settings: Settings, viewers=None) -> Genesis:
     recorder = Peer(rec_id, settings, PeerConfig(url=urls["recorder"]), _area(os.path.join(d, "areas", "recorder"), settings,
                     "제네시스 기록자: god이 만든 첫 기록자. 원장을 검증하고 기록자 서명을 남겨 보관한다"), NoOwner(), llm, transport, log,
                     brokers=brokers(), apps=[role], home=PeerHome(os.path.join(d, "homes", "recorder"), settings))
+    god_role, god_home = GodRole(settings, viewers), PeerHome(os.path.join(d, "homes", "god"), settings)
+    observer = ObserverApp(god_role, settings, settings.genesis_god_web_host, settings.genesis_god_web_port,
+                           web_token(god_home, settings.genesis_god_web_token)) if settings.genesis_god_web_port else None
+    windows = [observer] if observer else []  # the observer window opens when the god starts (ARENA_GENESIS_GOD_WEB_PORT)
     god = Peer(god_id, settings, PeerConfig(url=urls["god"], kind="observer"), _area(os.path.join(d, "areas", "god"), settings,
                "god: 제네시스로 만민 broker와 기록자를 만든 peer. 원장 전체를 읽어 감사하고 통계를 낸다"), NoOwner(), llm, transport, log,
-               brokers=brokers(), apps=[GodRole(settings, viewers)], home=PeerHome(os.path.join(d, "homes", "god"), settings))
+               brokers=brokers(), apps=[god_role, *windows], home=god_home)
     world = Genesis(god, recorder, broker, urls)
     world.servers.append(await serve_background(build_broker_app(broker), host, settings.genesis_broker_port))
     world.servers.append(await serve_background(role.api(), host, settings.genesis_recorder_api_port))
