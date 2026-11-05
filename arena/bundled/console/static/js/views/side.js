@@ -8,15 +8,19 @@ export class SideView {
 
   render({ event, config }) {
     if (!event) { this.key = null; return replace(this.root); }
-    const key = JSON.stringify([event.event_id, event.drive, event.state_line, event.tools.map(t => t.name), event.timers.length]);
-    if (key === this.key) return;  // keep half-filled tool forms while polling
+    const key = JSON.stringify([event.event_id, event.drive, event.tools.map(t => t.name), event.timers.length]);
+    if (key === this.key) {  // keep half-filled tool forms while polling: the state line carries the clock, so only its text is renewed
+      if (this.stateEl) this.stateEl.textContent = event.state_line;
+      return;
+    }
     this.key = key;
     const forms = new ToolForm((name, args) => this.actions.runTool(event.event_id, name, args));
+    this.stateEl = h('div', { class: 'state', testid: 'state-line' }, event.state_line);
     const drive = h('select', { testid: 'drive', onchange: e => this.actions.setDrive(event.event_id, e.target.value) },
       (config?.drives || []).map(d => h('option', { value: d, selected: d === event.drive }, d)));
     replace(this.root,
       h('label', {}, '운전석', drive),
-      h('label', {}, '지금 상태(코드가 적음)'), h('div', { class: 'state', testid: 'state-line' }, event.state_line),
+      h('label', {}, '지금 상태(코드가 적음)'), this.stateEl,
       event.schedule.length ? h('div', { testid: 'schedule' }, h('label', {}, '일정(원장)'),
         event.schedule.map(x => h('div', {}, `${x.when} ${x.code}${x.subject ? ' ' + x.subject : ''}`))) : null,
       event.timers.length ? h('div', { testid: 'timers' }, h('label', {}, '예약'), event.timers.map(t => h('div', {}, `${t.when} ${t.kind}`))) : null,

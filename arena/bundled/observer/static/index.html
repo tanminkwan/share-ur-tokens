@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>에이전트 아레나 · 관전</title>
+  <link rel="stylesheet" href="/static/observer.css">
+</head>
+<body>
+  <header id="header" data-testid="header"></header>
+  <div id="toast" data-testid="toast" role="status" aria-live="polite"></div>
+  <main class="observer">
+    <section class="col" aria-label="요약과 무결성">
+      <div id="summary" data-testid="summary"></div>
+      <div id="integrity" data-testid="integrity"></div>
+      <div id="access" data-testid="access"></div>
+    </section>
+    <section class="col wide" aria-label="원장과 event">
+      <div id="recent" data-testid="recent"></div>
+      <div id="events" data-testid="events"></div>
+    </section>
+    <section class="col" aria-label="peer">
+      <div id="peers" data-testid="peers"></div>
+    </section>
+  </main>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

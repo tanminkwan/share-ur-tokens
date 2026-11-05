@@ -4,6 +4,8 @@
 #   docker compose up -d
 # The image comes from deploy/build.sh (no build here). Network: host, so this peer is reached at ARENA_PUBLIC_HOST
 # (default: ARENA_HOST, 127.0.0.1). To serve others: ARENA_HOST=0.0.0.0 and ARENA_PUBLIC_HOST=<this server's address>.
+# The god's observer window (a screen that refreshes itself) is on ARENA_GENESIS_GOD_WEB_PORT (9104), on this machine only
+# unless ARENA_GENESIS_GOD_WEB_HOST=0.0.0.0; its token: docker compose exec genesis cat /app/data/genesis/homes/god/web-token
 # The peer keeps connecting to its broker until it answers. Guide: dev/docker.md
 services:
   genesis:
@@ -20,6 +22,8 @@ services:
       ARENA_KEY_STORE: file
       ARENA_RECORDER_REQUIRE_GROUP: ${ARENA_RECORDER_REQUIRE_GROUP:-true}
       ARENA_GENESIS_DIR: ${ARENA_GENESIS_DIR:-/app/data/genesis}
+      ARENA_GENESIS_GOD_WEB_PORT: ${ARENA_GENESIS_GOD_WEB_PORT:-9104}
+      ARENA_GENESIS_GOD_WEB_HOST: ${ARENA_GENESIS_GOD_WEB_HOST:-127.0.0.1}
     volumes:
       - data:/app/data
 

@@ -10,16 +10,20 @@ export class EventView {
   }
   render({ event, config }) {
     if (!event) return replace(this.root, h('div', { class: 'empty', testid: 'no-event' }, '왼쪽에서 이벤트를 고르면 여기에 보인다'));
-    const key = JSON.stringify([event.event_id, event.drive, event.transcript.length, event.state_line, event.tools.map(t => t.name), event.timers.length]);
-    if (key === this.lastKey) return;  // keep half-filled forms while polling
+    const key = JSON.stringify([event.event_id, event.drive, event.transcript.length, event.tools.map(t => t.name), event.timers.length]);
+    if (key === this.lastKey) {  // keep half-filled forms while polling: the state line carries the clock, so only its text is renewed
+      if (this.stateEl) this.stateEl.textContent = event.state_line;
+      return;
+    }
     this.lastKey = key;
     const forms = new ToolForm((name, args) => this.actions.runTool(event.event_id, name, args));
+    this.stateEl = h('div', { class: 'state', testid: 'state-line' }, event.state_line);
     const drive = h('select', { testid: 'drive', onchange: e => this.actions.setDrive(event.event_id, e.target.value) },
       (config?.drives || []).map(d => h('option', { value: d, selected: d === event.drive }, d)));
     replace(this.root,
       h('h2', { testid: 'event-title' }, `${event.title} (${event.role === 'host' ? '개최' : '참가'})`),
       h('label', {}, '운전석', drive),
-      h('label', {}, '지금 상태(코드가 적음)'), h('div', { class: 'state', testid: 'state-line' }, event.state_line),
+      h('label', {}, '지금 상태(코드가 적음)'), this.stateEl,
       event.schedule.length ? h('div', { testid: 'schedule' }, h('label', {}, '일정(원장)'),
         event.schedule.map(x => h('div', {}, `${x.when} ${x.code}${x.subject ? ' ' + x.subject : ''}${x.note ? ' · ' + x.note : ''}`))) : null,
       event.timers.length ? h('div', { testid: 'timers' }, h('label', {}, '예약'),

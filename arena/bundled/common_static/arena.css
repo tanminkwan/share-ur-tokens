@@ -135,6 +135,7 @@ label { display: block; font-size: var(--fs-sm); color: var(--muted); margin-top
 
 /* ---------- code-made text: where an event stands, a transcript ---------- */
 .state { background: var(--surface-2); padding: var(--sp-2); border-radius: var(--r); white-space: pre-wrap; font-size: 13px; }
+.state.warn { border-left: 4px solid var(--warn); font-weight: 600; }  /* with its words: a warning is never color alone */
 .transcript { font-family: var(--mono); font-size: var(--fs-sm); white-space: pre-wrap; background: var(--surface-3); padding: var(--sp-2);
               border-radius: var(--r); max-height: 24em; overflow: auto; }
 

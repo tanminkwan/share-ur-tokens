@@ -177,3 +177,24 @@ async def test_in_the_console_the_person_opens_an_event_with_a_schedule(eco, con
     assert "schedule" in await page.get_by_test_id("timers").inner_text()
     await page.get_by_test_id("line-note-instruction").wait_for(timeout=WAIT)  # my standing instruction, in the conversation
     assert next(iter(asst(p).events.values())).role == "host"
+
+
+async def test_a_half_filled_tool_form_survives_the_clock_moving(eco, console_site, browser):
+    """found on a real run (2026-11-05): the state line carries the clock, so the side panel was rebuilt on every poll and a
+    form being typed in closed and emptied within two seconds. Now only the state line's text is renewed."""
+    from tests.conftest import FakeClock
+    p, _, url = await console_site()
+    p.clock = fc = FakeClock()
+    ev = await hosted(eco)
+    await p.events.watch_once(p.ctx(p.events))
+    await settle(p)
+    page = await page_of(browser, url)
+    await page.locator(f'[data-testid="event-item"][data-id="{ev}"]').click()
+    await page.get_by_test_id("tools-box").locator("> summary").click(timeout=WAIT)
+    await page.get_by_test_id("tool-send").locator("summary").click(timeout=WAIT)
+    await page.get_by_test_id("tool-send").get_by_test_id("arg-text").fill("쓰는 중인 글")
+    before = await page.get_by_test_id("state-line").inner_text()
+    fc.tick(60)  # a minute later: the state line is different, the form must not be
+    await page.get_by_test_id("state-line").filter(has_not_text=before).wait_for(timeout=WAIT)
+    assert await page.get_by_test_id("tools-box").evaluate("e => e.open") is True
+    assert await page.get_by_test_id("tool-send").get_by_test_id("arg-text").input_value() == "쓰는 중인 글"

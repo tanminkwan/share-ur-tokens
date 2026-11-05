@@ -10,6 +10,13 @@ from ..stats import ledger_stats, per_peer
 from .plugin import BaseApp, MessageHead
 
 
+def recent_entries(chain: list[dict], n: int, pen) -> list[dict]:
+    """the last n entries, newest first: what they are and who signed (pen names), never their content"""
+    return [{"seq": e.get("seq", i), "type": e["type"], "ts": e["ts"], "hash": e["hash"], "event_id": e["payload"].get("event_id"),
+             "who": [pen(pub) for pub in e["sigs"]]}
+            for i, e in reversed(list(enumerate(chain))[max(len(chain) - max(n, 0), 0):])]
+
+
 class GodRole(BaseApp):
     name, version, app_id = "god", "1.0", "caaa8085-5e8b-4581-8383-75ba77e30126"
 
@@ -67,7 +74,7 @@ class GodRole(BaseApp):
         pen = lambda pub: pen_name(pub, self.settings.pen_name_prefix, self.settings.pen_name_len)
         snap = {"ok": True, "integrity": {"recorders": integ, "agree": agree},
                 "stats": ledger_stats(chain, self.settings.god_top_flows, self.settings.genesis_group_id), "peers": per_peer(chain, profiles, pen),
-                "access": access}
+                "recent": recent_entries(chain, self.settings.god_recent, pen), "access": access}
         self._cache = (now, snap)
         return snap
 
