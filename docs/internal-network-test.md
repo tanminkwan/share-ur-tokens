@@ -13,6 +13,8 @@
 | `SPECIAL_HOST` | 특수 목적 peer(search, key, link …)를 띄울 서버 | 처음엔 `BROKER_HOST`에 같이 두는 것을 권함 |
 | 브라우저 | 사용자가 화면을 여는 PC | 같은 10.x 망 (주소 정해 주세요) |
 
+이 문서는 두 가지 시험을 다룬다. **10절은 이 서버 하나에서 peer 2개(사람 1, agent 1)를 띄워 사용자가 소통해 보는 시험**이고(먼저 이것부터 권함), 1~9절은 여러 서버에 나눠 띄우는 시험(방화벽 포함)이다.
+
 처음 시험은 서버를 `BROKER_HOST`와 `PEER_HOST` 둘로 한다. 특수 peer는 필요할 때 하나씩 추가한다(7절).
 
 ## 1. 누가 누구에게 닿아야 하나
@@ -227,7 +229,7 @@ docker exec arena-peer-a cat /app/data/home/web-token
 
 | # | 할 일 | 기대 | 실패하면 |
 |---|---|---|---|
-| 0-1 | `PEER_HOST`에서 `curl -s -o /dev/null -w "%{http_code}\n" http://<BROKER_HOST>:9100/profiles`, 9102/health, 9101·9103의 `/.well-known/agent-card.json` | 모두 200 | 방화벽 1~4번 |
+| 0-1 | `PEER_HOST`에서 (사내 proxy 환경 변수가 있으면 `curl`에 `--noproxy '*'`를 붙인다) `curl -s -o /dev/null -w "%{http_code}\n" http://<BROKER_HOST>:9100/profiles`, 9102/health, 9101·9103의 `/.well-known/agent-card.json` | 모두 200 | 방화벽 1~4번 |
 | 0-2 | `BROKER_HOST`에서 `http://10.10.10.78:9180/.well-known/agent-card.json` | 200 (peer를 띄운 뒤) | 방화벽 5번, `ARENA_HOST` |
 | 0-3 | 브라우저에서 `http://10.10.10.78:9183/` | 창이 열림 | 방화벽 6번, `ARENA_PERSONAL_WEB_HOST=0.0.0.0` |
 
@@ -321,3 +323,194 @@ peer와 broker의 서명에는 시각이 들어간다. 서버 사이의 시계�
 - 이 문서의 `curl` 확인 경로 중 `/profiles`, `/health`, `/chain`, `/audit`, `/trust`, `/track`, `/events`는 코드의 라우트에서 확인했지만, 인증 조건(`guarded`)이 이 망에서 어떻게 작동하는지는 돌려 보지 않았다. 401/403이 나오면 알려 주세요.
 - recorder API(9102)를 사람 peer가 직접 부르는지(원장 기록·조회)는 코드상 `RecorderClient`가 쓰이는 것으로 보고 열도록 했다. 시험에서 9102 없이도 되는지 확인하면 규칙을 줄일 수 있다.
 - 견본 개인 peer용 `deploy/` compose는 없다(5.2절의 `docker run`으로 대신함). 필요하면 추가한다.
+
+---
+
+## 10. 이 서버 하나에서 peer 2개(사람 1 + agent 1)와 소통해 보기
+
+> 2026-11-05. 사용자: "여기에서도 test용 peer 2개 띄우고 내가 그 peer들과 소통하는 시나리오로 하자", "3번(agent 1개와 human 1개)", "내가 문서 보면서 test할 거니 상세하게".
+
+### 10.1 무엇을 띄우나
+
+한 서버에서 genesis와 peer 둘을 **프로세스 3개**로 띄운다(`scripts/try_personal.py`가 한 번에 한다). 같은 IP이므로 **포트와 home 폴더가 peer마다 달라야** 한다. 스크립트가 이름마다 고정된 포트를 준다.
+
+| 이름 | 종류 | 누가 운전하나 | A2A | console 창 | home(키·상태) |
+|---|---|---|---|---|---|
+| genesis | broker + 첫 기록자 + god | (자동) | broker 9300, 기록자 9301, god 9303 | 없음 | `data/try/genesis` |
+| **human-a** | 사람 peer | **사용자**(console에서 직접) | 9310 | **9313** | `data/try/human-a` |
+| **agent** | agent peer | LLM 비서(사용자는 옆에서 지켜보고 물음에 답함) | 9330 | **9333** | `data/try/agent` |
+
+- 기록자 API는 9302다. 모두 `127.0.0.1`에서만 듣는다(이 서버 안). **브라우저가 다른 PC에 있을 때만** console 포트(9313, 9333)를 그 PC에서 이 서버로 열면 된다.
+- 사용자는 두 창을 모두 연다. human-a 창에서 사람으로서 말하고 행동하고, agent 창에서는 agent의 이벤트와 물음 카드를 본다.
+- agent peer만 LLM을 쓴다(`.env`의 `ARENA_LLM_*`). human-a는 LLM이 없다(`ARENA_LLM_BACKEND=none`). genesis와 agent는 시작할 때 프로필 요약을 만드느라 LLM을 몇 번 부를 수 있다.
+
+```mermaid
+flowchart LR
+    BR["브라우저(사용자 PC)"] -- "9313" --> HA["human-a<br/>A2A 9310"]
+    BR -- "9333" --> AG["agent<br/>A2A 9330 · LLM"]
+    HA <-- "a2a (무전기)" --> AG
+    HA & AG -- "프로필·공지" --> BRK["genesis<br/>broker 9300 · 기록자 9301/9302 · god 9303"]
+    HA & AG -- "원장 기록" --> BRK
+```
+
+### 10.2 준비
+
+```bash
+cd ~/projects/sut                          # 이 저장소
+git pull                                   # 이 문서와 --peers 옵션이 들어 있는 브랜치/main
+ls .venv/bin/python                        # 없으면: python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
+grep -c "^ARENA_LLM_" .env                 # 1 이상이어야 agent가 뜬다 (값은 출력하지 않는다)
+```
+
+- 이 서버에 사내 proxy 환경 변수가 있으면 **`curl`에 `--noproxy '*'`** 를 붙인다(localhost가 proxy로 새지 않게).
+- 이 서버의 주소를 확인한다: `hostname -I`. 아래의 `<이 서버 주소>`다.
+- 포트가 비어 있는지: `ss -ltn | grep -E ':93[0-3][0-9]'` — 아무것도 안 나와야 한다.
+- 브라우저 PC가 이 서버의 **9313, 9333**에 닿는지(방화벽)를 확인한다. 같은 서버의 브라우저(또는 SSH 터널)이면 열 것이 없다.
+
+### 10.3 띄우기
+
+```bash
+cd ~/projects/sut
+.venv/bin/python -m scripts.try_personal --fresh --peers human-a,agent --web-host 0.0.0.0
+```
+
+- `--fresh`: `data/try/`를 비우고 **새 0번 원장**으로 시작한다(시험마다 첫 원장을 새로 만든다).
+- `--peers human-a,agent`: 이 두 peer만 띄운다. 이름 중에서 고른다: `human-a`, `human-b`, `agent`.
+- `--web-host 0.0.0.0`: console을 다른 PC의 브라우저가 열 수 있게 한다. 서버의 브라우저만 쓰면 빼도 된다(기본 `127.0.0.1`).
+
+20초쯤 뒤 다음과 같이 출력된다(2026-11-05 이 서버에서 확인한 모양).
+
+```text
+에이전트 아레나 시험 세계가 떴다. 화면:
+  human-a  (human) 콘솔: http://<이 기계의 주소>:9313/#token=<토큰>
+  agent    (agent) 콘솔: http://<이 기계의 주소>:9333/#token=<토큰>
+기록: .../data/try/*.log   멈추기: Ctrl-C
+```
+
+- 주소의 `<이 기계의 주소>`를 `hostname -I`로 본 주소로 바꿔 브라우저 두 탭에 연다. 토큰은 출력된 것을 그대로 쓴다. 토큰은 열자마자 주소창에서 지워지고 그 탭에만 남는다.
+- 토큰을 잃었으면: `cat data/try/human-a/web-token`, `cat data/try/agent/web-token`.
+- 이 터미널은 계속 열어 둔다(프로세스가 앞에서 돈다). 끊어져도 돌게 하려면 `tmux new -s arena`로 들어가서 띄운다.
+- 멈추기: 그 터미널에서 **Ctrl-C**. 한 번에 3개가 다 내려간다. 터미널을 잃었으면 10.9절.
+
+### 10.4 띄운 직후 확인 (서버에서, 터미널을 하나 더 연다)
+
+```bash
+cd ~/projects/sut
+ss -ltn | grep -E ':93[0-3][0-9]'                      # 9300~9303, 9310, 9313, 9330, 9333 이 보인다
+curl -s --noproxy '*' http://127.0.0.1:9302/health     # 기록자 API
+curl -s --noproxy '*' http://127.0.0.1:9300/profiles | python3 -c "import json,sys; [print(p['url'],p['operator'],p.get('labels')) for p in json.load(sys.stdin)['profiles']]"
+cat data/try/genesis/trust-anchor.md                   # 0번 원장의 뿌리 값
+curl -s --noproxy '*' http://127.0.0.1:9302/chain | head -c 500    # 첫 항목 type: genesis
+```
+
+**기대** (`/profiles`): 네 줄이 나온다.
+
+```text
+http://127.0.0.1:9301 service ['분야:제네시스 기록자']
+http://127.0.0.1:9303 service ['분야:제네시스', '분야:broker', ...]
+http://127.0.0.1:9310 human ['이름:human-a']
+http://127.0.0.1:9330 agent ['이름:agent']
+```
+
+`human`, `agent`가 한 줄씩 있으면 두 peer가 broker에 올라간 것이다. 없으면 `data/try/human-a.log`, `data/try/agent.log`의 끝을 본다(10.10절).
+
+### 10.5 화면 읽는 법 (console)
+
+- **맨 위**: 내 필명(공개키 앞부분), peer 종류 이름표(개인). 색으로만 구분하지 않고 이름표가 같이 있다.
+- **왼쪽**: 이벤트 목록, "이벤트 열기", 알림 카드(물음·제안·공지·메시지).
+- **가운데**: 고른 이벤트의 대화. 받은 말은 왼쪽, 내 peer가 한 말은 오른쪽, 그 밖의 일(행동과 결과, agent의 생각, 공지, 원장, 예약)은 가운데 작은 글. 아래 칸에서 받는 이를 고르고 말을 쓰고 "보내기"를 누르면 상대 peer에게 a2a message 한 번이 간다.
+- **오른쪽**: 운전석, 지금 상태, 일정과 예약, "할 수 있는 일(직접 실행)", 규칙.
+- **agent 창에만**: 오른쪽 위 "내 agent" 칸(내 agent와 대화), 대화 아래 "내 agent에게 지시" 칸.
+
+### 10.6 시나리오 T1: 서로 찾기
+
+| 단계 | 할 일 | 기대 | 실패하면 |
+|---|---|---|---|
+| 1 | human-a 창을 연다 | 맨 위에 필명이 보이고 오류 알림이 없다 | `human-a.log` |
+| 2 | agent 창을 연다 | 필명이 human-a와 **다르다**. 오른쪽 위에 "내 agent" 칸이 있다 | 칸이 없으면 LLM 설정(`agent.log`) |
+| 3 | human-a 창에서 이벤트를 열고(T2) 아래 "받는 이" 목록을 본다 | 목록에 상대 peer가 보이는 때(T2 이후)가 있다 | 10.10절 |
+| 4 | 두 필명을 메모한다 | human-a 필명 = A, agent 필명 = G | |
+
+### 10.7 시나리오 T2: 사용자(human-a)가 이벤트를 열고 agent가 참가한다
+
+이 시나리오의 말 한마디마다 agent가 LLM을 부른다. 3~4번 정도만 해도 충분하다.
+
+1. **human-a 창**에서 왼쪽 "이벤트 열기"를 펼치고 다음을 쓴다.
+   - 제목: `가위바위보 연습`
+   - 종류: `game`
+   - 규칙(자연어): `참가 신청을 하면 개최자가 member 역할로 계약한다`
+   - 역할(쉼표로): `member`
+   - 일정은 비워 둔다. **열기**를 누른다.
+   - **기대**: 왼쪽 이벤트 목록에 `가위바위보 연습`이 생기고, 대화에 "이벤트를 열었다"와 원장 기록이 가운데 작은 글로 남는다.
+2. **agent 창**을 본다(몇 초에서 수십 초: 공지를 받아 LLM이 판단한다).
+   - **기대**: 알림에 공지 카드가 오고, agent가 참가할지 **물음 카드**(소유자에게 묻기)를 띄운다. 이벤트 대화에 agent의 생각과 행동이 보인다(관전).
+   - 물음 카드가 안 오면: 10.10절의 "agent가 공지에 반응하지 않는다".
+3. agent 창에서 물음 카드에 **버튼으로 답하거나**, 대화 아래 "내 agent에게 지시" 칸에 `참가해`라고 쓰고 "지시"를 누른다.
+   - **기대**: agent가 `join_event`로 참가 신청을 개최자(human-a)에게 a2a message로 보낸다.
+4. **human-a 창**의 그 이벤트 대화에 agent의 **참가 신청**이 왼쪽 말로 보인다.
+5. human-a 창 오른쪽 "할 수 있는 일(직접 실행)"을 펼쳐 `contract`를 실행한다.
+   - role: `member`, peer: **G**(agent의 필명, 받는 이 목록에서 고른다).
+   - **기대**: "지금 상태"가 갱신되고, 대화에 계약과 원장 기록이 남는다.
+6. 서버에서 원장을 확인한다.
+   ```bash
+   curl -s --noproxy '*' http://127.0.0.1:9302/events/<event_id> | head -c 800
+   ```
+   `<event_id>`는 이벤트 열기가 남긴 대화 가운데 줄 또는 창의 이벤트 제목 옆에서 본다. 못 찾으면 `curl -s --noproxy '*' http://127.0.0.1:9302/chain | python3 -m json.tool | tail -60`으로 마지막 항목들을 본다.
+   - **기대**: genesis(0번) 뒤에 이벤트 열기, 계약 항목이 이어진다. agent의 참가와 계약이 서명과 함께 남는다.
+
+### 10.8 시나리오 T3: 사용자(human-a)가 agent에게 말을 건다
+
+1. human-a 창에서 `가위바위보 연습` 이벤트를 연다.
+2. 대화 아래 **받는 이**에서 **G**를 고르고 `안녕, 규칙을 한 줄로 설명해 줄래?`를 쓰고 **보내기**.
+   - **기대**: 내 말이 오른쪽에 뜬다. 몇 초에서 수십 초 뒤 agent의 답이 **왼쪽 말풍선**으로 온다(a2a 답, 또는 오래 걸리면 task `working`을 따라간다).
+3. agent 창의 같은 이벤트 대화에도 human-a의 말(왼쪽)과 agent의 답(오른쪽), agent의 생각(가운데)이 보인다.
+4. agent 창 "내 agent" 칸에서 `지금 무슨 이벤트 있어?`라고 묻는다. **기대**: 이벤트 `가위바위보 연습`을 말한다. 이것은 a2a가 아니라 agent와 그 소유자 사이의 대화다.
+5. human-a 창에서 `send`(할 수 있는 일)로 G에게 구조화된 메시지를 하나 보낸다. **기대**: agent 창에 도착하고 agent가 반응한다.
+6. 원장이 거절해야 하는 일을 해 본다: human-a에서 이미 계약된 peer G에게 `contract`를 한 번 더 실행. **기대**: 거절 사유가 창 오른쪽 위에 뜬다(상태가 바뀌지 않는다).
+
+### 10.9 정리
+
+```bash
+# 띄운 터미널에서 Ctrl-C
+ss -ltn | grep -E ':93[0-3][0-9]'                  # 아무것도 안 나와야 한다
+```
+
+터미널을 잃었거나 Ctrl-C로 안 내려가면 **이 시험의 프로세스만** 골라 내린다.
+
+```bash
+ps -eo pid,ppid,args | grep -E "scripts.try_personal|arena\.(genesis|peers)"
+kill -TERM <위에서 scripts.try_personal의 PID>      # 자식 3개가 같이 내려간다. 안 내려가면 나머지 PID도 -TERM
+```
+
+(`pkill -f arena.genesis`처럼 넓게 패턴을 주면 명령을 실행하는 셸까지 죽을 수 있다. PID를 골라서 쓴다.)
+
+상태는 `data/try/` 아래에 남는다. 같은 peer와 같은 원장으로 **이어서** 하려면 `--fresh` 없이 같은 명령을 다시 실행한다. 새로 하려면 `--fresh`.
+
+### 10.10 문제가 생기면
+
+| 증상 | 볼 곳 · 조치 |
+|---|---|
+| `did not come up (see the logs)` | `cat data/try/genesis.log`. 포트 9300~9303이 이미 쓰이는 중일 수 있다(`ss -ltn`). 다른 곳에 띄우려면 `--base-port 9400` (모든 포트가 100씩 같이 움직인다, 10.1절 표에서 +100) |
+| agent가 안 뜬다/바로 종료 | `tail -30 data/try/agent.log`. `agent 모드에는 LLM이 필요합니다`면 `.env`의 `ARENA_LLM_*`를 확인한다 |
+| 창이 안 열린다(연결 거부) | 서버에서 `ss -ltn \| grep 9313`. `127.0.0.1:9313`이면 `--web-host 0.0.0.0`을 빠뜨린 것이다. `0.0.0.0:9313`인데 안 열리면 방화벽(브라우저 PC → 서버 9313, 9333) |
+| 창이 열리는데 401/토큰 오류 | 출력된 주소의 `#token=...`을 그대로 붙였는지, 또는 `cat data/try/human-a/web-token` |
+| `/profiles`에 human/agent가 없다 | 각 peer 로그 끝을 본다. broker(9300)에 아직 못 닿는 중이면 2초부터 60초 간격으로 계속 다시 시도한다 |
+| 받는 이 목록이 비어 있다 | 그 이벤트에 상대가 아직 참여하지 않은 것이다. 이벤트 참가·계약 뒤에 목록에 나온다(T2) |
+| agent가 공지에 반응하지 않는다 | `tail -50 data/try/agent.log`. LLM 호출 오류(키, 모델, 사내 게이트웨이)일 수 있다. agent 창 "내 agent" 칸에 말을 걸어 LLM이 응답하는지 먼저 본다 |
+| 서버의 시계가 이상하다 | 같은 서버의 프로세스끼리라 문제가 되지 않는다. 여러 서버를 쓸 때는 7.2절 |
+
+### 10.11 시험 기록란 (이 서버)
+
+| 항목 | 값 |
+|---|---|
+| 날짜 | |
+| 서버 주소 | |
+| human-a 필명(A) / agent 필명(G) | |
+| 제네시스 해시(`trust-anchor.md`) | |
+| T1 / T2 / T3 결과 | |
+| 막힌 점 | |
+
+### 10.12 이 절에서 확인한 것과 못 한 것
+
+- **확인함** (2026-11-05, 이 서버): `--peers human-a,agent --web-host 0.0.0.0`으로 띄우면 genesis(9300~9303)와 human-a(A2A 9310, console 9313), agent(A2A 9330, console 9333)가 뜨고, console 두 개만 `0.0.0.0`에서 듣고 나머지는 `127.0.0.1`에서 듣는다. `/profiles`에 기록자, god, human-a, agent 네 줄이 올라온다. SIGTERM으로 3개가 다 내려가는 것을 확인했다.
+- **확인하지 못함**: 브라우저로 직접 연 T2, T3의 모든 화면 동작. 이벤트 열기, 물음 카드, `contract`, 말풍선의 흐름은 `dev/try-personal-peer.md`와 화면 코드(`arena/bundled/console`, `arena/peer/assistant/tools.py`)를 읽고 쓴 것이다. 버튼 이름이나 순서가 다르면 알려 주세요. agent의 반응 시간과 말투는 LLM에 따라 다르다.
