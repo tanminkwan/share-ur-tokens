@@ -6,6 +6,7 @@ class Directory:
     def __init__(self, group: str):
         self.group = group
         self.nicks: dict[str, str] = {}  # public key -> the nickname its owner posted (the latest profile seen); P9-C2
+        self.read_at = float("-inf")  # when the broker's list was last read
 
     async def profiles(self, ctx) -> list[dict]:
         try:
@@ -15,7 +16,14 @@ class Directory:
         for p in found:
             if p.get("nick"):
                 self.nicks[p["pub"]] = p["nick"]
+        self.read_at = ctx.clock()
         return found
+
+    async def refresh(self, ctx) -> None:
+        """before a person is shown who spoke: read the broker's list again unless it was read a moment ago, so a nickname the
+        speaker has just changed shows at once (P9-A7)"""
+        if ctx.clock() - self.read_at >= ctx.settings.nick_refresh_sec:
+            await self.profiles(ctx)
 
     async def offers_role(self, ctx, pub: str, role: str) -> bool:
         """does this peer's posted profile offer the role (a service peer takes roles it advertises, without applying)?"""

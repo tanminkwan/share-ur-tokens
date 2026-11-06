@@ -82,6 +82,7 @@ class EventAssistant:
         st = self.events.get(request.get("event_id"))
         if st:
             st.peers[sender] = request.get("issuer_url", st.peers.get(sender))
+            await self.directory.refresh(ctx)
             self.timeline.received(ctx, st, sender, "request", request.get("text", ""))
             await self.feed(ctx, st.event_id, f"[직접 요청] 보낸 이 pub={sender}\n{request.get('text', '')}\n"
                                               f"data={json.dumps(request.get('data', {}), ensure_ascii=False)}")
@@ -498,6 +499,7 @@ class EventAssistant:
             else:
                 notes += "\n[코드 확인] 참가 신청이 아님: 규칙 해시가 다르다"
         notes += self.reveals.summary(ctx, st, data, await self.verify_reveals(ctx, st, data))
+        await self.directory.refresh(ctx)
         joined = isinstance(data, dict) and data.get("type") == "join"
         self.timeline.received(ctx, st, who, "join" if joined else "message", msg.get("text", "") or ("참가 신청" if joined else ""))
         await self.feed(ctx, st.event_id, f"[메시지] 보낸 이 pub={who}\n{msg.get('text', '')}\n"
@@ -513,6 +515,7 @@ class EventAssistant:
         checks = await self.verify_reveals(ctx, st, p.get("value"))
         st.pending[msg["request_id"]] = {"payload": p, "from_pub": who, "from_url": msg.get("url"), "reveals_ok": all(ok for ok, _ in checks)}
         st.peers[who] = msg.get("url")
+        await self.directory.refresh(ctx)
         self.timeline.received(ctx, st, who, "sign_request", f"공동 확인 서명 요청: {p.get('kind')} {p.get('subject') or ''}".strip())
         await self.feed(ctx, st.event_id, f"[서명 요청] request_id={msg['request_id']} 제안자 pub={who}\n"
                                           f"kind={p.get('kind')} subject={p.get('subject')} parties={p.get('parties')}\n"
@@ -525,6 +528,7 @@ class EventAssistant:
         if not who or not prop or not self.messenger.head_ok(st, msg, head) or who not in prop["payload"]["parties"]:
             return {"ok": False, "error": "unknown proposal or party"}
         if msg.get("declined"):
+            await self.directory.refresh(ctx)
             self.timeline.received(ctx, st, who, "declined", f"공동 확인 거절: {msg.get('reason', '')}")
             await self.feed(ctx, st.event_id, f"[공동 확인 거절] request_id={msg['request_id']} 거절한 이 pub={who} 이유: {msg.get('reason', '')}")
             return {"ok": True}
