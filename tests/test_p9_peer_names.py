@@ -12,7 +12,7 @@ from arena.peer.home import PeerHome
 from arena.peer.node import Peer, PeerConfig
 from arena.peer.owner import NoOwner
 from arena.events import EventLog
-from tests.test_assistant import Eco, Steps, asst, ctx
+from tests.test_assistant import Eco, Steps, asst, ctx, settle
 
 
 @pytest.fixture
@@ -155,3 +155,29 @@ async def test_p9c_others_are_shown_by_the_nickname_they_posted(eco):
     assert h.handle(c, _state(a), a.identity.pub) == a.pen
     unseen = Identity.generate().pub
     assert h.handle(c, _state(a), unseen) == f"{eco.s.pen_name_default_nick}-{unseen[:6]}"  # not known yet: the default nickname (P9-C2)
+
+
+# ---- A7: a nickname just changed shows at once on the other side ----
+async def test_p9a7_a_message_shows_the_senders_new_nickname_at_once(eco):
+    import dataclasses
+    from tests.test_assistant import joined
+    ev = await joined(eco)
+    a, b = eco.a, eco.b
+    for p in (a, b):  # the throttle would otherwise hide a change made a moment after the last read
+        p.settings = dataclasses.replace(p.settings, nick_refresh_sec=0.0)
+    a.llm.push("send", to=b.pen, text="안녕", data={})
+    await asst(a).feed(ctx(a), ev, "보내라")
+    await settle(a, b)
+    first = [x for x in asst(b).events[ev].timeline if x["dir"] == "in" and x["text"] == "안녕"][-1]
+    assert first["who"] == a.pen
+    await a.set_nick("물결")
+    b_to_a = a.pen  # the new full name
+    a.llm.push("send", to=eco.host.pen, text="이름을 바꿨다", data={})
+    b.llm.push("send", to=b_to_a, text="새 이름으로 부른다", data={})
+    await asst(b).feed(ctx(b), ev, "보내라")
+    await settle(a, b)
+    a.llm.push("send", to=b.pen, text="바뀐 뒤 메시지", data={})
+    await asst(a).feed(ctx(a), ev, "보내라")
+    await settle(a, b)
+    last = [x for x in asst(b).events[ev].timeline if x["dir"] == "in" and x["text"] == "바뀐 뒤 메시지"][-1]
+    assert last["who"] == f"물결-{a.identity.pub[:6]}"  # not the old name

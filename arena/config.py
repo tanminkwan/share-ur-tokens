@@ -124,6 +124,7 @@ class Settings(EnvSettings):
     # display
     pen_name_default_nick: str = F("ARENA_PEN_NAME_DEFAULT_NICK", "필명", str, "닉네임을 정하지 않은 peer의 닉네임(필명 = 닉네임-공개키 앞 글자)")
     nick_max_len: int = F("ARENA_NICK_MAX_LEN", 16, int, "닉네임 최대 글자 수")
+    nick_refresh_sec: float = F("ARENA_NICK_REFRESH_SEC", 2.0, float, "남에게서 메시지를 받을 때 그의 닉네임을 broker에서 다시 읽는 최소 간격(초). 이보다 자주 읽지 않는다")
     pen_name_len: int = F("ARENA_PEN_NAME_LEN", 6, int, "표시용 이름에 쓰는 공개키 글자 수")
     # llm
     llm_backend: str = F("ARENA_LLM_BACKEND", "compat", str, "LLM 백엔드: compat(OpenAI 호환, 삼성SDS Cloud AI 서비스), claude, 또는 none(LLM 없는 peer: 사람이 직접 움직이는 peer)")
