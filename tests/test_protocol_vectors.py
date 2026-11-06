@@ -13,7 +13,7 @@ V = json.loads((pathlib.Path(__file__).resolve().parents[1] / "dev" / "protocol-
 def test_protocol_vectors_match_the_code(settings):
     me = Identity.from_hex(V["private_key_hex"])
     assert me.pub == V["public_key_hex"]
-    assert pen_name(me.pub, settings.pen_name_prefix, settings.pen_name_len) == V["pen_name"]
+    assert pen_name(me.pub, settings.pen_name_default_nick, settings.pen_name_len) == V["pen_name"]
     assert canon(V["canonical_json"]["input"]).decode() == V["canonical_json"]["bytes_utf8"]
     assert me.sign(V["signature"]["payload"]) == V["signature"]["sig_hex"]  # ed25519 signatures are deterministic
     assert verify(me.pub, V["signature"]["payload"], V["signature"]["sig_hex"])

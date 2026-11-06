@@ -22,8 +22,9 @@ def commit_hash(label: str, value, salt: str, pub: str) -> str:
     return h(canon({"label": label, "value": value, "salt": salt, "pub": pub}))
 
 
-def pen_name(pub: str, prefix: str, n: int) -> str:
-    return prefix + pub[:n]
+def pen_name(pub: str, nick: str, n: int) -> str:
+    """the name shown for a key: the peer's nickname + '-' + the first n characters of the key (arena/names.py has the rules)"""
+    return f"{nick}-{pub[:n]}"
 
 
 class Identity:

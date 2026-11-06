@@ -37,6 +37,10 @@ class AppContext:
         return self._peer.pen
 
     @property
+    def nick(self) -> str:
+        return self._peer.nick
+
+    @property
     def url(self) -> str:
         return self._peer.config.url
 

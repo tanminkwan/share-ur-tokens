@@ -17,7 +17,7 @@ def test_r1_1_defaults_apply_when_key_absent():
     s = Settings.load(env={}, dotenv_path=None)
     assert s.host == "127.0.0.1"
     assert not hasattr(s, "contract_roles")  # P2-A4: roles come from each event policy, not the platform
-    assert s.pen_name_prefix and s.pen_name_len > 0
+    assert s.pen_name_default_nick and s.pen_name_len > 0
     assert s.broker_owner_pub is None
     assert s.recorder_readers == []
 

@@ -34,8 +34,8 @@ def test_r1_3_load_or_create_makes_a_key_once(tmp_path):
 
 def test_r1_3_pen_name_uses_prefix_and_length():
     pub = "abcdef0123456789"
-    assert pen_name(pub, prefix="필명-", n=6) == "필명-abcdef"
-    assert pen_name(pub, prefix="p:", n=4) == "p:abcd"
+    assert pen_name(pub, nick="필명", n=6) == "필명-abcdef"
+    assert pen_name(pub, nick="비단길", n=4) == "비단길-abcd"
 
 
 def test_r1_4_canon_and_hash_are_order_independent():

@@ -9,6 +9,7 @@ from typing import Callable, Iterable
 from ..connections import check_connections, check_operator
 from ..config import ConfigError, Settings
 from ..crypto import Identity, pen_name, verify
+from ..names import nick_error
 from ..groups.decl import declaration_error, next_error
 from ..search import BM25Searcher, Searcher
 from .neighbors import Caller, HttpNeighbors, NeighborGateway
@@ -133,6 +134,9 @@ class BrokerService:
         bad = check_operator(prof["operator"]) if "operator" in prof else None
         if bad:
             return {"ok": False, "error": bad}
+        bad = nick_error(prof["nick"], self.settings.nick_max_len) if "nick" in prof else None
+        if bad:
+            return {"ok": False, "error": f"bad nickname: {bad}"}
         cb = prof.get("codebook")
         if cb is not None and (not isinstance(cb, dict) or set(cb) != {"entry", "publisher", "version"}):
             return {"ok": False, "error": "codebook must be {entry, publisher, version}"}
@@ -141,7 +145,7 @@ class BrokerService:
         updated = pub in self.profiles
         self.profiles[pub] = dict(prof, pub=pub)
         self._persist()
-        log.info("%s: profile %s %s v%s", self.name, pen_name(pub, self.settings.pen_name_prefix, self.settings.pen_name_len),
+        log.info("%s: profile %s %s v%s", self.name, pen_name(pub, prof.get("nick") or self.settings.pen_name_default_nick, self.settings.pen_name_len),
                  "updated" if updated else "registered", prof.get("ver"))
         return {"ok": True, "updated": updated}
 
@@ -170,7 +174,7 @@ class BrokerService:
         ranked = self.searcher.rank(q, [f"{p['summary']} {' '.join(p.get('offers', []))}" for p in cands])
         s = self.settings
         hits = [dict(cands[i], offers=cands[i].get("offers", []), labels=cands[i].get("labels", []),
-                     pen_name=pen_name(cands[i]["pub"], s.pen_name_prefix, s.pen_name_len), score=score, broker=self.name,
+                     pen_name=pen_name(cands[i]["pub"], cands[i].get("nick") or s.pen_name_default_nick, s.pen_name_len), score=score, broker=self.name,
                      group_id=self.group_id)
                 for i, score in ranked[:k]]
         if not local:

@@ -61,7 +61,11 @@ SHA-256, 결과는 소문자 16진 문자열 64자.
 
 ### 2.4 필명
 
-사람이 읽는 이름. `필명-` + 공개키 앞 6자(설정 `ARENA_PEN_NAME_PREFIX`, `ARENA_PEN_NAME_LEN`). 표시용일 뿐 규약 메시지 안에서는 항상 공개키 전체를 쓴다.
+사람이 읽는 이름. **닉네임** + `-` + 공개키 앞 6자(설정 `ARENA_PEN_NAME_LEN`). 예: `비단길-aa11ff`. 닉네임은 peer의 소유자가 정하고 아무 때나 바꾼다. 프로필의 전용 칸 `nick`에 담아 서명해 게시한다(6.x절). 정하지 않으면 기본 닉네임 `필명`(`ARENA_PEN_NAME_DEFAULT_NICK`)이다. 닉네임은 1~16자(`ARENA_NICK_MAX_LEN`), 공백·`-`·`#`·제어 문자를 쓰지 않고 `http`·`mem:`으로 시작하지 않는다(broker가 어긴 프로필을 거절한다). 같은 닉네임을 여럿이 쓸 수 있다.
+
+사람이 이름으로 부를 때: 전체(`비단길-aa11ff`), 닉네임만(`비단길`, 그 닉네임을 쓰는 peer가 하나일 때), 닉네임과 키 앞부분(`비단길-aa`, 하나가 될 때까지)을 코드가 한 키로 바꾼다. 여럿이 남으면 고르지 않고 후보 필명을 전체로 적어 거절한다. 닉네임은 대소문자를 구분하지 않고 찾는다.
+
+표시용일 뿐 **규약 메시지와 원장 안에서는 항상 공개키 전체를 쓴다.** 닉네임은 신원 증명이 아니다: 누구나 같은 닉네임을 쓸 수 있고, 구분은 키 앞 6자(24비트)에 있다. 같은 앞자리가 나올 때까지 키를 만들어 흉내 낼 수 있으므로 중요한 계약 전에는 공개키 전체나 소유자 확인이 필요하다.
 
 ### 2.5 먼저 등록하고 나중에 공개(봉인 해시)
 
@@ -374,7 +378,7 @@ sequenceDiagram
 | `GET /group` | - → `{group_id, genesis, closed, founder, declaration, sig}` | 아니요 |
 | `GET /health` | - | 아니요(`group_id` 포함) |
 
-프로필은 JSON 객체다. 지금 구현이 싣는 칸: `url`(A2A 주소), `connections`(6.5절), `operator`(`service`·`agent`·`human`: 누가 판단하고 답하나, broker가 확인, [peer-spec.md](peer-spec.md) 1절), `summary`, `offers`(맡을 수 있는 역할), `labels`, `capabilities`, `until`(만료 시각), `ver`, 선택 `codebook`(따르는 코드표 판).
+프로필은 JSON 객체다. 지금 구현이 싣는 칸: `url`(A2A 주소), `connections`(6.5절), `operator`(`service`·`agent`·`human`: 누가 판단하고 답하나, broker가 확인, [peer-spec.md](peer-spec.md) 1절), `nick`(닉네임, 2.4절), `summary`, `offers`(맡을 수 있는 역할), `labels`, `capabilities`, `until`(만료 시각), `ver`, 선택 `codebook`(따르는 코드표 판).
 
 ### 5.1 그룹 선언과 원장 없는 그룹
 

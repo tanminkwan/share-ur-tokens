@@ -71,7 +71,7 @@ class GodRole(BaseApp):
             r = await broker.list_profiles(identity=ctx.identity)
             profiles += [dict(p, group=group) for p in r.get("profiles", [])]
         chain = [merged(e) for e in copies[0][1]]  # stats read the full view (body + envelope); the audit above checked the stored form
-        pen = lambda pub: pen_name(pub, self.settings.pen_name_prefix, self.settings.pen_name_len)
+        pen = lambda pub: pen_name(pub, self.settings.pen_name_default_nick, self.settings.pen_name_len)
         snap = {"ok": True, "integrity": {"recorders": integ, "agree": agree},
                 "stats": ledger_stats(chain, self.settings.god_top_flows, self.settings.genesis_group_id), "peers": per_peer(chain, profiles, pen),
                 "recent": recent_entries(chain, self.settings.god_recent, pen), "access": access}

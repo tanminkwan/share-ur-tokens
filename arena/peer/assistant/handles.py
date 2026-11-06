@@ -5,9 +5,14 @@ from __future__ import annotations
 import re
 
 from ...crypto import pen_name
+from ...names import resolve
 from .directory import Directory
 
 HEX64 = re.compile(r"\b[0-9a-f]{64}\b")
+
+
+class AmbiguousName(Exception):
+    """a typed name fits several peers (P9-B4): the message names them; the tool refuses and the person writes more of the key"""
 
 
 class Handles:
@@ -21,9 +26,13 @@ class Handles:
         return pubs
 
     def handle(self, ctx, st, pub: str) -> str:
-        name = pen_name(pub, ctx.settings.pen_name_prefix, ctx.settings.pen_name_len)
+        name = pen_name(pub, self.nick_of(ctx, pub), ctx.settings.pen_name_len)
         st.aliases[name] = pub
         return name
+
+    def nick_of(self, ctx, pub: str) -> str:
+        """the nickname a key is known by: mine, one seen on the broker, else the default (P9-C2)"""
+        return ctx.nick if pub == ctx.pub else self.directory.nicks.get(pub) or ctx.settings.pen_name_default_nick
 
     def shorten(self, ctx, st, text: str) -> str:
         """public keys become 필명-xxxxxx, other 64-hex values become #xxxxxxxxxx; the code remembers what they stand for"""
@@ -58,15 +67,37 @@ class Handles:
         pub = ref if HEX64.fullmatch(ref) else None
         if pub and (pub in st.peers or not need_url):
             return pub, st.peers.get(pub)
-        for p in await self.directory.profiles(ctx):
-            if p["pub"] == pub or pen_name(p["pub"], ctx.settings.pen_name_prefix, ctx.settings.pen_name_len) == ref:
+        profiles = await self.directory.profiles(ctx)
+        for p in profiles:
+            if p["pub"] == pub:
                 st.peers.setdefault(p["pub"], p.get("url"))
                 return p["pub"], st.peers[p["pub"]]
-        return pub, None
+        if pub:
+            return pub, None
+        m = resolve(ref, self.known_names(ctx, st, profiles), ctx.settings.pen_name_len)  # the full name, the nickname, or the nickname + start of the key
+        if m.pub == ctx.pub:
+            return ctx.pub, ctx.url
+        if m.pub:
+            url = next((p.get("url") for p in profiles if p["pub"] == m.pub), None)
+            st.peers.setdefault(m.pub, url)
+            return m.pub, st.peers[m.pub]
+        if m.candidates:  # several: nothing is chosen, the person is told who
+            raise AmbiguousName(m.error)
+        return None, None
+
+    def known_names(self, ctx, st, profiles: list[dict]) -> list[tuple[str, str]]:
+        """(key, nickname) of everyone this event knows or the broker lists now; the nickname of a key without a profile is the default"""
+        seen = {p["pub"]: p.get("nick") or ctx.settings.pen_name_default_nick for p in profiles}
+        for pub in (*st.peers, *st.roster, st.issuer_pub):
+            seen.setdefault(pub, self.nick_of(ctx, pub))
+        seen[ctx.pub] = ctx.nick
+        return list(seen.items())
 
     async def check_handles(self, ctx, st, obj):
         """a whole string that looks like a handle but names nobody known (event, broker) is refused; known ones become keys"""
-        pre, n = ctx.settings.pen_name_prefix, ctx.settings.pen_name_len
+        n = ctx.settings.pen_name_len
+        shape = re.compile(rf"([^\s-]+)-\S{{{n}}}")  # nickname-n characters (any: a mistyped key start must be refused too)
+        nicks = {k.casefold() for k in (*self.directory.nicks.values(), ctx.nick, ctx.settings.pen_name_default_nick)}
         bad = []
 
         async def one(x):
@@ -74,8 +105,12 @@ class Handles:
                 return {k: await one(v) for k, v in x.items()}
             if isinstance(x, list):
                 return [await one(v) for v in x]
-            if isinstance(x, str) and x.strip().startswith(pre) and len(x.strip()) == len(pre) + n:
-                pub, _ = await self.resolve_peer(ctx, st, x.strip(), need_url=False)
+            m = shape.fullmatch(x.strip()) if isinstance(x, str) else None
+            if m and m.group(1).casefold() in nicks:  # looks like a name of someone known: it must name them (a word that merely looks so is left alone)
+                try:
+                    pub, _ = await self.resolve_peer(ctx, st, x.strip(), need_url=False)
+                except AmbiguousName:
+                    pub = None
                 if not pub:
                     bad.append(x.strip())
                     return x

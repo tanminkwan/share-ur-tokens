@@ -55,7 +55,7 @@ def expected_winner(r, a, b):
 def pen(pub):
     from arena.config import Settings
     s = Settings.load(env={}, dotenv_path=None)
-    return s.pen_name_prefix + pub[:s.pen_name_len]
+    return f"{s.pen_name_default_nick}-{pub[:s.pen_name_len]}"
 
 
 def ranking_from_ledger(chain, ev, players):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 
-from .handles import Handles
+from .handles import AmbiguousName, Handles
 from .tools import ARG_LABELS, LABELS, Tool
 
 JSON_ARGS = ("data_json", "value_json", "subjects_json", "input_json")
@@ -82,5 +82,7 @@ class Toolbox:
             return await tool.run(host, ctx, st, **args)
         except TypeError as e:
             return {"error": f"인자가 맞지 않음: {e}"}
+        except AmbiguousName as e:  # a typed name fits several peers: say who (P9-B4)
+            return {"error": str(e)}
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}

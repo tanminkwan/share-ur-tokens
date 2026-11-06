@@ -194,7 +194,7 @@ class RecorderService:
         chain = self.ledger.chain
         return {"ok": True, "name": s.recorder_name, "pub": self.identity.pub,
                 "ledger_id": chain[0]["hash"] if chain and chain[0]["type"] == "genesis" else None,
-                "pen_name": pen_name(self.identity.pub, s.pen_name_prefix, s.pen_name_len),
+                "pen_name": pen_name(self.identity.pub, s.pen_name_default_nick, s.pen_name_len),
                 "length": len(self.ledger.chain), "head": self.ledger.head()}
 
 

@@ -198,3 +198,22 @@ async def test_a_half_filled_tool_form_survives_the_clock_moving(eco, console_si
     await page.get_by_test_id("state-line").filter(has_not_text=before).wait_for(timeout=WAIT)
     assert await page.get_by_test_id("tools-box").evaluate("e => e.open") is True
     assert await page.get_by_test_id("tool-send").get_by_test_id("arg-text").input_value() == "쓰는 중인 글"
+
+
+async def test_p9a5_the_owner_renames_the_peer_in_the_window_at_any_time(eco, console_site, browser):
+    p, desk, url = await console_site()
+    key = p.identity.pub
+    page = await page_of(browser, url)
+    pen = page.get_by_test_id("me-pen")
+    await pen.wait_for(timeout=WAIT)
+    assert (await pen.inner_text()).endswith("-" + key[:6])
+    await page.get_by_test_id("nick-edit").click()
+    await page.get_by_test_id("nick-input").fill("비단길")
+    await page.get_by_test_id("nick-save").click()
+    await page.get_by_test_id("me-pen").filter(has_text="비단길-" + key[:6]).wait_for(timeout=WAIT)
+    assert p.nick == "비단길" and eco.broker.profiles[key]["nick"] == "비단길"  # posted at once
+    await page.get_by_test_id("nick-edit").click()  # a nickname the rules refuse is told, and the old name stays
+    await page.get_by_test_id("nick-input").fill("a b")
+    await page.get_by_test_id("nick-save").click()
+    await page.get_by_test_id("toast").or_(page.locator(".toast")).first.wait_for(timeout=WAIT)
+    assert p.nick == "비단길"
