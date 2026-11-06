@@ -32,7 +32,7 @@ async def test_toolbox_refuses_before_running(eco):
     assert "닫힌 이벤트" in (await box.run(asst(a), c, state(closed=True), "send", {"to": "x", "text": "t"}))["error"]
     assert "없음" in (await box.run(asst(a), c, st, "send", {}))["error"]  # a required argument missing
     assert "JSON이 아님" in (await box.run(asst(a), c, st, "send", {"to": "x", "text": "t", "data_json": "{broken"}))["error"]
-    garbled = c.settings.pen_name_prefix + "z" * c.settings.pen_name_len
+    garbled = c.settings.pen_name_default_nick + "-" + "z" * c.settings.pen_name_len
     assert "아무도 가리키지 않는 필명" in (await box.run(asst(a), c, st, "contact", {"peer": garbled}))["error"]
     with pytest.raises(ValueError):
         box.add(box.tools["note"])  # a tool name is registered once

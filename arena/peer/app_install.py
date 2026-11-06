@@ -92,7 +92,7 @@ class AppInstaller:
             ctx.log.emit("apps", ctx.pen, f"{label} 설치 못 함: {why}")
             return None
         m = pkg["manifest"]
-        publisher = pen_name(m["publisher"], self.s.pen_name_prefix, self.s.pen_name_len)
+        publisher = pen_name(m["publisher"], self.s.pen_name_default_nick, self.s.pen_name_len)
         question = (f"이벤트 '{notice.get('title', '')}'({notice.get('notice_id')})가 앱 '{m['name']}' {m['version']}을 요구합니다. "
                     f"배포자 {publisher}, 코드 해시 {m['source_hash'][:12]}. 설치하면 이 코드가 내 peer 안에서 격리 없이 실행됩니다. 설치할까요?")
         answer = await ctx.owner.ask(question, f"앱 목록표: {json.dumps(m, ensure_ascii=False)}")

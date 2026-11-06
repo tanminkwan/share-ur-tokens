@@ -51,8 +51,12 @@ class OwnerService:
         events = [{"event_id": st.event_id, "title": st.title, "role": st.role, "drive": st.drive, "closed": st.closed}
                   for st in self._asst.events.values()]
         from .peer_kinds import kind_view
-        return {"me": {"pen": p.pen, "pub": p.identity.pub, "operator": p.operator(), "llm": llm_available(p.llm), **kind_view(p.config.kind)},
+        return {"me": {"pen": p.pen, "nick": p.nick, "pub": p.identity.pub, "operator": p.operator(), "llm": llm_available(p.llm), **kind_view(p.config.kind)},
                 "events": sorted(events, key=lambda x: (x["closed"], x["title"])), "open_items": len(self.desk.list("open"))}
+
+    async def set_nick(self, nick: str) -> dict:
+        """the owner renames this peer, any time (P9-A5); the peer posts its profile again at once"""
+        return await self.peer.set_nick(nick)
 
     def items(self, status: str = "open") -> list[dict]:
         return [it.to_dict() for it in self.desk.list(status if status in ("open", "all") else "open")]

@@ -24,5 +24,6 @@ export class ApiClient {
   event(id) { return this.request('GET', `/api/events/${encodeURIComponent(id)}`); }
   setDrive(id, drive) { return this.request('POST', `/api/events/${encodeURIComponent(id)}/drive`, { drive }); }
   runTool(id, name, args) { return this.request('POST', `/api/events/${encodeURIComponent(id)}/tools/${encodeURIComponent(name)}`, { args }); }
+  setNick(nick) { return this.request('POST', '/api/nick', { nick }); }
   host(form) { return this.request('POST', '/api/events', form); }
 }

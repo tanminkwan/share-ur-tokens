@@ -58,7 +58,7 @@ def build(s: Settings, extra_apps: list = (), kind: str = "personal") -> tuple[P
               ([DeskWebApp(None, s.personal_web_host, s.personal_desk_port, token)] if "desk" in screens else []) + \
               ([ChatApp(None, s, s.personal_web_host, s.personal_chat_port, token)] if "chat" in screens else [])
     apps = [OwnerDeskApp(desk), EventAssistant(s), *extra_apps, *windows]
-    peer = Peer(home.identity(), s, PeerConfig(url=s.public_url(s.personal_peer_port), labels=list(s.personal_peer_labels),
+    peer = Peer(home.identity(), s, PeerConfig(url=s.public_url(s.personal_peer_port), labels=list(s.personal_peer_labels), nick=s.personal_peer_nick,
                                                operator=s.personal_mode, kind=kind),
                 home.area(), DeskOwner(desk, s), llm, A2ATransport(s), EventLog(keep=s.event_log_size),
                 brokers={g: FailoverBrokerClient.from_urls(urls, s) for g, urls in groups.items()}, apps=apps, home=home)

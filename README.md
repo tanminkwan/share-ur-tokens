@@ -64,7 +64,7 @@ flowchart TB
 - **6단계 진행 중**: 여러 이벤트에 공통인 요소(제출 받기, 평가, 봉인 묶음), API를 제공하는 peer 틀, 개인 키 관리, 공동 서명, 원장 없는 그룹, 사람의 창(console·desk·chat, 한 가지 모양), 스핑크스. [dev/phase6](dev/phase6)
 - **8단계 완료(뿌리 키의 생성과 소멸)**: god 열쇠는 오프라인에서 만들고 서명만 옮기는 세리머니, 첫 기록자 열쇠는 디스크에 쓰지 않고 넘긴 뒤 소멸, 증인이 서명한 폐기 선언, 감사는 관찰자 열쇠로. [dev/phase8/test-results.md](dev/phase8/test-results.md)
 - **가지 공동체를 만드는 길**: god이 대리인(스핑크스)을 원장에 지정하고, 뿌리 원장은 대리인의 통과 증명서(또는 god 승인)가 있는 가지만 받는다. 얼마나 자주 허락할지는 재단 peer가 기준을 내고 스핑크스가 지킨다. [dev/founding/test-results.md](dev/founding/test-results.md)
-- 자동 테스트 570개(569 통과, 1개는 선택 실행), 커버리지 94.4%. [dev/test-report.md](dev/test-report.md)
+- 자동 테스트 594개(593 통과, 1개는 선택 실행), 커버리지 94.5%. [dev/test-report.md](dev/test-report.md)
 - **기준 네트워크의 제네시스는 아직이다.** 공개 출시 때 세리머니로 한 번 하고, 첫 열쇠와 제네시스 해시를 이 README, 백서 5.5절, 설정 기본값, 서명된 태그에 함께 공개한다.
 
 | 뿌리 값 | 기준 네트워크 |

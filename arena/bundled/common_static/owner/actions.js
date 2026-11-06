@@ -35,6 +35,10 @@ export class Actions {
     });
   }
 
+  async setNick(nick) {
+    await this.guard(async () => { const r = await this.api.setNick(nick); this.notify(`이름: ${r.pen}`); await this.refresh(); });
+  }
+
   async host(form) {
     await this.guard(async () => {
       const r = await this.api.host(form);

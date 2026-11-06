@@ -51,7 +51,7 @@ def build_autonomous_peer(settings: Settings, prefix: str, apps: list, descripti
     except ConfigError:
         llm = NoLLM()
     return Peer(load_or_create(open_key_store(settings), get("key_file")), settings,
-                PeerConfig(url=settings.public_url(get("port")), labels=list(get("labels")), kind=KINDS.get(prefix, "personal")),
+                PeerConfig(url=settings.public_url(get("port")), labels=list(get("labels")), kind=KINDS.get(prefix, "personal"), nick=get("nick")),
                 LocalFolderArea(area_dir, settings), NoOwner(), llm, A2ATransport(settings), EventLog(keep=settings.event_log_size),
                 brokers={g: FailoverBrokerClient.from_urls(urls, settings) for g, urls in groups.items()}, apps=apps)
 

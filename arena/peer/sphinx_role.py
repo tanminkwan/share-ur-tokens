@@ -170,7 +170,7 @@ class SphinxRole(BaseApp):
 
     # ---- the person decides ----
     def _pen(self, ctx, pub: str) -> str:
-        return pen_name(pub, self.s.pen_name_prefix, self.s.pen_name_len)
+        return pen_name(pub, self.s.pen_name_default_nick, self.s.pen_name_len)
 
     def _decide_later(self, ctx, aid: str) -> None:
         if aid not in self._tasks or self._tasks[aid].done():

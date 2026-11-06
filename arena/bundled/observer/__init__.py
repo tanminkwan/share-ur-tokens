@@ -25,7 +25,7 @@ class ObserverApp(LocalWebApp):
         return build_observer_api(self, self.token)
 
     def pen(self, pub: str) -> str:
-        return pen_name(pub, self.s.pen_name_prefix, self.s.pen_name_len)
+        return pen_name(pub, self.s.pen_name_default_nick, self.s.pen_name_len)
 
     def config(self) -> dict:
         return {"poll_ms": self.s.observer_poll_ms}

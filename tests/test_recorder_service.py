@@ -106,7 +106,7 @@ async def test_r3_6_health(svc, cast, settings):
     await svc.record(*cast.publish(ev=None))
     hl = svc.health()
     assert hl["ok"] and hl["name"] == settings.recorder_name and hl["pub"] == svc.identity.pub
-    assert hl["pen_name"].startswith(settings.pen_name_prefix) and hl["length"] == 1 and hl["head"] == svc.ledger.head()
+    assert hl["pen_name"].startswith(settings.pen_name_default_nick + "-") and hl["length"] == 1 and hl["head"] == svc.ledger.head()
 
 
 def test_r3_7_readers_come_from_settings(tmp_path):

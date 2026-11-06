@@ -13,9 +13,10 @@ from starlette.routing import Route
 from ..a2a import Transport, build_a2a_app
 from ..a2a_push import NOTIFY_PATH, TOKEN_HEADER, TaskWatch, task_id_of
 from ..rest import RestTransport
-from ..config import Settings
+from ..config import ConfigError, Settings
 from ..crypto import Identity, pen_name
 from ..events import EventLog
+from ..names import nick_error
 from ..llm import LLM, llm_available
 from ..recorder.client import RecorderAPI, RecorderClient
 from .area import PublicArea
@@ -45,6 +46,7 @@ class PeerConfig:
     codebook: dict | None = None  # the code table edition this peer follows {entry, publisher, version} (optional)
     element_apps: bool | None = None  # built-in elements' apps (desks): None = only if an app handles events, True/False = always/never
     kind: str = "personal"  # which kind of peer this is, for its windows (arena/bundled/peer_kinds.py): personal, sphinx, observer, ...
+    nick: str = ""  # the nickname to start with (P9); what the owner set later is kept in the home and wins. Empty = the default nickname
 
 
 class Peer:
@@ -53,9 +55,12 @@ class Peer:
                  home=None):
         self.identity, self.settings, self.config, self.area, self.owner = identity, settings, config, area, owner
         self.llm, self.transport, self.log, self.brokers, self.clock = llm, transport, log, brokers, clock
-        self.pen = pen_name(identity.pub, settings.pen_name_prefix, settings.pen_name_len)
         self.home = home  # PeerHome: what must survive a restart
         saved = home.load_state() if home else {}
+        self.nick = saved.get("nick") or config.nick or settings.pen_name_default_nick  # the home's value wins: the owner may have changed it
+        bad = nick_error(self.nick, settings.nick_max_len)
+        if bad:
+            raise ConfigError(f"닉네임을 쓸 수 없다({self.nick!r}): {bad}")
         self.receipts = Receipts(home.load_receipts() if home else [], on_keep=home.append_receipt if home else None)
         self.profiles = ProfileBuilder()
         self.profiles.version = saved.get("profile_ver", 0)
@@ -192,9 +197,29 @@ class Peer:
         return self._requests.inbox
 
     # ---- persistence across restarts ----
+    @property
+    def pen(self) -> str:
+        """this peer's name now: nickname-first characters of its key (changes when the owner changes the nickname)"""
+        return pen_name(self.identity.pub, self.nick, self.settings.pen_name_len)
+
+    async def set_nick(self, nick: str) -> dict:
+        """the owner changes the nickname at any time (P9-A5): kept in the home, posted again at once under a new profile version.
+        Nothing signed or on a ledger changes: those carry the whole public key"""
+        nick = (nick or "").strip()
+        bad = nick_error(nick, self.settings.nick_max_len)
+        if bad:
+            return {"ok": False, "error": bad}
+        if nick != self.nick:
+            self.nick = nick
+            self.profiles.version += 1
+            last = self.last_profile  # post the same profile under the new name: no new summary, so no LLM call for a rename
+            await self.advertise(dict(last, nick=nick, ver=self.profiles.version) if last else None)
+        return {"ok": True, "nick": self.nick, "pen": self.pen}
+
     def persist(self) -> None:
         if self.home:
-            self.home.save_state({"profile_ver": self.profiles.version, "known_recorders": self.known_recorders, "apps": self.app_states})
+            self.home.save_state({"profile_ver": self.profiles.version, "known_recorders": self.known_recorders, "apps": self.app_states,
+                                  "nick": self.nick})
 
     async def recorder_trust(self, url: str) -> dict:
         """is the recorder at url the one this peer's root of trust proves? see RecorderTrust"""
@@ -309,8 +334,8 @@ class Peer:
         return await self._requests.send(self.ctx(self._requests), targets, request)
 
     # ---- profile ----
-    async def advertise(self) -> dict:
-        profile = await self.profiles.build(self)
+    async def advertise(self, profile: dict | None = None) -> dict:
+        profile = profile or await self.profiles.build(self)
         unreached = set()
         for group, broker in self.brokers.items():
             try:

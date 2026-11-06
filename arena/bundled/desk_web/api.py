@@ -43,6 +43,10 @@ def build_owner_api(service: OwnerService, token: str, static_dir: str = STATIC,
         out = await service.run_tool(r.path_params["event_id"], r.path_params["name"], (await body(r)).get("args") or {})
         return JSONResponse(out)
 
+    async def nick(r):
+        out = await service.set_nick((await body(r)).get("nick", ""))
+        return JSONResponse(out, status_code=200 if out["ok"] else 400)
+
     async def host(r):
         out = await service.host(await body(r))
         return JSONResponse(out, status_code=200 if out["ok"] else 400)
@@ -52,6 +56,7 @@ def build_owner_api(service: OwnerService, token: str, static_dir: str = STATIC,
         Route("/api/state", guarded(state)),
         Route("/api/items", guarded(items)),
         Route("/api/items/{item_id}/answer", guarded(answer), methods=["POST"]),
+        Route("/api/nick", guarded(nick), methods=["POST"]),
         Route("/api/events", guarded(host), methods=["POST"]),
         Route("/api/events/{event_id}", guarded(event)),
         Route("/api/events/{event_id}/drive", guarded(drive), methods=["POST"]),

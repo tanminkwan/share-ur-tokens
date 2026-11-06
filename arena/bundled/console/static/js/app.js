@@ -19,7 +19,7 @@ const toast = new Toast($('toast'));
 const store = new Store({ agent: { available: false, messages: [] } });
 const actions = new ConsoleActions(new ConsoleApi(readToken()), store, (text, tone) => toast.show(text, tone));
 
-new HeaderView($('header'), store);
+new HeaderView($('header'), store, actions);
 new EventsView($('events'), store, actions);
 new HostForm($('host'), store, actions);
 new ItemsView($('items'), store, actions, defaultCards());
