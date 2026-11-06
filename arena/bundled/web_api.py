@@ -31,8 +31,20 @@ async def read_body(r: Request) -> dict:
     return d if isinstance(d, dict) else {}
 
 
+NO_CACHE = {"Cache-Control": "no-cache"}  # the browser asks again every time (a cheap 304 when the file is unchanged), so a new version shows at once
+
+
+class FreshFiles(StaticFiles):
+    """static files the browser must revalidate: without this a plain refresh may keep an old script after the peer is updated"""
+
+    def file_response(self, *args, **kw):
+        r = super().file_response(*args, **kw)
+        r.headers.update(NO_CACHE)
+        return r
+
+
 def screen_routes(static_dir: str) -> list:
     """/ (the window's page), /static (its files), /common (the shared files)"""
     async def index(_):
-        return FileResponse(os.path.join(static_dir, "index.html"))
-    return [Route("/", index), Mount("/static", StaticFiles(directory=static_dir)), Mount("/common", StaticFiles(directory=COMMON))]
+        return FileResponse(os.path.join(static_dir, "index.html"), headers=NO_CACHE)
+    return [Route("/", index), Mount("/static", FreshFiles(directory=static_dir)), Mount("/common", FreshFiles(directory=COMMON))]
