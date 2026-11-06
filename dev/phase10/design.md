@@ -2,6 +2,11 @@
 
 > 2026-11-06. 요구사항 [requirements.md](requirements.md). 사용자 결정: "제안대로 해"로 Q1~Q7을 제안값으로 정함, "UDP 막힌 환경도 가능하게 해", "1번(우리 쪽에 얇게 직접 만들기)". 이미 있는 오픈소스를 찾아본 결과(a2a-relay 등)는 1절.
 
+## 0. 두 원칙 (2026-11-06 사용자, 요구사항 P10-P1~P4)
+
+1. **connectivity는 범용 서비스다.** 최상위 패키지 `connectivity/`이고 이 저장소의 다른 것을 import하지 않는다(`tests/test_layering.py`가 지킨다: import도, agent·peer·ledger·a2a라는 말도 없다). 설정은 `CONNECTIVITY_*`, 서명은 그 자신의 방식(`X-Conn-*`), 경로 허용 목록은 비어 있으면 모든 경로다. 무엇을 옮기는지는 배치하는 쪽이 설정으로 정한다(Arena의 배치는 A2A 경로만 연다).
+2. **추상화 계층은 connectivity를 모른다**(broker와 같다). Arena 쪽에서 connectivity를 아는 곳은 peer의 **전송 어댑터 하나**뿐이다. 앱, assistant, 도구, 규약 메시지, 프로필의 뜻은 바뀌지 않는다. 프로필에는 주소 하나(`url`)만 있고, 그것이 relay 주소인지는 아무도 구분하지 않는다. 그래서 아래의 프로필 field `connectivity`와 broker 검사는 **취소**한다.
+
 ## 1. 이미 있는 것과 우리가 만드는 것
 
 | 후보 | 판단 |
@@ -43,7 +48,7 @@ WebSocket 대신 **long poll**을 쓴다: 새 패키지가 없고, `httpx`가 �
 
 ```mermaid
 flowchart LR
-    subgraph SRV["arena/connectivity (서버, 한 프로세스)"]
+    subgraph SRV["connectivity (범용 서버, 한 프로세스, 다른 패키지를 모름)"]
         API["api.py<br/>HTTP 경로"] --> SVC["service.py<br/>Attachment 목록 · 요청 대기열 · 한도"]
         API --> REACH["reach.py<br/>inbound 점검(되돌아가 보기)"]
         STUN["stun.py<br/>UDP 3478 (선택)"]
@@ -58,38 +63,41 @@ flowchart LR
 
 | 단위 | 하나의 책임 |
 |---|---|
-| `arena/connectivity/service.py` | 붙은 peer의 목록(Attachment), 요청 대기열, 응답 맞이, 한도. 입출력 없음(시계 주입) |
-| `arena/connectivity/api.py` | 경로와 서명 검사, service 호출. 얇다 |
-| `arena/connectivity/reach.py` | inbound 점검(되돌아가 보기)과 주소 제한 |
-| `arena/connectivity/stun.py` | 선택: STUN binding(UDP). 없어도 모든 일이 된다 |
-| `arena/peer/connectivity.py` | `ConnectivityLink`: 서버에 붙기, 점검, poll, 받은 요청을 내 앱에 넣기, 상태 알리기 |
+| `connectivity/config.py` | `CONNECTIVITY_*` 설정(상수는 모두 여기) |
+| `connectivity/signing.py` | 붙는 쪽의 서명(`X-Conn-Key`·`Ts`·`Sig`, ed25519) |
+| `connectivity/service.py` | 붙은 키의 목록(Attachment), 요청 대기열, 응답 맞이, 한도. 입출력 없음(시계 주입) |
+| `connectivity/api.py` | 경로와 서명 검사, service 호출. 얇다 |
+| `connectivity/reach.py` | inbound 점검(되돌아가 보기)과 주소 제한 |
+| `connectivity/stun.py` | 선택: STUN binding(UDP). 없어도 모든 일이 된다 |
+| `connectivity/client.py` | 범용 클라이언트: 붙기, poll, 받은 요청을 주어진 ASGI 앱에 넣기, 점검. 누가 쓰는지 모른다 |
+| `arena/peer/reach.py`(가칭) | **Arena 쪽 어댑터(유일하게 connectivity를 아는 곳)**: peer 키로 클라이언트를 만들고 A2A 앱을 넘기며, 나온 주소를 peer의 알리는 주소로 쓴다 |
 
 ## 4. 서버 경로 (모두 TCP)
 
 | 경로 | 누가 | 서명 | 하는 일 |
 |---|---|---|---|
-| `GET /poll?hold=N` | 막힌 peer | peer 키(`X-Arena-*`, 기존 방식) | session을 만들거나 이어 간다. 요청이 오거나 hold초가 지나면 `{"requests": [...]}`로 답. 첫 poll이 곧 attach이고, 응답에 `relay_base`(`https://S/r/<내 키>`)가 들어 있다 |
+| `GET /poll?hold=N` | 막힌 peer | peer 키(`X-Conn-*`, connectivity의 방식) | session을 만들거나 이어 간다. 요청이 오거나 hold초가 지나면 `{"requests": [...]}`로 답. 첫 poll이 곧 attach이고, 응답에 `relay_base`(`https://S/r/<내 키>`)가 들어 있다 |
 | `POST /reply/{id}` | 막힌 peer | peer 키 | 전달받은 요청의 응답 `{status, headers, body}` |
 | `ANY /r/{pub}/{경로}` | 누구나(호출하는 peer) | 없음(A2A 메시지 안의 서명이 신원) | 붙어 있는 `pub`에게 전달하고 응답을 기다려 그대로 돌려준다. 붙어 있지 않으면 503 |
 | `POST /reach` | peer | peer 키 | inbound 점검. 서버가 이 요청의 출발 IP로 되돌아가 본다 |
 | `GET /health` | 누구나 | 없음 | 붙은 수, session 수, 중계한 바이트, 거절 횟수(내용은 없음) |
 
-- **`/r/{pub}/…`가 막은 경로**: 전달하는 경로는 허용 목록(`ARENA_CONNECTIVITY_PATHS`, 기본 `/.well-known/agent-card.json`, `/rpc`, `/a2a/notify`)만이다. 그 밖은 404. peer 앱의 다른 경로가 터널로 노출되지 않는다.
-- **전달하는 것**: method, 경로, 쿼리, 헤더 중 허용한 것(`content-type`, `accept`, `a2a-*`, `x-arena-*`), body(base64). hop-by-hop 헤더는 버린다. **SSE(`message:stream`)는 중계하지 않는다**(우리 transport는 스트림을 쓰지 않는다).
+- **`/r/{key}/…`가 막은 경로**: 허용 목록(`CONNECTIVITY_PATHS`)이 있으면 그것만 전달하고 그 밖은 404다. 비어 있으면 모든 경로다(범용 서비스). **Arena의 배치(`deploy/connectivity`)는 `/.well-known/agent-card.json`, `/rpc`, `/a2a/notify`만 연다.** Arena 쪽 어댑터도 이 경로만 자기 앱에 넣는다(두 겹).
+- **전달하는 것**: method, 경로, 쿼리, 헤더, body(base64). hop-by-hop 헤더(`connection`, `host`, `content-length` 등)와 `CONNECTIVITY_DROP_HEADERS`(기본 `cookie`, `set-cookie`)는 버린다. 서버가 특정 프로토콜의 헤더를 알지 않는다. **스트림(SSE)은 중계하지 않는다**: 요청 하나에 응답 하나다(Arena의 transport는 스트림을 쓰지 않는다).
 - **요청과 응답은 메모리에서 바로 전달하고 저장하지 않는다**(H3). 로그에는 경로, 크기, 시간만 남기고 내용은 남기지 않는다.
 
 ## 5. 한도와 session (E1~E5, H1)
 
 | 한도 | 설정 | 넘으면 |
 |---|---|---|
-| 붙은 peer 수(서버 전체) | `ARENA_CONNECTIVITY_MAX_ATTACHED` | 새 attach 거절(429) |
-| 한 peer의 처리 중 요청 수 | `…_MAX_INFLIGHT_PER_PEER` | 429 |
-| 호출 출발 IP와 대상 peer별 초당 요청 | `…_RATE_PER_SEC` | 429 |
-| 요청·응답 body 크기 | `…_MAX_BODY_BYTES` | 413 |
-| 요청 대기 시간 | `…_REQUEST_TIMEOUT_SEC` | 504 |
-| poll이 없는 시간 | `…_ATTACH_GRACE_SEC` | session을 닫는다. 이후 요청은 503 |
+| 붙은 peer 수(서버 전체) | `CONNECTIVITY_MAX_ATTACHED` | 새 attach 거절(429) |
+| 한 peer의 처리 중 요청 수 | `CONNECTIVITY_MAX_INFLIGHT_PER_PEER` | 429 |
+| 호출 출발 IP와 대상 peer별 초당 요청 | `CONNECTIVITY_RATE_PER_SEC` | 429 |
+| 요청·응답 body 크기 | `CONNECTIVITY_MAX_BODY_BYTES` | 413 |
+| 요청 대기 시간 | `CONNECTIVITY_REQUEST_TIMEOUT_SEC` | 504 |
+| poll이 없는 시간 | `CONNECTIVITY_ATTACH_GRACE_SEC` | session을 닫는다. 이후 요청은 503 |
 | 서명 시각 창 | 기존 `ARENA_SIG_WINDOW_SEC` | 거절 |
-| 허용 키 목록(선택) | `…_ALLOW_KEYS`(파일, 비면 서명 있는 누구나) | 거절 |
+| 허용 키 목록(선택) | `CONNECTIVITY_ALLOW_KEYS`(파일, 비면 서명 있는 누구나) | 거절 |
 
 - **session**(Attachment)은 키 하나에 하나다. 같은 키가 다시 붙으면 옛 것을 대체한다(서명으로 확인). session은 `since`, `last_seen`, 처리 중 요청, 대기열, 중계 바이트를 가진다.
 - 응답을 올리는 쪽은 그 요청을 받은 session의 키여야 한다(남의 요청에 응답할 수 없다). 요청 id는 추측할 수 없는 값이다.
@@ -107,27 +115,27 @@ flowchart TD
     S4 -- "아니오·시간 초과" --> R
 ```
 
-- **되돌아가는 곳은 그 요청의 출발 IP뿐**이고 포트는 peer가 말한 하나(1024 이상)다. 요청이 적은 임의 주소로는 가지 않는다(SSRF 방지, SEC-4). 사설·loopback·link-local 출발 IP는 기본으로 점검하지 않고 `relay`로 본다. 사내망 시험을 위해 `ARENA_CONNECTIVITY_PROBE_ALLOW`(CIDR 목록)로 허용한다.
+- **되돌아가는 곳은 그 요청의 출발 IP뿐**이고 포트는 peer가 말한 하나(1024 이상)다. 요청이 적은 임의 주소로는 가지 않는다(SSRF 방지, SEC-4). 사설·loopback·link-local 출발 IP는 기본으로 점검하지 않고 `relay`로 본다. 사내망 시험을 위해 `CONNECTIVITY_PROBE_ALLOW`(CIDR 목록)로 허용한다.
 - peer 앱에 경로 `POST /.well-known/arena-reach`를 더한다: `{nonce}`를 받아 `{pub, sig(nonce와 "reach")}`로 답한다. 이 경로는 터널 허용 목록에 없다.
-- 한 키의 점검은 시간당 횟수 제한(`…_CHECK_PER_HOUR`).
+- 한 키의 점검은 시간당 횟수 제한(`CONNECTIVITY_CHECK_PER_HOUR`).
 - proxy 뒤의 peer는 서버가 보는 출발 IP가 proxy의 것이라 점검이 실패하고 `relay`가 된다. 맞는 결과다.
 - **direct일 때는 붙지 않는다**(Q7). `direct`이면 poll을 하지 않고 지금처럼 자기 주소를 프로필에 올린다. `relay`이면 poll을 시작한다. 주기 점검에서 결과가 바뀌면 전환한다.
 
 ## 7. peer 쪽 (ConnectivityLink)
 
-- **설정**: `ARENA_<종류>_PEER_CONNECTIVITY=주소(|주소…)`(broker 주소와 같은 모양, 먼저 적은 것이 우선, 기본 비어 있음 = 꺼짐). 종류마다 `…_PEER_NICK`처럼 설정 항목을 더한다.
+- **설정**: `ARENA_<종류>_PEER_CONNECTIVITY=주소(|주소…)`(broker 주소와 같은 모양, 먼저 적은 것이 우선, 기본 비어 있음 = 꺼짐). 종류마다 `…_PEER_NICK`처럼 설정 항목을 더한다. 이것은 Arena peer의 설정이다(connectivity 서버의 설정이 아니다).
 - **상태** `LinkState`: `mode`(`direct`, `relay`, `none`), `via`(붙은 서버 주소), `relay_base`, `udp`(`true`, `false`, `null`).
 - **effective URL** `Peer.url`: `mode == relay`이면 `relay_base`, 아니면 `config.url`. 지금 `config.url`을 직접 쓰는 곳 가운데 **외부에 알리는 곳**이 이것으로 바뀐다: 프로필의 `connections`, 에이전트 카드, 호출할 때 알리는 알림 주소(`node.py:157, 261, 321`)와 `ctx.url`(`context.py:45`). 내 서버를 여는 곳(포트)은 `config.url` 그대로다.
 - **에이전트 카드**는 `a2a-sdk`의 `card_modifier`(요청마다 카드를 고칠 수 있는 인자, 설치된 1.3의 `create_agent_card_routes`에 있음)로 현재 effective URL을 낸다. 점검은 앱이 떠 있어야 하므로 앱을 먼저 연 뒤 하고, 결과가 바뀌면 카드도 바뀐다.
-- **받은 요청 처리**: poll이 요청을 주면 `httpx.ASGITransport(app=내 A2A 앱)`으로 그대로 넣고 응답을 `/reply/{id}`로 보낸다. 동시에 처리하는 수는 설정(`…_LINK_CONCURRENCY`). 한 요청의 실패가 다른 요청이나 poll을 멈추지 않는다.
+- **받은 요청 처리**: poll이 요청을 주면 `httpx.ASGITransport(app=내 A2A 앱)`으로 그대로 넣고 응답을 `/reply/{id}`로 보낸다. 동시에 처리하는 수는 클라이언트의 인자이고 Arena는 `ARENA_PEER_RELAY_CONCURRENCY`로 준다. 한 요청의 실패가 다른 요청이나 poll을 멈추지 않는다.
 - **붙기와 재시도**는 broker와 같은 규칙(처음 2초에서 최대 60초 간격, 서버가 없어도 peer는 멈추지 않는다)이고 `Presence`와 같은 틀로 만든다. 서버 여럿이면 앞에서부터 시도하고 붙은 서버가 죽으면 다음으로 간다.
-- **프로필**: 전용 field `connectivity: {"via": 서버 주소, "mode": "direct" 또는 "relay", "udp": true·false·null}`. `url`과 `connections`의 a2a `url`은 effective URL이다. 상태가 바뀌면 프로필을 다시 게시한다(요약을 새로 쓰지 않으므로 LLM 호출이 없다: 9단계 `set_nick`과 같은 방식).
+- **프로필**: connectivity 전용 field는 **없다**(원칙 2). `url`과 `connections`의 a2a `url`이 effective URL일 뿐이다. 주소가 바뀌면 프로필을 다시 게시한다(요약을 새로 쓰지 않으므로 LLM 호출이 없다: 9단계 `set_nick`과 같은 방식).
 - **창**: console와 desk 머리글에 `직접 연결됨`, `중계로 연결됨`, `연결 서버 없음`, 그리고 `udp 됨`·`udp 안 됨`(P10-B6, C7)을 보인다.
-- **broker 검사**: `connectivity`가 있으면 `via`가 http(s) 주소 문자열이고 `mode`가 둘 중 하나이고 `udp`가 `true`·`false`·`null`이고 다른 key가 없을 것. 어기면 프로필을 거절한다.
+- **broker는 바뀌지 않는다**(원칙 2).
 
 ## 8. STUN (선택, UDP)
 
-- 서버: `ARENA_CONNECTIVITY_STUN_PORT`(0이면 열지 않음, 기본 3478/UDP)에서 STUN binding request(RFC 5389, 20바이트 머리 + `XOR-MAPPED-ADDRESS`)에만 답한다. 최소 구현이고, TURN은 하지 않는다.
+- 서버: `CONNECTIVITY_STUN_PORT`(0이면 열지 않음, 기본 3478/UDP)에서 STUN binding request(RFC 5389, 20바이트 머리 + `XOR-MAPPED-ADDRESS`)에만 답한다. 최소 구현이고, TURN은 하지 않는다.
 - peer: 기동할 때 서버의 STUN 포트로 binding request를 한 번 보내 응답이 오면 `udp=true`와 바깥에서 보이는 주소를 얻는다. 제한 시간 안에 안 오면 `udp=false`다. 서버 주소에 STUN 포트가 없으면 `null`이다. **결과는 알리기만 하고 경로를 바꾸지 않는다**(이 단계에서는 UDP로 가는 경로가 없다).
 
 ## 9. 요구사항과 달라진 것 (설계하며 정한 것)
@@ -145,8 +153,8 @@ flowchart TD
 
 | 묶음 | 내용 | 시험 |
 |---|---|---|
-| 10-A | 설정, `connectivity/service.py`(Attachment, 요청 대기열, 한도), `api.py`(`/poll`, `/reply`, `/r/…`, `/health`), `python -m arena.connectivity` | 단위: 한도, 만료, 남의 요청에 응답 못 함, 경로 허용 목록, 크기. 실제 loopback 서버 |
-| 10-B | `ConnectivityLink`(poll, 내 앱에 넣기), `Peer.url`(effective URL), 카드 `card_modifier`, 프로필 `connectivity`, broker 검사 | 포트를 열지 않은 peer B를 A가 실제 loopback 서버를 거쳐 호출. 이벤트 개최·참가·계약·대화, 느린 답과 webhook |
+| 10-A | `connectivity/` 패키지: 설정, 서명, `service.py`(Attachment, 요청 대기열, 한도), `api.py`(`/poll`, `/reply`, `/r/…`, `/health`), `python -m connectivity` | 단위: 한도, 만료, 남의 요청에 응답 못 함, 경로 허용 목록, 크기. 실제 loopback 서버 |
+| 10-B | 범용 `connectivity/client.py`(poll, ASGI 앱에 넣기), Arena 어댑터, `Peer.url`(effective URL), 카드 `card_modifier` | 포트를 열지 않은 peer B를 A가 실제 loopback 서버를 거쳐 호출. 이벤트 개최·참가·계약·대화, 느린 답과 webhook |
 | 10-C | inbound 점검(`/reach`, `/.well-known/arena-reach`), direct↔relay 전환, 주기 점검, 창 머리글 | 점검 결과별 동작, 출발 IP 제한, 횟수 제한, 전환 때 프로필과 카드 |
 | 10-D | STUN(서버·peer), `udp` 상태 | 단위(패킷 모양), 응답 없음 → `udp=false` |
 | 10-E | `deploy/connectivity`, docker로 막힌 환경(서로 닿지 않는 네트워크 둘) 시험, `docs/security-assessment.md`·`docs/internal-network-test.md` 포트, `dev/protocol.md`, README | 실제 프로세스(P10-I2, I4) |

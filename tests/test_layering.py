@@ -33,3 +33,14 @@ def test_layers_lower_layers_do_not_import_upper_ones():
                 if re.match(rf"^\s*from\s+(\.\.+|arena\.)({forbidden})\b", line):
                     bad.append(f"{f.relative_to(ROOT)}:{i}: {line.strip()}")
     assert not bad, "\n".join(bad)
+
+
+def test_p10_connectivity_is_a_service_of_its_own():
+    """user 2026-11-06: "connectivity는 agent arena와 상관없는 보편 서비스". It imports nothing of this repository but itself,
+    and speaks of no agent, peer, ledger or event"""
+    bad = []
+    for f in sorted((ROOT / "connectivity").rglob("*.py")):
+        for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if re.match(r"^\s*(from|import)\s+(arena|apps|demo|tests)\b", line) or re.search(r"\b(peer|agent|ledger|arena|a2a)\b", line, re.I):
+                bad.append(f"{f.relative_to(ROOT)}:{i}: {line.strip()[:80]}")
+    assert not bad, "\n".join(bad)

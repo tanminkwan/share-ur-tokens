@@ -1,6 +1,6 @@
 # Test coverage of the platform (user 2026-11-03: "test 철저히 하고 coverage 관리도 해"). Run: scripts/coverage.sh
 [run]
-source = arena
+source = arena, connectivity
 branch = true
 parallel = true
 # measure the processes the tests start (genesis, broker, recorder, peers) too
