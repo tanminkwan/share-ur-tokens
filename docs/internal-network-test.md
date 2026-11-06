@@ -339,6 +339,26 @@ peer와 broker의 서명에는 시각이 들어간다. 서버 사이의 시계�
 | 막힌 포트와 해결 | |
 | S0~S6 결과 | |
 
+### 8.1 서버 준비 기록 (2026-11-06)
+
+사용자: "test를 위한 docker 컨테이너들 활성화 해", "embedding 서버는 네가 직접 띄워", "나머지 특수 peer들도 다 띄워 줘", "그냥 78 서버에서 image build 하는 방식으로 할께". 사람 peer(`10.10.10.78`)는 사용자가 직접 띄운다. 아래는 이 서버(`10.10.20.11`, `BROKER_HOST`)에서 한 일이고, 시험 시나리오(S0~S6)는 아직 하지 않았다.
+
+| 컨테이너 | 포트 | 확인한 것 |
+|---|---|---|
+| `test-broker-genesis-1` (broker, 첫 recorder, god) | 9100~9104 | 로그에 `제네시스: {...}`, 9100 `/profiles`와 9102 `/health` 200. 원장 ID `1eecf1aa…6302` |
+| `embedding-server` (`../embedding`, CPU 이미지 `embedding-server:cpu-test`) | 8000 | `/health` 200, `/embed`가 1024차원 반환. compose가 `restart: "no"`라 재부팅 뒤 다시 띄운다 |
+| search peer | 9130 | agent-card 200, broker `/profiles`에 등록 |
+| app-store peer | 9150 | agent-card 200 |
+| service peer | 9160(A2A), 9161(api) | 9161 listen. 9160은 listen하지 않음(`CONNECTIONS=api` 기본값 때문으로 보이며 코드로 확인하지 않음) |
+| foundation peer | 9170 | agent-card 200 |
+| key peer | 9180 | agent-card 200 |
+| link peer | 9190(A2A), 9191(api) | 9191 listen. 9190은 service와 같은 상태 |
+| sphinx peer | 9195, 9196(console, 이 서버 안에서만) | agent-card 200 |
+
+- 모든 peer의 `.env`는 `ARENA_HOST=0.0.0.0`, `ARENA_PUBLIC_HOST=10.10.20.11`, broker `public=http://10.10.20.11:9100`이다. search는 `ARENA_EMBED_URL=http://10.10.20.11:8000`, foundation과 link는 recorder `http://10.10.20.11:9102`를 더한다. `.env`는 git이 무시한다.
+- **오래된 이미지**: 처음에 sphinx가 `No module named arena.peers.sphinx`로 계속 재시작됐다. `agent-arena:latest`가 sphinx 코드가 들어오기 전에 빌드된 것이었다. `deploy/build.sh`로 다시 빌드하고 sphinx를 `--force-recreate`해 해결했다. 다른 peer는 재생성할 때 새 이미지로 바뀐다. 시험 서버를 준비할 때는 먼저 이미지를 새로 빌드한다.
+- `PEER_HOST`는 저장소를 clone해 `deploy/build.sh`로 이미지를 빌드한 뒤 5.2절의 `docker run`으로 띄운다. `<BROKER_HOST>`는 `10.10.20.11`이다.
+
 ## 9. 아직 확인하지 못한 것
 
 - `/health`, `/log`, `/audit`, `/trust`, `/events/<id>`, `/track/<공개키>`는 이 서버에서 직접 확인했다(서명 없이 열린다). `/chain`은 **서명된 요청과 허용된 키가 필요**해서 일반 `curl`로는 `signed request required`가 나온다. `/profiles`(broker)는 서명 없이 열린다.
