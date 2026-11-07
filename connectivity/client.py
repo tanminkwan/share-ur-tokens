@@ -65,12 +65,13 @@ class TunnelClient:
         """poll one server until it fails; yields after each poll (attached)"""
         local = httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app), base_url="http://local")
         async with httpx.AsyncClient(timeout=self.hold + self.margin) as hc, local:
+            hold = 0.0  # the first poll answers at once: the caller-facing address is known before any long wait
             while True:
-                r = await hc.get(f"{server}/poll", params={"hold": self.hold}, headers=self._signed(server, "GET", "/poll"))
+                r = await hc.get(f"{server}/poll", params={"hold": hold}, headers=self._signed(server, "GET", "/poll"))
                 if r.status_code != 200:
                     raise TunnelError(f"poll answered {r.status_code}: {r.text[:200]}")
                 d = r.json()
-                self.server = server
+                self.server, hold = server, self.hold
                 await self._set_base(d["base"])
                 for req in d.get("requests", []):
                     t = asyncio.create_task(self._handle(hc, local, server, req))

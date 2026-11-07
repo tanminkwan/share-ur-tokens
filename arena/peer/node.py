@@ -215,10 +215,11 @@ class Peer:
 
     async def repost(self) -> dict:
         """post the last profile again with what changed (name, address) under a new version: no new summary, no LLM call"""
-        self.profiles.version += 1
         last = self.last_profile
-        return await self.advertise(dict(last, nick=self.nick, url=self.url, connections=self.connections(), ver=self.profiles.version)
-                                    if last else None)
+        if last is None:  # nothing posted yet: the first post (Presence) carries the name and address of now
+            return {"ok": True, "posted": False}
+        self.profiles.version += 1
+        return await self.advertise(dict(last, nick=self.nick, url=self.url, connections=self.connections(), ver=self.profiles.version))
 
     @property
     def pen(self) -> str:
@@ -234,6 +235,7 @@ class Peer:
             return {"ok": False, "error": bad}
         if nick != self.nick:
             self.nick = nick
+            self.persist()  # kept in the home even before anything is posted
             await self.repost()  # the same profile under the new name: no new summary, so no LLM call for a rename
         return {"ok": True, "nick": self.nick, "pen": self.pen}
 

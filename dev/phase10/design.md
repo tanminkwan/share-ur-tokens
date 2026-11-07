@@ -165,7 +165,7 @@ flowchart TD
 - **실제 프로세스(docker)**: 네트워크 둘(`net-a`, `net-b`)을 만들고 connectivity 컨테이너만 둘에 모두 붙인다. peer A는 `net-a`, peer B는 `net-b`에 두면 서로 닿지 않는다(direct 불가). 둘이 relay로 이벤트 개최, 참가, 계약, 대화까지 한다. UDP는 쓰지 않으므로 UDP가 막힌 환경과 같다(P10-I4). `ARENA_TEST_DOCKER=1`일 때만 도는 시험 + 사용자가 따라 할 문서.
 - LLM은 쓰지 않는다(사람 모드 peer끼리).
 
-## 12. 구현하며 정한 것 (10-A, 10-B)
+## 12. 구현하며 정한 것 (10-A, 10-B, 10-C, 10-E)
 
 - **서명 함수**: `connectivity.signing.sign_headers(signer, key_hex, …)`는 키 객체가 아니라 서명하는 함수를 받는다. Arena는 `Identity.sign_bytes`를 넘긴다(개인키를 건네지 않는다).
 - **A2A 앱은 하나**: `Peer.a2a_app()`은 한 번만 만든다. 포트와 relay가 같은 앱, 같은 task 저장소에 요청을 넣는다(느린 답을 한쪽에서 만들고 다른 쪽에서 확인해도 같다).
@@ -176,3 +176,9 @@ flowchart TD
 - **점검이 아무 서버에도 닿지 않으면** 이미 정한 길을 그대로 둔다. 처음이면 relay를 시작한다(서버가 돌아오면 붙는다).
 - **창 머리글**에 `직접 연결됨`·`중계로 연결됨`·`연결 확인 중`을 보인다(peer 안의 상태, 프로필에는 오르지 않음).
 - 아직: 끊긴 relay 때문에 실패한 호출을 다시 시도하는 일(P10-C4)은 하지 않았다. 지금은 호출이 오류로 끝나고 다음 호출이 새 주소로 간다.
+- **첫 poll은 기다리지 않는다**(10-E): 붙은 뒤 첫 poll은 `hold=0`이라 서버가 바로 relay 주소를 돌려준다. 그다음부터 긴 poll이다. 그렇지 않으면 시작 뒤 `HOLD_SEC` 동안 아무도 그 peer에 닿지 못한다(실제 프로세스 시험에서 찾음).
+- **첫 결정이 첫 게시보다 먼저**(10-E): 개인 peer는 `RelayLink.start()`로 점검하고, relay면 붙기를 `ARENA_PEER_RELAY_ATTACH_WAIT_SEC`(5초)까지 기다린 뒤 프로필을 처음 게시한다. broker는 처음부터 닿는 주소만 보인다. 더 걸리면 붙는 대로 다시 게시한다. 다시 점검은 `run(started=True)`가 이어 한다.
+- **게시 전의 다시 게시는 하지 않는다**: `Peer.repost()`는 아직 아무것도 게시하지 않았으면 아무것도 하지 않는다(첫 게시가 지금 이름과 주소를 싣는다). 닉네임은 `set_nick`이 바로 home에 저장한다.
+- **배치**: 서버는 Arena 이미지에 함께 들어 있고 `deploy/connectivity`가 `command: ["connectivity"]`로 띄운다(상태가 없어 volume이 없다). 설정은 `CONNECTIVITY_*`만. Arena peer를 위해 `.env.example`이 `CONNECTIVITY_PATHS`를 A2A 경로 셋으로 둔다. 독립 이미지로 나누는 것은 서버를 따로 배포할 때 한다.
+- **실제 프로세스 시험**: `deploy/relay-test`(공유 네트워크 없는 `net-a`, `net-b`), `tests/test_p10_docker.py`. 결과: [test-results.md](test-results.md).
+- **아직(P10-C4와 함께)**: 기본 비서는 이벤트마다 상대 주소를 기억한다(공지의 `issuer_url`, 받은 메시지의 `url`). 상대가 길을 바꾸면 상대가 무언가 보내 올 때까지 옛 주소로 부른다. 연결 오류가 나면 broker에서 그 키의 지금 `url`을 읽어 한 번 다시 부르는 것이 고칠 길이다.

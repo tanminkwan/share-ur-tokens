@@ -68,16 +68,34 @@ class RelayLink:
         self._relay = None
         self.client.base = None
 
-    async def run(self, rounds: int | None = None) -> None:
+    async def _round(self) -> str:
+        try:
+            mode = await self.decide()
+            self.peer.log.emit("peer", self.peer.pen, f"연결: {mode} ({self.last_check.get('why') or self.last_check.get('error') or ''})"[:200])
+        except Exception as e:  # noqa: BLE001  (a check that fails is tried again later)
+            self.last_check = {"reachable": None, "error": f"{type(e).__name__}: {e}"}
+        return self.mode
+
+    async def start(self) -> str:
+        """the first decision, before the profile is first posted, so that the first address the broker lists is one others can
+        open. Through a relay it waits (ARENA_PEER_RELAY_ATTACH_WAIT_SEC at most) for the relay address; later it is posted again"""
+        mode = await self._round()
+        if mode == "relay":
+            loop = asyncio.get_running_loop()
+            end = loop.time() + self.peer.settings.peer_relay_attach_wait_sec
+            while self.client.base is None and self._relay and not self._relay.done() and loop.time() < end:
+                await asyncio.sleep(0.02)
+        return mode
+
+    async def run(self, rounds: int | None = None, started: bool = False) -> None:
+        """check again every ARENA_PEER_REACH_RECHECK_SEC (started: start() made the first decision already)"""
         n = 0
         while rounds is None or n < rounds:
-            try:
-                mode = await self.decide()
-                self.peer.log.emit("peer", self.peer.pen, f"연결: {mode} ({self.last_check.get('why') or self.last_check.get('error') or ''})"[:200])
-            except Exception as e:  # noqa: BLE001  (a check that fails is tried again later)
-                self.last_check = {"reachable": None, "error": f"{type(e).__name__}: {e}"}
+            if started:
+                await self.sleep(self.peer.settings.peer_reach_recheck_sec)
+            await self._round()
             n += 1
-            if rounds is None or n < rounds:
+            if not started and (rounds is None or n < rounds):
                 await self.sleep(self.peer.settings.peer_reach_recheck_sec)
 
     async def close(self) -> None:

@@ -51,7 +51,7 @@ class World:
         self.servers.append(srv)
         return svc, f"http://127.0.0.1:{port}", srv
 
-    async def peer(self, name, owner=None, apps=(), port=True):
+    async def peer(self, name, owner=None, apps=(), port=True, post=True):
         (self.tmp / name).mkdir()
         url = f"http://127.0.0.1:{free_port()}"
         p = Peer(Identity.generate(), self.s, PeerConfig(url=url), LocalFolderArea(str(self.tmp / name), self.s), owner or NoOwner(),
@@ -60,7 +60,8 @@ class World:
         if port:  # a peer behind a firewall serves nothing: nobody can reach this address
             self.servers.append(await serve_background(p.a2a_app(), "127.0.0.1", int(url.rsplit(":", 1)[1])))
         await p.scheduler.start(p.ctx(p.scheduler))
-        await p.advertise()
+        if post:
+            await p.advertise()
         return p
 
     async def behind(self, p, servers):
@@ -254,3 +255,38 @@ async def test_p10b6_the_owners_window_shows_how_the_peer_is_reached(world):
     assert OwnerService(a, desk).state()["me"]["reach"] is None  # no connectivity server set: nothing to show
     await linked(world, a, [server])
     assert OwnerService(a, desk).state()["me"]["reach"] == "direct"
+
+
+# ---- 10-E: found in the real-process docker test (dev/phase10/test-results.md) ----
+
+async def test_p10e_the_relay_address_is_known_at_once_even_with_a_long_poll_hold(world):
+    """the first poll after attaching does not wait: a server holding polls for 25 s must not leave the peer unreachable for 25 s"""
+    world.s = dataclasses.replace(world.s, peer_relay_hold_sec=25.0)
+    _, server, _ = await world.connectivity(poll_hold_sec=25.0)
+    b = await world.peer("b", FakeOwner(yes=True, why="좋다"), [AskOwner()], port=False)
+    t0 = time.monotonic()
+    b = await world.behind(b, [server])
+    assert time.monotonic() - t0 < 2.0 and b.url.startswith(server)
+    a = await world.peer("a")
+    assert (await a.call(b.url, engage(b.identity.pub)))["ok"]  # and requests flow at once (the next poll is the long one)
+
+
+async def test_p10e_the_first_profile_already_names_the_address_others_can_reach(world):
+    """the first decision comes before the first post: the broker never lists a peer at an address nobody can open"""
+    svc, server, _ = await world.connectivity()
+    b = await world.peer("b", port=False, post=False)
+    b.relay = RelayLink(b, [server])
+    assert await b.relay.start() == "relay"
+    assert world.broker.profiles.get(b.identity.pub) is None  # the decision posts nothing; the first post follows it
+    await b.advertise()
+    prof = world.broker.profiles[b.identity.pub]
+    assert prof["url"] == f"{server}/r/{b.identity.pub}" and svc.health()["attached"] == 1
+    await b.relay.close()
+
+
+async def test_p10e_a_repost_before_any_post_posts_nothing(world):
+    b = await world.peer("b", post=False)
+    await b.set_reach_url("http://example.invalid/r/x")
+    assert world.broker.profiles.get(b.identity.pub) is None and b.url == "http://example.invalid/r/x"
+    await b.advertise()
+    assert world.broker.profiles[b.identity.pub]["url"] == "http://example.invalid/r/x"

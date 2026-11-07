@@ -91,7 +91,7 @@ flowchart TB
 | P10-C1 | 경로는 순서대로 시도한다: **(1) direct**(상대가 inbound를 받는다) → **(2) 구멍 뚫기** → **(3) relay**(서버가 중계). 앞 경로가 되면 뒤로 가지 않는다 | **정함(설계 변경)**: (2) 구멍 뚫기는 이 단계에서 하지 않는다. 경로는 direct → relay 둘이다(design 9절) | ✅ |
 | P10-C2 | inbound 점검이 `relay`인 peer는 (1)로 받지 않는다. 이 peer를 부르는 쪽은 (2) 또는 (3)을 쓴다 | 정함 | ✅ |
 | P10-C3 | 두 peer가 모두 `direct`면 connectivity 서버를 거치지 않는다. 서버 부하는 못 닿는 경우에만 생긴다 | 정함 | ✅ |
-| P10-C4 | relay 연결이 끊기면 호출은 오류로 끝나지 않고 다시 연결한 뒤 이어서 시도한다(재연결 횟수와 간격은 설정). 그래도 안 되면 지금의 오류로 돌려준다 | 제안 | ⬜ |
+| P10-C4 | relay 연결이 끊기면 호출은 오류로 끝나지 않고 다시 연결한 뒤 이어서 시도한다(재연결 횟수와 간격은 설정). 그래도 안 되면 지금의 오류로 돌려준다 | 제안. 10-E에서 더 찾음: 이벤트마다 기억한 상대 주소가 상대의 길 바꾸기 뒤에 낡는다([test-results.md](test-results.md) 4절) | ⬜ |
 | P10-C5 | **UDP가 막힌 환경에서도 모든 일이 된다**(정함: 사용자 "UDP 막힌 환경도 가능하게 해"). direct와 relay는 **TCP만으로** 동작한다. relay는 HTTPS/WebSocket으로 붙어 proxy를 거쳐 나갈 수 있다 | 정함 | ✅ |
 | P10-C6 | UDP는 **있으면 쓰는 선택 기능**이다. 쓰는 곳은 둘뿐이다: (1) STUN으로 바깥에서 보이는 내 주소 알기, (2) 두 peer가 모두 UDP를 쓸 수 있을 때 구멍 뚫기(P10-C1의 2번). 둘 다 안 되면 코드는 조용히 3번(relay)으로 간다 | 제안 | ⬜ |
 | P10-C7 | UDP를 쓸 수 있는지는 기동할 때 STUN 응답이 오는지로 확인한다(제한 시간 설정). 결과(`udp 됨`, `udp 안 됨`)를 소유자 창과 로그에 보인다. 안 됨이 오류가 아니다 | 제안 | ⬜ |
@@ -139,16 +139,16 @@ flowchart TB
 | P10-H1 | 서버가 받는 모든 것(주소, 크기, 횟수)에 상한을 둔다. 서명이 없는 요청은 아무것도 하지 않는다 | 정함 | ✅ |
 | P10-H2 | **relay 운영자가 내용을 읽을 수 있는가**: 지금 메시지는 서명만 되고 암호화되지 않는다. relay를 거치는 내용을 운영자가 읽을 수 있다는 점을 문서로 밝히고, 끝과 끝 사이 암호화를 넣을지는 Q3이다 | 미정(Q3) | ⬜ |
 | P10-H3 | 서버는 중계한 내용을 저장하지 않는다(메모리에서 바로 전달, 로그에 내용을 남기지 않는다) | 제안 | ✅ |
-| P10-H4 | 서버가 연 포트는 `deploy/connectivity`와 `docs/security-assessment.md`의 포트 목록에 올린다 | 정함 | ⬜ |
+| P10-H4 | 서버가 연 포트는 `deploy/connectivity`와 `docs/security-assessment.md`의 포트 목록에 올린다 | 정함 (`deploy/connectivity`, `docs/security-assessment.md` S15, `docs/internal-network-test.md` 2.4) | ✅ |
 
 ### I. 시험
 
 | # | 요구 | 결정 | 상태 |
 |---|---|---|---|
-| P10-I1 | 메모리 안에서 서버와 peer를 가짜 네트워크(inbound 차단 흉내)로 시험한다: direct, 구멍 뚫기, relay 세 경로, 경로 바꾸기, 끊김과 재연결 | 정함 | ⬜ |
-| P10-I2 | **실제 프로세스**로 inbound가 막힌 환경을 만든다(docker 네트워크에서 peer 컨테이너는 서버로 나가는 길만 둔다). 거기서 두 peer가 relay로 이벤트 개최·참가·계약·대화까지 해낸다(`real-genesis-tests` 방침) | 정함 | ⬜ |
-| P10-I3 | LLM은 쓰지 않는다. 사람 모드 peer끼리 시험한다(LLM 호출 최소 방침) | 정함 | ⬜ |
-| P10-I4 | HTTP proxy 환경(UDP 막힘)을 흉내 낸 시험을 둔다: UDP를 모두 막은 docker 네트워크에서 두 peer가 relay로 이벤트 개최·참가·계약·대화까지 한다 | 정함(Q2) | ⬜ |
+| P10-I1 | 메모리 안에서 서버와 peer를 가짜 네트워크(inbound 차단 흉내)로 시험한다: direct, 구멍 뚫기, relay 세 경로, 경로 바꾸기, 끊김과 재연결 | 정함 (구멍 뚫기는 하지 않으므로 direct·relay·전환·끊김과 다시 붙기: `tests/test_p10_relay.py`) | ✅ |
+| P10-I2 | **실제 프로세스**로 inbound가 막힌 환경을 만든다(docker 네트워크에서 peer 컨테이너는 서버로 나가는 길만 둔다). 거기서 두 peer가 relay로 이벤트 개최·참가·계약·대화까지 해낸다(`real-genesis-tests` 방침) | 정함 (`deploy/relay-test`, `tests/test_p10_docker.py`, [test-results.md](test-results.md) 2절) | ✅ |
+| P10-I3 | LLM은 쓰지 않는다. 사람 모드 peer끼리 시험한다(LLM 호출 최소 방침) | 정함 | ✅ |
+| P10-I4 | HTTP proxy 환경(UDP 막힘)을 흉내 낸 시험을 둔다: UDP를 모두 막은 docker 네트워크에서 두 peer가 relay로 이벤트 개최·참가·계약·대화까지 한다 | 정함(Q2) (공유 네트워크 없는 두 docker 네트워크, UDP 미사용) | ✅ |
 
 ## 3. 미정: 사용자 결정이 필요한 것
 

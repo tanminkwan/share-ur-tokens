@@ -90,6 +90,25 @@ flowchart LR
 
 포트를 바꾸고 싶으면 방화벽을 열기 전에 정한다. 각 포트는 환경 변수(`ARENA_*_PORT`)로 바꾼다(`.env.example`).
 
+### 2.4 connectivity 서버를 쓸 때 (10단계, 선택)
+
+들어오는 포트를 열 수 없는 peer는 connectivity 서버를 거쳐 닿는다(`dev/phase10`). 서버는 `deploy/connectivity`로 `BROKER_HOST`에 같이 두는 것을 권한다.
+
+| # | 출발 | 도착 | 포트 | 용도 |
+|---|---|---|---|---|
+| C1 | 모든 peer | `BROKER_HOST` | **9200** | peer가 붙기(poll), 다른 peer가 relay 주소로 부르기, inbound 점검 요청 |
+| C2 | `BROKER_HOST` | 각 peer | 그 peer의 A2A 포트(예: 9180) | inbound 점검: 서버가 되돌아가 보는 길. **열려 있으면 direct, 막혀 있으면 relay**로 간다. 이 길을 열지 않으면 그 peer는 relay로 닿는다 |
+
+- relay로 닿는 peer에게는 2.1절 5번(`BROKER_HOST` → `PEER_HOST:9180`)이 **필요 없다**. 나가는 TCP 9200만 있으면 된다. UDP는 쓰지 않는다.
+- 사내망 주소(10.x)는 사설 대역이라 서버는 기본으로 되돌아가 보지 않고 모두 relay로 보낸다. 사내망에서 direct 판정을 쓰려면 서버에 `CONNECTIVITY_PROBE_ALLOW=10.0.0.0/8`을 준다.
+- peer 쪽: `ARENA_PERSONAL_PEER_CONNECTIVITY=http://<BROKER_HOST>:9200`. 창 머리글에 `직접 연결됨` 또는 `중계로 연결됨`이 보인다.
+- 서버 쪽: `cd deploy/connectivity && cp .env.example .env`, `CONNECTIVITY_HOST=0.0.0.0`, `CONNECTIVITY_PUBLIC_URL=http://<BROKER_HOST>:9200`, `docker compose up -d`.
+
+```text
+# BROKER_HOST로 들어오는 것 (출발: 모든 peer)
+9200/tcp                                          # connectivity
+```
+
 ## 3. 서버 준비 (두 서버 공통)
 
 저장소에는 Python 3.11 이상 또는 docker가 필요하다. `PEER_HOST`의 시스템 Python이 3.9이면 docker 방법을 쓴다.
