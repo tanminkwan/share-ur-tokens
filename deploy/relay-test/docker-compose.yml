@@ -2,7 +2,8 @@
 #   net-a: genesis, connectivity, peer-a         net-b: genesis, connectivity, peer-b
 # peer-a and peer-b share no network, so neither can open the other's port; only genesis (broker and recorder) and the
 # connectivity server sit on both. Each peer checks whether it can be reached (the connectivity server refuses to probe a
-# private source address), finds it cannot, attaches, and posts its relay address as its url. No UDP anywhere.
+# private source address), finds it cannot, attaches, and posts its relay address as its url. Every path is TCP; the one UDP
+# use is the STUN check each peer makes at start, which it only shows.
 # Human mode, no LLM. From this directory:
 #   docker compose up -d      (image from deploy/build.sh)
 #   peer-a console: http://127.0.0.1:${RELAY_TEST_A_CONSOLE:-19183}   peer-b console: http://127.0.0.1:${RELAY_TEST_B_CONSOLE:-19283}
@@ -54,6 +55,7 @@ services:
       CONNECTIVITY_PUBLIC_URL: http://connectivity:9200
       CONNECTIVITY_PATHS: /.well-known/agent-card.json,/rpc,/a2a/notify
       CONNECTIVITY_CHECK_PER_HOUR: 1000
+      CONNECTIVITY_STUN_PORT: 3478     # UDP between the containers works here: the peers show "UDP 됨" (only shown, no path uses it)
 
   peer-a:
     <<: *arena

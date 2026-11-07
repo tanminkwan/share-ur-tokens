@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from . import stun
 from .reach import REACH_PATH, reach_endpoint
 from .signing import sign_headers
 
@@ -98,6 +99,19 @@ class TunnelClient:
             except Exception as e:  # noqa: BLE001
                 last = f"{server}: {type(e).__name__}: {e}"
         return {"reachable": None, "error": last}
+
+    async def udp_check(self, timeout: float) -> dict:
+        """does UDP get out, and how do I look from outside? Through the first server that offers STUN (GET /info).
+        {udp: True|False, mapped, server, why} or {udp: None} when no server offers it. Only for showing: nothing depends on it"""
+        for server in self.servers:
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as hc:
+                    port = (await hc.get(f"{server}/info")).json().get("stun_port")
+            except Exception:  # noqa: BLE001  (an older server, or not there: try the next)
+                continue
+            if port:
+                return dict(await stun.check(urlsplit(server).hostname, int(port), timeout), server=server)
+        return {"udp": None, "mapped": None, "server": None, "why": "no server offers STUN"}
 
     async def _handle(self, hc, local, server: str, req: dict) -> None:
         """one request: into my app, the answer back. One failing never stops the others or the polling"""

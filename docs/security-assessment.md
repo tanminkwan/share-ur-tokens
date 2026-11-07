@@ -170,7 +170,7 @@ flowchart LR
 > 2026-11-08, 10단계(브랜치 `connectivity-20261106`)에서 더함. 서버는 Agent Arena와 상관없는 범용 서비스이고(`connectivity/`), Arena에서 그것을 아는 곳은 `arena/peer/relay_link.py` 하나다.
 
 - **현황**:
-  - 포트 9200(TCP, 평문 HTTP, `CONNECTIVITY_PORT`). UDP는 쓰지 않는다(STUN은 10-D, 기본 꺼짐).
+  - 포트 9200(TCP, 평문 HTTP, `CONNECTIVITY_PORT`). STUN(UDP, `CONNECTIVITY_STUN_PORT`)은 기본 꺼짐. 켜면 속성 없는 binding request(20바이트)에만 32바이트(IPv6 44바이트) 답을 보내고 다른 것에는 답하지 않는다. 출발 주소를 위장한 반사 공격의 증폭률이 낮다(약 1.6배). 서버의 `/info`는 STUN 포트만 알린다.
   - `/r/<키>/<경로>`는 서명 없이 누구나 부르지만 **그 키로 지금 붙어 있는 peer에게만** 전달한다. 임의 주소로 가는 열린 proxy가 아니다.
   - 전달하는 경로는 `CONNECTIVITY_PATHS`로 좁힌다(Arena: 카드, `/rpc`, `/a2a/notify`). peer도 자기 쪽에서 같은 목록으로 거른다. `cookie`, `set-cookie`, hop-by-hop 헤더는 넘기지 않는다.
   - 한도: 본문 크기(`MAX_BODY_BYTES`, 요청과 응답), 출발 IP 하나가 한 키에 보내는 초당 수(`RATE_PER_SEC`), 키당 동시 전달 수(`MAX_INFLIGHT`), 붙은 키 수(`MAX_ATTACHED`), 응답 대기(`REQUEST_TIMEOUT_SEC`), poll이 끊기면 `ATTACH_GRACE_SEC` 뒤 session을 닫는다. 거절은 사유별로 `/health`의 `refused`에 센다.

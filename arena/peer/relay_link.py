@@ -33,6 +33,8 @@ class RelayLink:
         self.port = urlsplit(peer.config.url).port
         self.mode = "checking"  # direct | relay | checking
         self.last_check: dict = {}
+        self.udp: dict = {}  # the STUN check, once at start: shown only, no path depends on it (P10-C6, C7)
+        self._udp_task: asyncio.Task | None = None
         self._relay: asyncio.Task | None = None
 
     async def _on_base(self, base: str | None) -> None:
@@ -76,9 +78,16 @@ class RelayLink:
             self.last_check = {"reachable": None, "error": f"{type(e).__name__}: {e}"}
         return self.mode
 
+    async def _check_udp(self) -> None:
+        self.udp = await self.client.udp_check(self.peer.settings.peer_stun_timeout_sec)
+        if self.udp.get("udp") is not None:
+            seen = f", 바깥에서 보이는 주소 {self.udp['mapped']}" if self.udp.get("udp") else f" ({self.udp.get('why', '')})"
+            self.peer.log.emit("peer", self.peer.pen, f"UDP {'됨' if self.udp['udp'] else '안 됨'}{seen}"[:200])
+
     async def start(self) -> str:
         """the first decision, before the profile is first posted, so that the first address the broker lists is one others can
         open. Through a relay it waits (ARENA_PEER_RELAY_ATTACH_WAIT_SEC at most) for the relay address; later it is posted again"""
+        self._udp_task = asyncio.create_task(self._check_udp())  # alongside: it never delays the first post
         mode = await self._round()
         if mode == "relay":
             loop = asyncio.get_running_loop()
@@ -99,10 +108,13 @@ class RelayLink:
                 await self.sleep(self.peer.settings.peer_reach_recheck_sec)
 
     async def close(self) -> None:
+        if self._udp_task and not self._udp_task.done():
+            self._udp_task.cancel()
         await self._stop_relay()
 
     @property
     def state(self) -> dict:
         """for the owner's window: how I am reached (shown, never posted in the profile)"""
         return {"mode": self.mode, "relay": self.client.base, "server": self.client.server or self.last_check.get("server"),
-                "source": self.last_check.get("source"), "error": self.client.last_error or self.last_check.get("error")}
+                "source": self.last_check.get("source"), "error": self.client.last_error or self.last_check.get("error"),
+                "udp": self.udp.get("udp"), "mapped": self.udp.get("mapped")}

@@ -110,8 +110,13 @@ def build_connectivity_app(svc: ConnectivityService) -> Starlette:
     async def health(_):
         return JSONResponse(svc.health())
 
+    async def info(_):
+        """what a client may use besides HTTP: the STUN port (UDP, on this host) or null"""
+        return JSONResponse({"ok": True, "stun_port": s.stun_port or None})
+
     return Starlette(routes=[
         Route("/health", health),
+        Route("/info", info),
         Route("/poll", poll),
         Route("/reply/{request_id}", reply, methods=["POST"]),
         Route("/reach", reach, methods=["POST"]),

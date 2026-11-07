@@ -76,7 +76,7 @@ flowchart LR
 - **처음 본 원장 기록**: 기본 비서는 이벤트 원장을 처음 볼 때 위치만 기억하고 알리지 않는다(이미 있던 설계). 계약이 그 전에 오르면 받는 쪽 timeline에 원장 줄이 없다. relay와 상관없다.
 - **닉네임 표시 시점**: 받는 쪽 directory가 상대 닉네임을 읽기 전에 만든 줄에는 기본 닉네임(`필명-xxxxxx`)이 찍힌다. 뒤의 줄은 맞다. 9단계의 `Directory.refresh` 간격 문제이고 relay와 상관없다.
 - **P10-H2 내용 열람**: relay 운영자는 지나가는 A2A 내용을 읽을 수 있다(서명은 되어 있어 바꾸면 들킨다). `docs/security-assessment.md` S15에 적었다.
-- 10-D(STUN, `udp` 상태)는 10-E 뒤로 미뤘다(사용자 2026-11-08: "10-E부터 진행해").
+- 10-D(STUN, `udp` 상태)는 10-E 뒤에 했다(6절).
 
 ## 5. P10-C4: 받지 못한 호출을 지금 주소로 다시 보내기
 
@@ -93,3 +93,17 @@ flowchart LR
 - 비용: 꺼져 있는 peer에게 보낸 호출은 바로 실패하지 않고 1+2+4초 뒤에 실패한다. 끄려면 `ARENA_PEER_CALL_RETRIES=0`.
 - 주소(url)만 아는 호출(`ctx.call(url)`, 키가 없는 직접 요청)은 다시 보내지 않는다. 지금 주소를 찾을 키가 없기 때문이다.
 - 앱 SDK의 `check_task`에 선택 인자 `pub`이 더해졌다(`arena/sdk/context.py`). 없으면 예전과 같다.
+
+## 6. 10-D: STUN과 UDP 표시 (P10-C6, C7)
+
+> 2026-11-08. 사용자: "10-D 진행해".
+
+| 시험 (`tests/test_p10_stun.py`, 11) | 확인한 것 | 결과 |
+|---|---|---|
+| 패킷 | binding request 머리(20바이트, magic cookie), 답의 `XOR-MAPPED-ADDRESS`가 RFC 5769 2.2의 바이트와 같음, IPv4·IPv6 왕복, 잘못된 패킷(길이, 형식, cookie, 속성 있음, 앞 두 비트)은 받지 않음 | 통과 |
+| 실제 UDP(loopback) | 서버가 답하고 `udp: true`, 바깥 주소 `127.0.0.1:<포트>`. 답하지 않는 곳과 아무것도 없는 곳은 제한 시간 뒤 `udp: false`(예외 아님). STUN이 아닌 것에는 답하지 않음 | 통과 |
+| 서버와 클라이언트 | `/info`가 STUN 포트(없으면 null)를 알리고, 클라이언트는 STUN을 주는 첫 서버로 묻는다. 아무 서버도 주지 않으면 `udp: null` | 통과 |
+| peer | 경로는 TCP 점검만으로 정하고(relay), 창의 `me.udp`가 `true`, 서버에 STUN이 없으면 `null`(표시 없음) | 통과 |
+| 실제 프로세스(docker) | `deploy/relay-test`에 `CONNECTIVITY_STUN_PORT=3478`. 두 peer 창이 `UDP 됨`, 길은 그대로 relay(TCP), 그 위에서 이벤트 전체와 재시작까지 | 2회 연속 통과 |
+
+- UDP가 막힌 경우의 실제 프로세스 시험은 없다(컨테이너 안에서 UDP만 막을 도구가 이미지에 없다). 막혔을 때 `udp: false`가 되고 아무것도 바뀌지 않는 것은 loopback 시험이 확인한다. 어떤 경로도 UDP를 쓰지 않으므로 P10-I4(UDP 막힘에서도 모든 일이 됨)는 그대로다.

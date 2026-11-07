@@ -165,7 +165,7 @@ flowchart TD
 - **실제 프로세스(docker)**: 네트워크 둘(`net-a`, `net-b`)을 만들고 connectivity 컨테이너만 둘에 모두 붙인다. peer A는 `net-a`, peer B는 `net-b`에 두면 서로 닿지 않는다(direct 불가). 둘이 relay로 이벤트 개최, 참가, 계약, 대화까지 한다. UDP는 쓰지 않으므로 UDP가 막힌 환경과 같다(P10-I4). `ARENA_TEST_DOCKER=1`일 때만 도는 시험 + 사용자가 따라 할 문서.
 - LLM은 쓰지 않는다(사람 모드 peer끼리).
 
-## 12. 구현하며 정한 것 (10-A, 10-B, 10-C, 10-E)
+## 12. 구현하며 정한 것 (10-A ~ 10-E)
 
 - **서명 함수**: `connectivity.signing.sign_headers(signer, key_hex, …)`는 키 객체가 아니라 서명하는 함수를 받는다. Arena는 `Identity.sign_bytes`를 넘긴다(개인키를 건네지 않는다).
 - **A2A 앱은 하나**: `Peer.a2a_app()`은 한 번만 만든다. 포트와 relay가 같은 앱, 같은 task 저장소에 요청을 넣는다(느린 답을 한쪽에서 만들고 다른 쪽에서 확인해도 같다).
@@ -184,3 +184,4 @@ flowchart TD
 - **P10-C4, 다시 보내기는 부르는 쪽이**: relay 서버가 끊긴 연결을 붙들고 있다가 이어 주지 않는다(서버는 상태를 적게 둔다). 대신 `PeerReach.call`(상대 키로 부르는 모든 호출)이, 상대가 받지 못한 것이 **확실한** 실패만 다시 보낸다. `arena.a2a.never_delivered`: 카드를 못 읽음(메시지보다 먼저 일어남), 연결이 안 됨, 503. 시간 초과나 답의 오류는 상대가 이미 처리했을 수 있으므로 다시 보내지 않는다(같은 계약이 두 번 가지 않게). 다시 보낼 때마다 broker에서 상대의 프로필을 다시 읽으므로, 같은 relay에 다시 붙었든 다른 서버로 옮겼든 direct로 바뀌었든 지금 주소로 간다. 횟수 `ARENA_PEER_CALL_RETRIES`(3), 간격 `ARENA_PEER_CALL_RETRY_SEC`(1초)에서 두 배씩(1+2+4초).
 - **기다리는 답도 지금 주소에서**: 상대 키로 부른 호출이 pending이면 답에 `pub`이 붙고, 기본 비서의 `WaitingCalls`가 그것을 기억해 다시 볼 때 `check_task(url, id, pub=...)`가 프로필의 지금 A2A 주소로 간다(task는 상대의 같은 A2A 앱에 있다).
 - **이벤트 메시지는 원래 지금 주소로 간다**: 기본 비서는 상대 키를 알면 `call_peer`로 보내고, 이것은 매번 프로필을 읽는다. 이벤트마다 기억한 주소(`issuer_url`, 받은 메시지의 `url`)는 프로필이 없을 때만 쓴다. 10-E 결과에 "낡은 주소로 부른다"고 적은 것은 틀렸고 고쳤다.
+- **STUN(10-D)**: `connectivity/stun.py`. 서버는 속성 없는 binding request(20바이트)에만 `XOR-MAPPED-ADDRESS` 하나로 답한다(RFC 5769 시험 벡터와 같은 바이트). 다른 것에는 답하지 않는다. 답이 요청보다 12바이트 클 뿐이라 증폭 공격의 발판이 되기 어렵다. `python -m connectivity`가 `CONNECTIVITY_STUN_PORT`를 주면 같은 프로세스에서 UDP를 연다. 클라이언트는 `GET /info`의 `stun_port`를 보고 서버 주소의 host로 묻는다(제한 시간 안에 세 번 보냄). peer는 첫 점검과 나란히 한 번 묻고(첫 게시를 늦추지 않음) 결과를 창과 로그에만 보인다. 다시 묻지 않는다(바뀌어도 쓰는 곳이 없음).

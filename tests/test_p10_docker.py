@@ -1,5 +1,6 @@
 """P10-I2, I4: real processes in containers. Two peers on two docker networks that share nothing (neither can open the other's
-port) host, join, contract and talk through the connectivity server. No UDP anywhere. deploy/relay-test/docker-compose.yml.
+port) host, join, contract and talk through the connectivity server. Every path is TCP; UDP carries only the STUN check each
+peer shows in its window (10-D). deploy/relay-test/docker-compose.yml.
 The structure checks always run; the containers are opt-in (ARENA_TEST_DOCKER=1) and need docker. Human mode, no LLM."""
 import json
 import os
@@ -94,6 +95,8 @@ def test_p10_i2_two_peers_that_cannot_reach_each_other_take_part_in_an_event_thr
         # each checks itself and finds it cannot be reached from outside
         a = wait(lambda: (lambda me: me if me["reach"] == "relay" else None)(A.get("/api/state").json()["me"]))
         b = wait(lambda: (lambda me: me if me["reach"] == "relay" else None)(B.get("/api/state").json()["me"]), 90)
+        # STUN (P10-C7): UDP gets out between these containers; shown in the window, the path stays the relay over TCP
+        assert wait(lambda: A.get("/api/state").json()["me"]["udp"] is True) and wait(lambda: B.get("/api/state").json()["me"]["udp"] is True)
 
         # the two cannot open each other: no network in common
         probe = "import httpx\ntry:\n httpx.get('http://peer-b:9180/.well-known/agent-card.json', trust_env=False, timeout=3); print('open')\n" \

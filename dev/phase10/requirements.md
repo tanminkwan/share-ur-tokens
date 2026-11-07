@@ -67,7 +67,7 @@ flowchart TB
 
 | # | 요구 | 결정 | 상태 |
 |---|---|---|---|
-| P10-A1 | 새 서버 **connectivity 서버**를 만든다(`python -m connectivity`, 최상위 패키지, docker 배치는 `deploy/connectivity`). 한 프로세스가 STUN, signaling, relay를 모두 맡는다 | 정함 | 🟡 |
+| P10-A1 | 새 서버 **connectivity 서버**를 만든다(`python -m connectivity`, 최상위 패키지, docker 배치는 `deploy/connectivity`). 한 프로세스가 STUN, signaling, relay를 모두 맡는다 | 정함. 한 프로세스가 HTTP(relay 터널과 점검)와 STUN(UDP)을 맡는다. signaling은 relay 터널이 대신한다(구멍 뚫기가 없으므로) | ✅ |
 | P10-A2 | peer는 설정에 connectivity 서버 주소가 **있으면** 기동할 때 붙는다. 없으면 지금과 똑같이 동작한다(기본은 꺼짐). 주소는 쉼표로 여럿 적을 수 있고 먼저 적은 것이 우선이다(`ARENA_PERSONAL_PEER_CONNECTIVITY`) | 정함(broker 주소처럼) | ✅ |
 | P10-A3 | 서버가 아직 없거나 중간에 죽어도 peer는 멈추지 않고 계속 붙으려 한다(처음 2초, 최대 60초 간격: broker와 같은 규칙). 붙기 전에도 peer의 다른 일은 한다 | 정함(기존 규칙) | ✅ |
 | P10-A4 | 서버 주소와 포트, 간격, 한도는 모두 `.env` 설정이다(상수 금지) | 정함 | ✅ |
@@ -93,8 +93,8 @@ flowchart TB
 | P10-C3 | 두 peer가 모두 `direct`면 connectivity 서버를 거치지 않는다. 서버 부하는 못 닿는 경우에만 생긴다 | 정함 | ✅ |
 | P10-C4 | relay 연결이 끊기면 호출은 오류로 끝나지 않고 다시 연결한 뒤 이어서 시도한다(재연결 횟수와 간격은 설정). 그래도 안 되면 지금의 오류로 돌려준다 | 제안. **정함(구현)**: 끊긴 연결을 기다려 주는 대신 **부르는 쪽이 다시 보낸다**. 상대가 받지 못한 것이 확실한 호출(카드를 못 읽음, 연결 안 됨, 503)만, 매번 broker에서 상대의 지금 주소를 읽어 `ARENA_PEER_CALL_RETRIES`(3)번까지, 간격 `ARENA_PEER_CALL_RETRY_SEC`(1초)에서 두 배씩. 받았을 수도 있는 호출(시간 초과, 답의 오류)은 다시 보내지 않는다. 기다리는 답(A2A task)도 상대의 지금 주소에서 다시 본다 | ✅ |
 | P10-C5 | **UDP가 막힌 환경에서도 모든 일이 된다**(정함: 사용자 "UDP 막힌 환경도 가능하게 해"). direct와 relay는 **TCP만으로** 동작한다. relay는 HTTPS/WebSocket으로 붙어 proxy를 거쳐 나갈 수 있다 | 정함 | ✅ |
-| P10-C6 | UDP는 **있으면 쓰는 선택 기능**이다. 쓰는 곳은 둘뿐이다: (1) STUN으로 바깥에서 보이는 내 주소 알기, (2) 두 peer가 모두 UDP를 쓸 수 있을 때 구멍 뚫기(P10-C1의 2번). 둘 다 안 되면 코드는 조용히 3번(relay)으로 간다 | 제안 | ⬜ |
-| P10-C7 | UDP를 쓸 수 있는지는 기동할 때 STUN 응답이 오는지로 확인한다(제한 시간 설정). 결과(`udp 됨`, `udp 안 됨`)를 소유자 창과 로그에 보인다. 안 됨이 오류가 아니다 | 제안 | ⬜ |
+| P10-C6 | UDP는 **있으면 쓰는 선택 기능**이다. 쓰는 곳은 둘뿐이다: (1) STUN으로 바깥에서 보이는 내 주소 알기, (2) 두 peer가 모두 UDP를 쓸 수 있을 때 구멍 뚫기(P10-C1의 2번). 둘 다 안 되면 코드는 조용히 3번(relay)으로 간다 | 제안. **정함(구현)**: 이 단계에서 UDP를 쓰는 곳은 (1) STUN 하나다. (2) 구멍 뚫기는 하지 않는다(설계 9절). UDP가 안 돼도 경로는 바뀌지 않는다 | ✅ |
+| P10-C7 | UDP를 쓸 수 있는지는 기동할 때 STUN 응답이 오는지로 확인한다(제한 시간 설정). 결과(`udp 됨`, `udp 안 됨`)를 소유자 창과 로그에 보인다. 안 됨이 오류가 아니다 | 제안. **구현**: `connectivity/stun.py`, 서버 `CONNECTIVITY_STUN_PORT`(기본 0, 꺼짐), `GET /info`가 STUN 포트를 알림, peer는 기동할 때 한 번(`ARENA_PEER_STUN_TIMEOUT_SEC` 2초) 묻고 창 머리글에 `UDP 됨`/`UDP 안 됨`과 로그에 바깥 주소를 보인다. 서버에 STUN이 없으면 보이지 않는다 | ✅ |
 
 ### D. signaling과 신원
 
@@ -118,7 +118,7 @@ flowchart TB
 
 | # | 요구 | 결정 | 상태 |
 |---|---|---|---|
-| P10-F1 | 새 연결 방식을 **등록하지 않는다.** relay 뒤의 peer도 `a2a` 연결이고 `url`이 relay 주소다 | **정함(설계 변경)** | ⬜ |
+| P10-F1 | 새 연결 방식을 **등록하지 않는다.** relay 뒤의 peer도 `a2a` 연결이고 `url`이 relay 주소다 | **정함(설계 변경)** (`test_p10b_the_profile_names_the_relay_address_and_nothing_else_changes`) | ✅ |
 | P10-F2 | ~~프로필에 붙은 connectivity 서버를 전용 field로 싣는다~~ **취소**(P10-P4: 추상화 계층은 connectivity를 모른다). 창에 보이는 연결 상태는 peer 안의 상태일 뿐 프로필에 오르지 않는다 | 정함(취소) | — |
 | P10-F3 | 막힌 peer의 프로필 `a2a` 연결의 `url`은 relay 주소다 | **정함(설계 변경)** | ✅ |
 | P10-F4 | ~~broker가 새 field를 검사한다~~ **취소**(F2와 함께). broker는 바뀌지 않는다 | 정함(취소) | — |

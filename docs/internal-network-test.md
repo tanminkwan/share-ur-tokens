@@ -104,9 +104,12 @@ flowchart LR
 - peer 쪽: `ARENA_PERSONAL_PEER_CONNECTIVITY=http://<BROKER_HOST>:9200`. 창 머리글에 `직접 연결됨` 또는 `중계로 연결됨`이 보인다.
 - 서버 쪽: `cd deploy/connectivity && cp .env.example .env`, `CONNECTIVITY_HOST=0.0.0.0`, `CONNECTIVITY_PUBLIC_URL=http://<BROKER_HOST>:9200`, `docker compose up -d`.
 
+- STUN(선택): 서버에 `CONNECTIVITY_STUN_PORT=3478`을 주면 peer 창에 `UDP 됨`/`UDP 안 됨`이 보인다. 보이기만 하고 경로는 바뀌지 않으니 막아 두어도 된다.
+
 ```text
 # BROKER_HOST로 들어오는 것 (출발: 모든 peer)
 9200/tcp                                          # connectivity
+3478/udp  (선택, STUN을 켰을 때만)
 ```
 
 ## 3. 서버 준비 (두 서버 공통)
