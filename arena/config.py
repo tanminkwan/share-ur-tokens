@@ -116,6 +116,7 @@ class Settings(EnvSettings):
     recorder_readers: list[str] = F("ARENA_RECORDER_READERS", [], _list, "전체 열람 허용 공개키(쉼표 구분)")
     # relay (P10): a peer reached through a connectivity server (arena/peer/relay_link.py)
     peer_relay_hold_sec: float = F("ARENA_PEER_RELAY_HOLD_SEC", 25.0, float, "connectivity 서버에 poll 하나를 붙들어 두는 시간(초)")
+    peer_reach_recheck_sec: float = F("ARENA_PEER_REACH_RECHECK_SEC", 300.0, float, "바깥에서 나에게 닿는지 다시 점검하는 간격(초). 결과가 바뀌면 직접 연결과 중계를 바꾼다")
     peer_relay_concurrency: int = F("ARENA_PEER_RELAY_CONCURRENCY", 8, int, "relay로 받은 요청을 동시에 처리하는 수")
     # ledger rules
     access_log_size: int = F("ARENA_ACCESS_LOG_SIZE", 50, int, "접근 기록 보관 건수")

@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from .reach import REACH_PATH, reach_endpoint
 from .signing import sign_headers
 
 
@@ -76,6 +77,26 @@ class TunnelClient:
                     self._tasks.add(t)
                     t.add_done_callback(self._tasks.discard)
                 yield d
+
+    def reach_route(self):
+        """(path, endpoint) to serve on my own port so a server can check that I am reachable there"""
+        return REACH_PATH, reach_endpoint(self.signer, self.key)
+
+    async def check(self, port: int, timeout: float | None = None) -> dict:
+        """ask the servers in turn whether I can be reached at my port; the first that answers decides.
+        {reachable, source, server} or {reachable: None, error} when no server answered"""
+        last = None
+        for server in self.servers:
+            try:
+                async with httpx.AsyncClient(timeout=timeout or self.margin * 2) as hc:
+                    r = await hc.post(f"{server}/reach", json={"port": port}, headers=self._signed(server, "POST", "/reach"))
+                if r.status_code == 200:
+                    d = r.json()
+                    return {"reachable": bool(d.get("reachable")), "source": d.get("source"), "server": server, "why": d.get("why", "")}
+                last = f"{server}: {r.status_code} {r.text[:200]}"
+            except Exception as e:  # noqa: BLE001
+                last = f"{server}: {type(e).__name__}: {e}"
+        return {"reachable": None, "error": last}
 
     async def _handle(self, hc, local, server: str, req: dict) -> None:
         """one request: into my app, the answer back. One failing never stops the others or the polling"""

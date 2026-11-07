@@ -57,7 +57,7 @@ class Peer:
         self.llm, self.transport, self.log, self.brokers, self.clock = llm, transport, log, brokers, clock
         self.home = home  # PeerHome: what must survive a restart
         self.relay = None  # the transport adapter to a connectivity server, if any (arena/peer/relay_link.py)
-        self.relay_url: str | None = None  # set by the transport adapter when I am reached through a relay (arena/peer/relay_link.py)
+        self.reach_url: str | None = None  # set by the transport adapter when I am reached through a relay (arena/peer/relay_link.py)
         self._a2a_app = None
         saved = home.load_state() if home else {}
         self.nick = saved.get("nick") or config.nick or settings.pen_name_default_nick  # the home's value wins: the owner may have changed it
@@ -202,14 +202,14 @@ class Peer:
     # ---- persistence across restarts ----
     @property
     def url(self) -> str:
-        """the address others reach me at: a relay's address when I am behind one, else my own. Nothing above the
-        transport tells the two apart (P10-P3)"""
-        return self.relay_url or self.config.url
+        """the address others reach me at: the one the transport adapter found (a relay's, or my address as seen from
+        outside), else my own. Nothing above the transport tells them apart (P10-P3)"""
+        return self.reach_url or self.config.url
 
-    async def set_relay_url(self, url: str | None) -> None:
-        """the transport adapter says where I am reached now; the profile is posted again at once if it changed"""
-        if url != self.relay_url:
-            self.relay_url = url
+    async def set_reach_url(self, url: str | None) -> None:
+        """the transport adapter says where I am reached now (None: my own address); posted again at once if it changed"""
+        if url != self.reach_url:
+            self.reach_url = url
             self.log.emit("peer", self.pen, f"알리는 주소: {self.url}")
             await self.repost()
 

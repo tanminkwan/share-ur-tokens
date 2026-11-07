@@ -116,7 +116,7 @@ flowchart TD
 ```
 
 - **되돌아가는 곳은 그 요청의 출발 IP뿐**이고 포트는 peer가 말한 하나(1024 이상)다. 요청이 적은 임의 주소로는 가지 않는다(SSRF 방지, SEC-4). 사설·loopback·link-local 출발 IP는 기본으로 점검하지 않고 `relay`로 본다. 사내망 시험을 위해 `CONNECTIVITY_PROBE_ALLOW`(CIDR 목록)로 허용한다.
-- peer 앱에 경로 `POST /.well-known/arena-reach`를 더한다: `{nonce}`를 받아 `{pub, sig(nonce와 "reach")}`로 답한다. 이 경로는 터널 허용 목록에 없다.
+- 점검받는 쪽은 `POST /.well-known/connectivity-reach`에서 `{nonce}`를 받아 `{key, sig("REACH <nonce>")}`로 답한다(connectivity의 범용 함수 `reach_endpoint`). Arena는 어댑터가 이 경로를 peer의 A2A 앱에 붙인다. 이 경로는 relay로는 닿지 않는다(A2A 경로만 넣는다).
 - 한 키의 점검은 시간당 횟수 제한(`CONNECTIVITY_CHECK_PER_HOUR`).
 - proxy 뒤의 peer는 서버가 보는 출발 IP가 proxy의 것이라 점검이 실패하고 `relay`가 된다. 맞는 결과다.
 - **direct일 때는 붙지 않는다**(Q7). `direct`이면 poll을 하지 않고 지금처럼 자기 주소를 프로필에 올린다. `relay`이면 poll을 시작한다. 주기 점검에서 결과가 바뀌면 전환한다.
@@ -172,4 +172,7 @@ flowchart TD
 - **카드 주소**: `build_a2a_app`의 `url`은 함수일 수 있고, `card_modifier`로 요청마다 지금 주소를 넣는다(설치된 a2a-sdk 1.3에서 동작 확인).
 - **다시 게시**: 주소나 닉네임이 바뀌면 `Peer.repost()`가 마지막 프로필에서 `nick`, `url`, `connections`만 바꿔 버전을 올려 게시한다(LLM 호출 없음).
 - **서버가 사라지면** 클라이언트가 relay 주소를 거두고(`None`) peer는 자기 주소로 돌아가 다시 게시한다. 다음 서버를 차례로 시도한다.
-- 아직(10-C): inbound 점검이 없어서, connectivity 주소를 설정한 peer는 **늘 relay로 붙는다.**
+- **주소 덮어쓰기는 `reach_url`**: relay 주소이거나, direct일 때 바깥에서 본 주소(`ARENA_PUBLIC_HOST`가 없을 때 서버가 본 출발 IP와 내 포트)다. 없으면 `config.url`.
+- **점검이 아무 서버에도 닿지 않으면** 이미 정한 길을 그대로 둔다. 처음이면 relay를 시작한다(서버가 돌아오면 붙는다).
+- **창 머리글**에 `직접 연결됨`·`중계로 연결됨`·`연결 확인 중`을 보인다(peer 안의 상태, 프로필에는 오르지 않음).
+- 아직: 끊긴 relay 때문에 실패한 호출을 다시 시도하는 일(P10-C4)은 하지 않았다. 지금은 호출이 오류로 끝나고 다음 호출이 새 주소로 간다.

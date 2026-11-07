@@ -12,6 +12,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from .reach import CheckLimit, probe, source_allowed
 from .service import ConnectivityService, Refused
 from .signing import SignatureError, verify_headers
 
@@ -85,6 +86,27 @@ def build_connectivity_app(svc: ConnectivityService) -> Starlette:
             return _err(e.status, e.message)
         return Response(out, status_code=status, headers=headers)
 
+    checks = CheckLimit(s.check_per_hour, svc.clock)
+
+    async def reach(r: Request):
+        """can the caller be reached from outside at its port? the answer names the source address seen"""
+        try:
+            key = who(r)
+            port = int(json.loads(await r.body() or b"{}")["port"])
+        except SignatureError as e:
+            return _err(401, str(e))
+        except (ValueError, TypeError, KeyError):
+            return _err(400, "body must be JSON {port: int}")
+        if not 1024 <= port <= 65535:
+            return _err(400, "port must be 1024..65535")
+        if not checks.allow(key):
+            return _err(429, svc.refuse(429, "checks", "too many checks for this key").message)
+        ip = source(r)
+        if not source_allowed(ip, s.probe_allow):
+            return JSONResponse({"ok": True, "reachable": False, "source": ip, "why": "source address is not public"})
+        ok = await probe(ip, port, key, s.reach_timeout_sec)
+        return JSONResponse({"ok": True, "reachable": ok, "source": ip, "why": "" if ok else "no signed answer at that port"})
+
     async def health(_):
         return JSONResponse(svc.health())
 
@@ -92,5 +114,6 @@ def build_connectivity_app(svc: ConnectivityService) -> Starlette:
         Route("/health", health),
         Route("/poll", poll),
         Route("/reply/{request_id}", reply, methods=["POST"]),
+        Route("/reach", reach, methods=["POST"]),
         Route("/r/{key}/{path:path}", tunnel, methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]),
     ])

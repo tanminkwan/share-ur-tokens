@@ -2,6 +2,8 @@ import { h, replace } from '/common/dom.js';
 
 // HeaderView: who this peer is, what kind of peer (its background, arena.css [data-peer]) and who drives it.
 // With `actions`, the owner can rename the peer here, any time (the nickname before the key start; the key start stays).
+const REACH = { direct: '직접 연결됨', relay: '중계로 연결됨', checking: '연결 확인 중' };
+
 export function showKind(me, doc = document) { if (me && me.kind) doc.documentElement.dataset.peer = me.kind; }
 
 export class HeaderView {
@@ -30,6 +32,7 @@ export class HeaderView {
       ...(this.actions ? [h('button', { testid: 'nick-edit', title: '닉네임 바꾸기', onclick: () => this.rename(me) }, '이름 바꾸기')] : []),
       h('span', { class: 'tag kind', testid: 'me-kind' }, me.kind_label),
       h('span', { class: 'tag', testid: 'me-operator' }, me.operator),
+      ...(me.reach ? [h('span', { class: 'tag', testid: 'me-reach', title: '바깥에서 이 peer에 닿는 길' }, REACH[me.reach] || me.reach)] : []),
       h('span', { class: 'tag' }, me.llm ? 'LLM 있음' : 'LLM 없음'),
       h('span', { class: 'tag', testid: 'open-count' }, `열린 알림 ${items.length}`));
   }

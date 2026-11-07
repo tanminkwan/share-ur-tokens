@@ -68,7 +68,7 @@ class World:
         p.relay = RelayLink(p, servers)
         self.tasks.append(asyncio.create_task(p.relay.run()))
         for _ in range(200):
-            if p.relay_url:
+            if p.reach_url:
                 return p
             await asyncio.sleep(0.02)
         raise AssertionError(f"not attached: {p.relay.state}")
@@ -139,7 +139,7 @@ async def test_p10b_when_the_server_goes_the_peer_falls_back_and_moves_to_the_ne
     assert b.url.startswith(server) and b.relay.state["server"] == server
     srv.should_exit = True  # the server goes away
     for _ in range(300):
-        if b.relay_url is None:
+        if b.reach_url is None:
             break
         await asyncio.sleep(0.05)
     assert b.url == b.config.url and world.broker.profiles[b.identity.pub]["url"] == b.config.url
@@ -155,11 +155,102 @@ async def test_p10b_the_peer_attaches_once_the_server_comes(world):
     b.relay = RelayLink(b, [server])
     world.tasks.append(asyncio.create_task(b.relay.run()))
     await asyncio.sleep(0.3)
-    assert b.relay_url is None and b.relay.state["error"]  # not there yet: it keeps trying
+    assert b.reach_url is None and b.relay.state["error"]  # not there yet: it keeps trying
     cs = dataclasses.replace(ConnectivitySettings(), public_url=server, poll_hold_sec=2.0)
     world.servers.append(await serve_background(build_connectivity_app(ConnectivityService(cs)), "127.0.0.1", port))
     for _ in range(200):
-        if b.relay_url:
+        if b.reach_url:
             break
         await asyncio.sleep(0.02)
-    assert b.relay_url == f"{server}/r/{b.identity.pub}"
+    assert b.reach_url == f"{server}/r/{b.identity.pub}"
+
+
+# ---- P10-C: the inbound check decides direct or relay ----
+async def linked(world, p, servers, rounds=1):
+    p.relay = RelayLink(p, servers)
+    await p.relay.run(rounds=rounds)
+    return p
+
+
+async def wait_for(cond, n=200):
+    for _ in range(n):
+        if cond():
+            return True
+        await asyncio.sleep(0.02)
+    return False
+
+
+async def test_p10c_a_peer_reachable_at_its_port_goes_direct_and_does_not_attach(world):
+    svc, server, _ = await world.connectivity(probe_allow=["127.0.0.0/8"])  # a test on loopback: the operator allows it
+    a = await linked(world, await world.peer("a"), [server])
+    assert a.relay.mode == "direct" and a.relay.last_check["source"] == "127.0.0.1"
+    assert a.url == a.config.url and svc.health()["attached"] == 0  # no session on the server
+    assert world.broker.profiles[a.identity.pub]["url"] == a.config.url
+
+
+async def test_p10c_a_peer_not_reachable_attaches_and_is_announced_at_the_relay(world):
+    svc, server, _ = await world.connectivity(probe_allow=["127.0.0.0/8"])
+    b = await linked(world, await world.peer("b", port=False), [server])
+    assert b.relay.mode == "relay" and "no signed answer" in b.relay.last_check["why"]
+    assert await wait_for(lambda: b.reach_url) and b.url == f"{server}/r/{b.identity.pub}"
+    await b.relay.close()
+
+
+async def test_p10c_a_private_source_is_not_tried_unless_allowed(world):
+    svc, server, _ = await world.connectivity()  # nothing allowed: loopback is not public
+    a = await linked(world, await world.peer("a"), [server])
+    assert a.relay.mode == "relay" and a.relay.last_check["why"] == "source address is not public"
+    await a.relay.close()
+
+
+async def test_p10c_when_the_port_stops_answering_the_next_check_moves_to_the_relay(world):
+    _, server, _ = await world.connectivity(probe_allow=["127.0.0.0/8"])
+    a = await world.peer("a")
+    a.relay = RelayLink(a, [server])
+    assert await a.relay.decide() == "direct"
+    world.servers[-1].should_exit = True  # a's own port closes (its server was the last one started)
+    await asyncio.sleep(0.3)
+    assert await a.relay.decide() == "relay"
+    assert await wait_for(lambda: a.reach_url and "/r/" in a.reach_url)
+    assert world.broker.profiles[a.identity.pub]["url"] == a.url  # posted again
+    await a.relay.close()
+
+
+async def test_p10c_the_check_goes_only_back_to_the_source_and_signs_are_checked(world):
+    from connectivity.signing import sign_headers
+    _, server, _ = await world.connectivity(probe_allow=["127.0.0.0/8"], check_per_hour=2)
+    me, other = Identity.generate(), await world.peer("other")
+    other.relay = RelayLink(other, [server])  # serves its own key's answer at its port
+    port = int(other.config.url.rsplit(":", 1)[1])
+
+    async def ask(body):
+        async with httpx.AsyncClient() as hc:
+            return await hc.post(f"{server}/reach", json=body, headers=sign_headers(me.sign_bytes, me.pub, "POST", "/reach"))
+    r = await ask({"port": port, "host": "10.1.2.3"})  # a named host is ignored: only the source is tried
+    assert r.status_code == 200 and r.json()["source"] == "127.0.0.1"
+    assert r.json()["reachable"] is False  # the answer there is signed by another key, not mine
+    assert (await ask({"port": 80})).status_code == 400  # privileged ports are not tried
+    await ask({"port": port})
+    assert (await ask({"port": port})).status_code == 429  # checks per key per hour
+    async with httpx.AsyncClient() as hc:
+        assert (await hc.post(f"{server}/reach", json={"port": port})).status_code == 401
+
+
+async def test_p10c_no_server_answering_keeps_trying_through_the_relay(world):
+    dead = f"http://127.0.0.1:{free_port()}"
+    a = await world.peer("a")
+    a.relay = RelayLink(a, [dead])
+    assert await a.relay.decide() == "relay" and a.relay.last_check["reachable"] is None
+    assert a.relay.state["error"]
+    await a.relay.close()
+
+
+async def test_p10b6_the_owners_window_shows_how_the_peer_is_reached(world):
+    from arena.bundled.owner_service import OwnerService
+    from arena.peer.assistant import EventAssistant
+    _, server, _ = await world.connectivity(probe_allow=["127.0.0.0/8"])
+    desk = OwnerDesk(lambda: 0.0, keep=10)
+    a = await world.peer("a", apps=[EventAssistant(world.s)])
+    assert OwnerService(a, desk).state()["me"]["reach"] is None  # no connectivity server set: nothing to show
+    await linked(world, a, [server])
+    assert OwnerService(a, desk).state()["me"]["reach"] == "direct"

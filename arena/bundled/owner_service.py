@@ -51,7 +51,7 @@ class OwnerService:
         events = [{"event_id": st.event_id, "title": st.title, "role": st.role, "drive": st.drive, "closed": st.closed}
                   for st in self._asst.events.values()]
         from .peer_kinds import kind_view
-        return {"me": {"pen": p.pen, "nick": p.nick, "pub": p.identity.pub, "operator": p.operator(), "llm": llm_available(p.llm), **kind_view(p.config.kind)},
+        return {"me": {"pen": p.pen, "nick": p.nick, "reach": p.relay.state["mode"] if p.relay else None, "pub": p.identity.pub, "operator": p.operator(), "llm": llm_available(p.llm), **kind_view(p.config.kind)},
                 "events": sorted(events, key=lambda x: (x["closed"], x["title"])), "open_items": len(self.desk.list("open"))}
 
     async def set_nick(self, nick: str) -> dict:
