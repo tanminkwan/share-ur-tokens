@@ -1,0 +1,21 @@
+# connectivity server: a general-purpose service that lets a server with no inbound access be reached (a transparent HTTP
+# tunnel over long poll) and tells a server whether it can be reached from outside. It knows nothing of Agent Arena.
+# Runs on its own, on a host that everyone can reach. From this directory:
+#   cp .env.example .env     (then set CONNECTIVITY_PUBLIC_URL to the address others use, e.g. http://10.10.20.11:9200)
+#   docker compose up -d
+# The image comes from deploy/build.sh (the Agent Arena image carries this package too; no build here). Network: host.
+# Settings are CONNECTIVITY_* only (connectivity/config.py). It keeps no state: no volume.
+# A peer uses it with ARENA_PERSONAL_PEER_CONNECTIVITY=<CONNECTIVITY_PUBLIC_URL>. Guide: dev/phase10/design.md
+services:
+  connectivity:
+    image: ${ARENA_IMAGE:-agent-arena:latest}
+    command: ["connectivity"]
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      CONNECTIVITY_HOST: ${CONNECTIVITY_HOST:-127.0.0.1}
+      CONNECTIVITY_PORT: ${CONNECTIVITY_PORT:-9200}
+      CONNECTIVITY_PUBLIC_URL: ${CONNECTIVITY_PUBLIC_URL:-}

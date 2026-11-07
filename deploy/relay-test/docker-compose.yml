@@ -1,0 +1,93 @@
+# relay test: two peers that cannot reach each other talk through the connectivity server (dev/phase10, P10-I2, I4).
+#   net-a: genesis, connectivity, peer-a         net-b: genesis, connectivity, peer-b
+# peer-a and peer-b share no network, so neither can open the other's port; only genesis (broker and recorder) and the
+# connectivity server sit on both. Each peer checks whether it can be reached (the connectivity server refuses to probe a
+# private source address), finds it cannot, attaches, and posts its relay address as its url. Every path is TCP; the one UDP
+# use is the STUN check each peer makes at start, which it only shows.
+# Human mode, no LLM. From this directory:
+#   docker compose up -d      (image from deploy/build.sh)
+#   peer-a console: http://127.0.0.1:${RELAY_TEST_A_CONSOLE:-19183}   peer-b console: http://127.0.0.1:${RELAY_TEST_B_CONSOLE:-19283}
+#   token: relay-test (or RELAY_TEST_TOKEN)
+#   docker compose down -v    (throws the test ledger away)
+# The automated version: ARENA_TEST_DOCKER=1 pytest tests/test_p10_docker.py. Guide: dev/phase10/test-results.md
+x-arena: &arena
+  image: ${ARENA_IMAGE:-agent-arena:latest}
+  restart: "no"
+x-peer-env: &peer-env
+  ARENA_KEY_STORE: file
+  ARENA_LLM_BACKEND: none
+  ARENA_HOST: 0.0.0.0
+  ARENA_PERSONAL_MODE: human
+  ARENA_PERSONAL_PEER_HOME: /app/data/peer
+  ARENA_PERSONAL_PEER_BROKERS: public=http://genesis:9100
+  ARENA_PERSONAL_PEER_CONNECTIVITY: http://connectivity:9200
+  ARENA_PERSONAL_WEB_HOST: 0.0.0.0
+  ARENA_PERSONAL_WEB_TOKEN: ${RELAY_TEST_TOKEN:-relay-test}
+  HTTP_PROXY: ""
+  HTTPS_PROXY: ""
+  http_proxy: ""
+  https_proxy: ""
+
+services:
+  genesis:
+    <<: *arena
+    command: ["arena.genesis"]
+    networks: [net-a, net-b]
+    environment:
+      ARENA_KEY_STORE: file
+      ARENA_HOST: 0.0.0.0
+      ARENA_PUBLIC_HOST: genesis
+      ARENA_GENESIS_DIR: /app/data/genesis
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+    volumes:
+      - genesis:/app/data
+
+  connectivity:
+    <<: *arena
+    command: ["connectivity"]
+    networks: [net-a, net-b]
+    environment:
+      CONNECTIVITY_HOST: 0.0.0.0
+      CONNECTIVITY_PORT: 9200
+      CONNECTIVITY_PUBLIC_URL: http://connectivity:9200
+      CONNECTIVITY_PATHS: /.well-known/agent-card.json,/rpc,/a2a/notify
+      CONNECTIVITY_CHECK_PER_HOUR: 1000
+      CONNECTIVITY_STUN_PORT: 3478     # UDP between the containers works here: the peers show "UDP 됨" (only shown, no path uses it)
+
+  peer-a:
+    <<: *arena
+    command: ["arena.peers.personal"]
+    networks: [net-a]
+    environment:
+      <<: *peer-env
+      ARENA_PUBLIC_HOST: peer-a
+      ARENA_PERSONAL_PEER_NICK: 가람
+    ports:
+      - "127.0.0.1:${RELAY_TEST_A_CONSOLE:-19183}:9183"
+    volumes:
+      - peer-a:/app/data
+
+  peer-b:
+    <<: *arena
+    command: ["arena.peers.personal"]
+    networks: [net-b]
+    environment:
+      <<: *peer-env
+      ARENA_PUBLIC_HOST: peer-b
+      ARENA_PERSONAL_PEER_NICK: 나래
+    ports:
+      - "127.0.0.1:${RELAY_TEST_B_CONSOLE:-19283}:9183"
+    volumes:
+      - peer-b:/app/data
+
+networks:
+  net-a: {}
+  net-b: {}
+
+volumes:
+  genesis:
+  peer-a:
+  peer-b:

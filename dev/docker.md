@@ -17,6 +17,8 @@ flowchart LR
     IMG --> SP["deploy/service-peer<br/>+ specs/"]
     IMG --> SE["deploy/search-peer<br/>(embedding 서버 필요)"]
     IMG --> SX["deploy/sphinx-peer<br/>(사람이 운전)"]
+    IMG --> CN["deploy/connectivity<br/>(범용 relay, 10단계)"]
+    IMG --> RT["deploy/relay-test<br/>(서로 닿지 않는 두 네트워크 시험)"]
     LP & KP & FP & AP & SP & SE & SX -. "broker에 연결될 때까지 계속 시도" .-> TB
 ```
 
@@ -30,6 +32,8 @@ flowchart LR
 | `deploy/service-peer` | `arena.peers.service --spec specs/<파일>` | api 9161 | broker, `specs/`의 spec 파일과 함수 |
 | `deploy/search-peer` | `arena.peers.search` | A2A 9130 | broker, embedding 서버(`ARENA_EMBED_URL`) |
 | `deploy/sphinx-peer` | `arena.peers.sphinx` | A2A 9195, 사람의 창(console) 9196 | broker, 사람(신청자를 만나 정함). 창의 토큰은 home의 `web-token` |
+| `deploy/connectivity` | `connectivity` (Arena 것이 아닌 범용 서비스) | HTTP 9200, STUN 3478/udp(켰을 때만) | 없음. 설정은 `CONNECTIVITY_*`만, 상태 없음(volume 없음). peer는 `ARENA_PERSONAL_PEER_CONNECTIVITY=<주소>` |
+| `deploy/relay-test` | genesis, connectivity, 사람 peer 둘 | 소유자 창 `127.0.0.1:19183`, `19283` | **시험용**. host network가 아니라 공유하지 않는 docker 네트워크 둘(`dev/phase10/test-results.md` 2절) |
 
 ## 2. 쓰는 법
 

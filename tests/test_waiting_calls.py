@@ -26,7 +26,7 @@ async def test_a_contract_the_other_owner_is_still_deciding_is_finished_when_the
         asked.append((msg, {"group_id": group, "event_id": event}))
         return {"ok": False, "pending": True, "task_id": "task-1", "url": "mem://a", "error": "still waiting: waiting for the owner (a person) to answer"}
 
-    async def check_task(url, task_id, wait=None):
+    async def check_task(url, task_id, wait=None, pub=None):
         looks.append(task_id)
         if len(looks) == 1:
             return {"ok": False, "pending": True, "task_id": task_id, "url": url, "error": "still waiting: waiting for the owner (a person) to answer"}
@@ -61,7 +61,7 @@ async def test_check_pending_now_and_a_refusal_ends_the_wait(eco):
                  {"role": "member", "peer_pub": eco.a.identity.pub, "peer_url": "mem://a", "body": {}, "private": None})
     assert out["pending"] and "거절이 아니다" in out["note"]
 
-    async def refused(url, task_id, wait=None):
+    async def refused(url, task_id, wait=None, pub=None):
         return {"ok": False, "error": "the owner said no"}
     eco.host.check_task = refused
     r = await check_pending(asst(eco.host), ctx(eco.host), st)

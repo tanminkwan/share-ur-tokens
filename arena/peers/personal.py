@@ -71,12 +71,18 @@ def build(s: Settings, extra_apps: list = (), kind: str = "personal") -> tuple[P
 async def run(s: Settings, built=None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     peer, _, _ = built or build(s)
+    if s.personal_peer_connectivity:  # reached through a connectivity server too (P10); the layers above never know
+        from ..peer.relay_link import RelayLink
+        peer.relay = RelayLink(peer, s.personal_peer_connectivity)  # before the windows open: they show "checking" at once
     await serve_background(peer.a2a_app(), s.host, s.personal_peer_port)
     peer.log.emit("peer", peer.pen, f"A2A {peer.config.url} · operator {peer.operator()}")
     await peer.start()  # the screen apps open their local web here
     for app in peer.apps:
         if hasattr(app, "address"):
             print(f"{app.name}: {app.address}", flush=True)
+    if peer.relay:
+        await peer.relay.start()  # before the first post: the broker lists an address others can open
+        asyncio.create_task(peer.relay.run(started=True))
     await Presence(peer).keep()  # posts the profile, keeps connecting to brokers that do not answer yet
 
 

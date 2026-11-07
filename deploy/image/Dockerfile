@@ -7,6 +7,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY arena ./arena
+COPY connectivity ./connectivity
 # keys, ledgers and state live in /app/data (a volume); the process does not run as root
 RUN useradd --create-home --uid 10001 arena && mkdir -p /app/data && chown arena:arena /app/data
 USER arena

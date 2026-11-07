@@ -10,6 +10,7 @@ from typing import Awaitable, Callable, Protocol
 
 import httpx
 from a2a.client import ClientConfig, create_client
+from a2a.client.errors import AgentCardResolutionError
 from a2a.helpers.proto_helpers import get_message_text, new_text_message
 from a2a.server.agent_execution import AgentExecutor
 from a2a.server.request_handlers.default_request_handler_v2 import DefaultRequestHandlerV2
@@ -26,6 +27,22 @@ from .config import Settings
 Handler = Callable[..., Awaitable[dict]]  # handler(msg) or handler(msg, meta)
 RPC_PATH = "/rpc"
 H_GROUP, H_EVENT = "X-Arena-Group", "X-Arena-Event"
+
+
+def never_delivered(e: BaseException) -> bool:
+    """did this failure surely happen before the other peer got the message? Its agent card could not be fetched (that comes
+    first), the connection was never made, or the server answered 503 (unavailable: nothing was processed). Only such a call
+    may be sent again; a timeout or a bad answer may come after the peer acted on it (P10-C4)"""
+    seen, x = set(), e
+    while x is not None and id(x) not in seen:
+        seen.add(id(x))
+        if isinstance(x, (AgentCardResolutionError, httpx.ConnectError, httpx.ConnectTimeout)):
+            return True
+        status = getattr(x, "status_code", None) or getattr(getattr(x, "response", None), "status_code", None)
+        if status == 503:
+            return True
+        x = x.__cause__  # only what it was explicitly raised from: not what happened to be handled at the time
+    return False
 
 
 class Transport(Protocol):
@@ -63,11 +80,14 @@ class _JsonExecutor(AgentExecutor):
         pass
 
 
-def build_a2a_app(name: str, description: str, url: str, skills: list[str], handler: Handler, version: str = "1.0",
+def build_a2a_app(name: str, description: str, url, skills: list[str], handler: Handler, version: str = "1.0",
                   answer_wait: float = 5.0, task_store=None, push: bool = True, streaming: bool = True, routes=()) -> Starlette:
     """task_store: where slow answers' tasks are kept (a FileTaskStore in the peer's home survives a restart);
     push: notify a caller's webhook when a task changes (arena/a2a_push.py); streaming: accept SSE (message:stream);
-    routes: more routes on the same server (the peer's own webhook)"""
+    routes: more routes on the same server (the peer's own webhook); url: an address, or a function giving the address now
+    (it can change while the server runs: the card is fitted to it on each request)"""
+    url_now = url if callable(url) else (lambda: url)
+    url = url_now()
     card = AgentCard(
         name=name, description=description, version=version,
         supported_interfaces=[AgentInterface(url=url.rstrip("/") + RPC_PATH, protocol_binding="JSONRPC", protocol_version="1.0")],
@@ -81,7 +101,15 @@ def build_a2a_app(name: str, description: str, url: str, skills: list[str], hand
                   "push_sender": BasePushNotificationSender(httpx.AsyncClient(timeout=10.0), store, push_url_validator=push_url_ok)}
     rh = DefaultRequestHandlerV2(agent_executor=_JsonExecutor(handler, answer_wait), task_store=task_store or InMemoryTaskStore(), agent_card=card,
                                  **pushes)
-    return Starlette(routes=create_agent_card_routes(card) + create_jsonrpc_routes(rh, rpc_url=RPC_PATH) + list(routes))
+    async def fitted(c):
+        want = url_now().rstrip("/") + RPC_PATH
+        if c.supported_interfaces[0].url == want:
+            return c
+        out = AgentCard()
+        out.CopyFrom(c)
+        out.supported_interfaces[0].url = want
+        return out
+    return Starlette(routes=create_agent_card_routes(card, card_modifier=fitted) + create_jsonrpc_routes(rh, rpc_url=RPC_PATH) + list(routes))
 
 
 class A2ATransport:

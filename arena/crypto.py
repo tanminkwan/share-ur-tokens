@@ -55,6 +55,10 @@ class Identity:
         me.save(path)
         return me
 
+    def sign_bytes(self, data: bytes) -> bytes:
+        """a raw ed25519 signature of bytes (for a service with its own signing scheme, e.g. the connectivity server)"""
+        return self._k.sign(data)
+
     def private_hex(self) -> str:
         """the private key as hex: only for a key store or an encrypted backup, never for a message or a log"""
         return self._k.private_bytes_raw().hex()

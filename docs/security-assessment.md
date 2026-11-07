@@ -27,7 +27,9 @@ flowchart LR
         PW["console·desk·chat 창 918x<br/>(token, 소유자 제어)"]
         SP["특수 peer A2A·api<br/>9130 9150 9160/9161 9170 9180 9190/9191 9195"]
     end
-    I --> B & RA & RP & GD & PA & SP
+    CN["connectivity 9200<br/>(10단계, 선택)<br/>relay·inbound 점검"]
+    I --> B & RA & RP & GD & PA & SP & CN
+    CN -->|"붙은 peer에게만 전달<br/>(peer가 poll로 가져감)"| PA
     I -.->|"창을 0.0.0.0에 열었을 때"| OW & PW
     PA -->|"남이 준 주소로 요청<br/>(webhook, 프로필 URL, 앱 배포, URL 영역)"| X["임의의 주소<br/>(사설망 포함)"]
 ```
@@ -39,6 +41,7 @@ flowchart LR
 | recorder API 공개 조회 | `/log`, `/entries`, `/trust`, `/events`, `/track`, `/content`, `/links`, `/delegates`, `/health`, `/codes`, `/codebooks`는 서명 없이. `/chain`, `/access-log`는 허용된 키의 서명 요청만 | `arena/recorder/api.py`, `dev/protocol.md` 4.1 |
 | peer A2A | 누구나 메시지를 보낼 수 있다. 이벤트 메시지는 본문에 서명(protocol 6.4), 그룹·이벤트 머리를 먼저 확인(6.2) | `dev/protocol.md` 6절 |
 | 사람의 창 | Bearer token이 맞아야 `/api`. 페이지 자체는 열림. 기본 듣는 주소는 `127.0.0.1` | `arena/bundled/web_api.py` `token_guard`, `ARENA_PERSONAL_WEB_HOST`, `ARENA_GENESIS_GOD_WEB_HOST` |
+| connectivity 서버(10단계, 선택) | `/r/<키>/…`는 누구나 부른다. 닿는 곳은 그 키로 붙은 peer의 허용 경로뿐. 붙기(`/poll`, `/reply`)와 점검(`/reach`)은 키 서명, `/health`는 숫자만 | `connectivity/api.py`, `dev/phase10/design.md` |
 | 키 교체·위임 | **네트워크에 없다.** 멈춘 폴더에서 명령으로, god은 오프라인 서명 | `arena/ceremony/` |
 
 ## 2. 요약
@@ -59,6 +62,7 @@ flowchart LR
 | S12 | 시간과 재전송 | 서명 요청 허용 폭 60초, 원장 nonce | 낮음 |
 | S13 | 배치 | 컨테이너는 root가 아님, 비밀은 `.env`. host network라 듣는 주소가 곧 노출 | 낮음(배치 실수면 높음) |
 | S14 | 기록과 감시 | 원장 열람 시도는 접근 기록에 남는다. 거절·과다 요청을 한곳에 모으는 기록은 없다 | 중간 |
+| S15 | connectivity 서버(relay) | 붙은 키에게만 전달, 경로 허용 목록, 한도는 있다. 지나가는 내용을 운영자가 읽을 수 있고, 누구나 붙을 수 있다(허용 목록이 없으면) | 중간 |
 
 ## 3. 범주별
 
@@ -161,6 +165,33 @@ flowchart LR
 - **조치(운영자)**: reverse proxy 접근 로그와 오류율을 감시 도구로 모은다. 접근 기록의 거절 건수를 본다(관전 창의 "원장 열람 기록").
 - **조치(플랫폼)**: `SEC-12` 거절 사유별 건수와 키별 요청 수를 내는 운영 지표(관전 창에 표시).
 
+### S15 connectivity 서버(relay) — 중간
+
+> 2026-11-08, 10단계(브랜치 `connectivity-20261106`)에서 더함. 서버는 Agent Arena와 상관없는 범용 서비스이고(`connectivity/`), Arena에서 그것을 아는 곳은 `arena/peer/relay_link.py` 하나다.
+
+- **현황**:
+  - 포트 9200(TCP, 평문 HTTP, `CONNECTIVITY_PORT`). STUN(UDP, `CONNECTIVITY_STUN_PORT`)은 기본 꺼짐. 켜면 속성 없는 binding request(20바이트)에만 32바이트(IPv6 44바이트) 답을 보내고 다른 것에는 답하지 않는다. 출발 주소를 위장한 반사 공격의 증폭률이 낮다(약 1.6배). 서버의 `/info`는 STUN 포트만 알린다.
+  - `/r/<키>/<경로>`는 서명 없이 누구나 부르지만 **그 키로 지금 붙어 있는 peer에게만** 전달한다. 임의 주소로 가는 열린 proxy가 아니다.
+  - 전달하는 경로는 `CONNECTIVITY_PATHS`로 좁힌다(Arena: 카드, `/rpc`, `/a2a/notify`). peer도 자기 쪽에서 같은 목록으로 거른다. `cookie`, `set-cookie`, hop-by-hop 헤더는 넘기지 않는다.
+  - 한도: 본문 크기(`MAX_BODY_BYTES`, 요청과 응답), 출발 IP 하나가 한 키에 보내는 초당 수(`RATE_PER_SEC`), 키당 동시 전달 수(`MAX_INFLIGHT`), 붙은 키 수(`MAX_ATTACHED`), 응답 대기(`REQUEST_TIMEOUT_SEC`), poll이 끊기면 `ATTACH_GRACE_SEC` 뒤 session을 닫는다. 거절은 사유별로 `/health`의 `refused`에 센다.
+  - 붙기와 응답은 키 서명(`X-Conn-*`, 시각 허용 폭 `SIG_WINDOW_SEC`)이 있어야 한다. 남의 요청에는 응답할 수 없다.
+  - inbound 점검(`/reach`)은 요청이 온 **출발 IP로만**, 1024 이상 포트 하나에, 고정 경로로 되돌아간다. 사설·loopback·link-local은 `CONNECTIVITY_PROBE_ALLOW`에 있을 때만. 키당 시간당 횟수 제한(`CHECK_PER_HOUR`). 되돌아갈 때 proxy 환경 변수와 redirect를 따르지 않는다.
+  - 내용을 저장하지 않는다(메모리에서 바로 전달, 로그에 내용 없음).
+- **위험**:
+  - **내용 열람**: A2A 메시지는 서명되어 있어 바꾸면 들키지만 암호화되어 있지 않다. relay 운영자(또는 TLS 없는 구간의 누구나)는 지나가는 내용을 읽는다(P10-H2).
+  - **누구나 붙기**: `CONNECTIVITY_ALLOW_KEYS_FILE`이 없으면 키를 만든 누구나 붙어 서버의 주소 아래에서 답한다. 경로 허용 목록이 비어 있으면 아무 내용(HTML 포함)이나 서버 도메인으로 내보낼 수 있다(피싱 발판).
+  - **출발 IP 위장**: `CONNECTIVITY_TRUST_FORWARDED=true`를 앞단 없이 켜면 `X-Forwarded-For`로 출발 IP를 꾸며 점검이 남의 주소(1024 이상 포트, 고정 경로 POST)로 가게 할 수 있다.
+  - **가용성**: 붙은 peer들의 길이 한 서버에 모인다(서버 분산은 이 단계 밖). 서버가 내려가면 peer는 다른 서버로 옮기거나 자기 주소로 돌아간다.
+  - **서명 키 공유**: peer는 Arena 키로 connectivity 서명도 한다. 서명 대상이 고정 머리(`REACH `, `<METHOD> <경로> <시각>`)로 시작하고 Arena 서명은 정규 JSON(`{`로 시작)이라 서로 옮겨 쓸 수 없다.
+- **조치(운영자)**:
+  - 앞에 TLS reverse proxy를 두고 `CONNECTIVITY_TRUST_FORWARDED=true`는 그 proxy가 `X-Forwarded-For`를 덮어쓸 때만 켠다.
+  - `CONNECTIVITY_PATHS`는 늘 채운다(`deploy/connectivity/.env.example`의 값).
+  - 닫힌 커뮤니티면 `CONNECTIVITY_ALLOW_KEYS_FILE`로 붙을 키를 정한다.
+  - `/health`의 `refused`를 감시한다.
+- **조치(플랫폼)**:
+  - `SEC-13`: 끝과 끝 사이 암호화(P10-H2, 상대 공개키로 본문 봉인). relay 운영자를 믿지 않아도 되게 한다.
+  - `SEC-14`: 붙기를 broker 구성원과 잇기(서버 분산 때, 설계 9절).
+
 ## 4. 권장 배치
 
 ```mermaid
@@ -193,7 +224,8 @@ flowchart LR
 | **공개 직후** | 닫힌 커뮤니티면 공개 조회 설정 끄기 | S10 |
 | | 접근 로그·오류율 감시, 원장 백업과 디스크 감시 | S9, S14 |
 | | 신뢰 배포자 좁히기, 컨테이너 격리 | S7 |
-| **플랫폼 개선 후보** | `SEC-4`(SSRF 공통 차단), `SEC-2`·`SEC-3`(쓰기 한도), `SEC-5`(LLM 비용 상한), `SEC-7`(창 token 만기), `SEC-1`(TLS 설정), `SEC-9`(앱 격리), `SEC-11`, `SEC-12`, `SEC-6`, `SEC-8`, `SEC-10` | |
+| | connectivity 서버를 쓰면: TLS 앞단, `CONNECTIVITY_PATHS` 채우기, 닫힌 커뮤니티면 붙을 키 목록 | S15 |
+| **플랫폼 개선 후보** | `SEC-4`(SSRF 공통 차단), `SEC-2`·`SEC-3`(쓰기 한도), `SEC-5`(LLM 비용 상한), `SEC-7`(창 token 만기), `SEC-1`(TLS 설정), `SEC-9`(앱 격리), `SEC-11`, `SEC-12`, `SEC-6`, `SEC-8`, `SEC-10`, `SEC-13`, `SEC-14` | |
 
 플랫폼 개선 후보 가운데 **인터넷 공개 전에 코드로 막는 편이 나은 것**은 `SEC-4`(운영자가 egress를 놓치면 내부망이 열린다)와 `SEC-5`(비용이 바로 난다)다.
 
@@ -211,6 +243,7 @@ flowchart LR
 | 크기 상한(항목 4,096 bytes, free-form 256 bytes) | 원장에 큰 내용 싣기 |
 | 창의 token(fragment, sessionStorage, 상수 시간 비교), 글로만 넣기 | token의 서버 로그 노출, XSS |
 | 컨테이너 비 root, 비밀은 `.env` | 이미지에서 비밀 새기, 컨테이너 탈출의 일부 |
+| connectivity: 붙은 키에게만 전달, 경로 허용 목록, 출발 IP로만 되돌아가는 점검 | 열린 proxy, 점검을 이용한 남의 주소 두드리기 |
 
 ## 7. 이 진단의 한계
 

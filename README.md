@@ -64,6 +64,7 @@ flowchart TB
 - **6단계 진행 중**: 여러 이벤트에 공통인 요소(제출 받기, 평가, 봉인 묶음), API를 제공하는 peer 틀, 개인 키 관리, 공동 서명, 원장 없는 그룹, 사람의 창(console·desk·chat, 한 가지 모양), 스핑크스. [dev/phase6](dev/phase6)
 - **8단계 완료(뿌리 키의 생성과 소멸)**: god 열쇠는 오프라인에서 만들고 서명만 옮기는 세리머니, 첫 기록자 열쇠는 디스크에 쓰지 않고 넘긴 뒤 소멸, 증인이 서명한 폐기 선언, 감사는 관찰자 열쇠로. [dev/phase8/test-results.md](dev/phase8/test-results.md)
 - **가지 공동체를 만드는 길**: god이 대리인(스핑크스)을 원장에 지정하고, 뿌리 원장은 대리인의 통과 증명서(또는 god 승인)가 있는 가지만 받는다. 얼마나 자주 허락할지는 재단 peer가 기준을 내고 스핑크스가 지킨다. [dev/founding/test-results.md](dev/founding/test-results.md)
+- **9단계(필명)·10단계(connectivity)**: 닉네임은 peer가 정하고 공개키 앞 글자가 구분한다([dev/phase9](dev/phase9)). 들어오는 포트를 열 수 없는 peer는 범용 connectivity 서버를 거쳐 닿는다. 스스로 바깥에서 닿는지 점검해 direct와 relay를 고르고, TCP만 쓴다. Arena의 윗층은 이 서버를 모른다([dev/phase10](dev/phase10), 브랜치 `connectivity-20261106`).
 - 자동 테스트 594개(593 통과, 1개는 선택 실행), 커버리지 94.5%. [dev/test-report.md](dev/test-report.md)
 - **기준 네트워크의 제네시스는 아직이다.** 공개 출시 때 세리머니로 한 번 하고, 첫 열쇠와 제네시스 해시를 이 README, 백서 5.5절, 설정 기본값, 서명된 태그에 함께 공개한다.
 
@@ -142,7 +143,8 @@ peer가 진짜 원장만 믿게 하려면 `.env`에 뿌리 값을 둔다: `ARENA
 | [dev/app-guide.md](dev/app-guide.md) | **앱 개발 규약집**: 앱 구조, 능력 인터페이스, 문맥, 원장 규약, 등록과 배포, 어댑터. 외부 개발자는 `arena.sdk`만 쓴다 |
 | [dev/test-report.md](dev/test-report.md) | **테스트 결과서**: 테스트 종류와 개수, 패키지별 커버리지와 기준선, 덜 덮인 곳 |
 | [dev/plan.md](dev/plan.md) | **개발 계획**: 원칙, 생태계가 자라는 방향, 단계 나눔 |
-| [dev/phase1](dev/phase1) ~ [dev/phase6](dev/phase6), [dev/phase8](dev/phase8) | 단계별 요구사항, 설계, 테스트 결과, 실제 실행 증거(8단계: 뿌리 열쇠 세리머니) |
+| [dev/phase1](dev/phase1) ~ [dev/phase6](dev/phase6), [dev/phase8](dev/phase8) ~ [dev/phase10](dev/phase10) | 단계별 요구사항, 설계, 테스트 결과, 실제 실행 증거(8단계: 뿌리 열쇠 세리머니, 10단계: 서로 닿지 않는 두 네트워크의 peer가 relay로 이벤트 진행) |
+| [connectivity/](connectivity/) | **connectivity 서버**(10단계): Agent Arena와 상관없는 범용 서비스. inbound가 막힌 서버를 long poll 터널로 닿게 하고, 바깥에서 닿는지 점검해 준다. `python -m connectivity`, 배치 `deploy/connectivity` |
 | [dev/acceptance-rps.md](dev/acceptance-rps.md) | 플랫폼 인수 절차: 앱 없는 가위바위보 |
 | [arena/](arena/) | **플랫폼 패키지** |
 | [docs/](docs/) | 기획 단계 문서(시스템 개요, broker, A2A 거래, 신뢰와 보안, 다른 제품과 비교, 해커톤 신청서). 지금 구조와 다른 곳이 있으면 `dev/`와 코드가 맞다 |
