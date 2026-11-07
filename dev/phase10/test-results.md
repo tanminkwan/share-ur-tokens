@@ -107,3 +107,17 @@ flowchart LR
 | 실제 프로세스(docker) | `deploy/relay-test`에 `CONNECTIVITY_STUN_PORT=3478`. 두 peer 창이 `UDP 됨`, 길은 그대로 relay(TCP), 그 위에서 이벤트 전체와 재시작까지 | 2회 연속 통과 |
 
 - UDP가 막힌 경우의 실제 프로세스 시험은 없다(컨테이너 안에서 UDP만 막을 도구가 이미지에 없다). 막혔을 때 `udp: false`가 되고 아무것도 바뀌지 않는 것은 loopback 시험이 확인한다. 어떤 경로도 UDP를 쓰지 않으므로 P10-I4(UDP 막힘에서도 모든 일이 됨)는 그대로다.
+
+## 7. 시험 서버(10.10.20.11)에서 relay 전환 (2026-11-08)
+
+> 사용자: "2번으로 relay 시험해 줘", "니가 알아서 test 해". 원장과 창에 흔적이 남지 않게 없는 op(`ping`)만 보냈다.
+
+| 단계 | 결과 |
+|---|---|
+| connectivity 서버(`deploy/connectivity`, 9200/tcp, STUN 3478/udp)에서 사내망 점검 허용(`CONNECTIVITY_PROBE_ALLOW`)을 뺌 | 사람 peer A, B는 다시 띄우지 않음 |
+| 다음 점검(300초 주기)에서 둘 다 스스로 relay로 | 프로필이 relay 주소로 다시 게시, 창 `relay`, 서버에 붙은 키 2 |
+| A→B, B→A를 broker가 알려 준 relay 주소로 | 둘 다 답함(약 35ms), 서버가 중계한 바이트 0 → 3,448. 소유자 창 경로(`/api/state`)는 relay로 404 |
+| 허용을 되돌리며 서버 재시작 | 둘 다 2~6초 안에 새 서버에 다시 붙고 relay로 통신됨 |
+| 다음 점검에서 둘 다 direct로 | 자기 주소로 다시 게시, 직접 통신 양방향 정상. poll이 끊긴 지 약 60초 뒤 서버의 붙은 키 0 |
+
+찾은 것: 서버가 재시작되는 동안 두 peer가 **자기 주소를 몇 초 게시했다가** 다시 붙자 relay 주소를 또 게시했다(재시작마다 두 번). 정말 막힌 peer라면 그동안 아무도 열 수 없는 주소를 알린다. 고침: relay로 판정된 peer는 끊긴 동안 relay 주소를 그대로 둔다(design 12절). 시험: `test_p10b_when_the_server_goes_the_peer_keeps_its_relay_address_until_it_attaches_again`(주소와 프로필 버전이 그대로, 같은 서버에 다시 붙어도 게시 없음), `test_p10b_when_the_server_goes_for_good_the_peer_moves_to_the_next_with_one_post`(다른 서버로 옮길 때 게시 한 번).

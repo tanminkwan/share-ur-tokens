@@ -38,10 +38,15 @@ class RelayLink:
         self._relay: asyncio.Task | None = None
 
     async def _on_base(self, base: str | None) -> None:
+        """a new relay address is posted at once. A dropped relay changes nothing others see: my own address would not help
+        (I was found unreachable there), the server is likely back soon, and calls in the gap are sent again by the caller
+        (P10-C4). Another server, or the next check finding me reachable, is what changes the address"""
         if self.mode != "relay":
             return
-        if base is None and self.client.last_error:
-            self.peer.log.emit("peer", self.peer.pen, f"relay 연결 끊김, 다시 붙는 중: {self.client.last_error[:200]}")
+        if base is None:
+            if self.client.last_error:
+                self.peer.log.emit("peer", self.peer.pen, f"relay 연결 끊김, 주소는 그대로 두고 다시 붙는 중: {self.client.last_error[:200]}")
+            return
         await self.peer.set_reach_url(base)
 
     async def decide(self) -> str:
