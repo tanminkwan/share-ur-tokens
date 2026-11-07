@@ -290,3 +290,99 @@ async def test_p10e_a_repost_before_any_post_posts_nothing(world):
     assert world.broker.profiles.get(b.identity.pub) is None and b.url == "http://example.invalid/r/x"
     await b.advertise()
     assert world.broker.profiles[b.identity.pub]["url"] == "http://example.invalid/r/x"
+
+
+# ---- P10-C4: a call the other peer surely never got is sent again, to where it is now ----
+
+async def restart_at(world, server):
+    """a connectivity server comes back at the same address (a restart): nobody is attached to it yet"""
+    port = int(server.rsplit(":", 1)[1])
+    cs = dataclasses.replace(ConnectivitySettings(), public_url=server, poll_hold_sec=2.0)
+    for _ in range(50):
+        try:
+            world.servers.append(await serve_background(build_connectivity_app(ConnectivityService(cs)), "127.0.0.1", port))
+            return
+        except Exception:  # noqa: BLE001  (the old socket is not let go yet)
+            await asyncio.sleep(0.05)
+    raise AssertionError("could not start the server again")
+
+
+async def test_p10c4_a_call_while_the_relay_is_down_goes_through_once_the_peer_is_back(world):
+    world.s = dataclasses.replace(world.s, peer_call_retries=5, peer_call_retry_sec=0.1)
+    _, server, srv = await world.connectivity()
+    b = await world.behind(await world.peer("b", FakeOwner(yes=True, why="좋다"), [AskOwner()], port=False), [server])
+    a = await world.peer("a")
+    srv.should_exit = True  # the relay restarts: b is not reachable for a moment
+    assert await wait_for(lambda: b.reach_url is None, 300)
+    call = asyncio.create_task(a.call_peer(b.identity.pub, engage(b.identity.pub)))
+    await asyncio.sleep(0.3)
+    assert not call.done()  # not an error at once: it is trying again
+    await restart_at(world, server)
+    r = await asyncio.wait_for(call, 10)
+    assert r["ok"] and r["sig"] and b.url.startswith(server)
+
+
+async def test_p10c4_a_call_goes_to_the_new_address_when_the_peer_moved(world):
+    world.s = dataclasses.replace(world.s, peer_call_retries=5, peer_call_retry_sec=0.1)
+    _, s1, srv1 = await world.connectivity()
+    _, s2, _ = await world.connectivity()
+    b = await world.behind(await world.peer("b", FakeOwner(yes=True, why="좋다"), [AskOwner()], port=False), [s1, s2])
+    a = await world.peer("a")
+    srv1.should_exit = True  # b moves to the second server; a still knows the first address
+    assert await wait_for(lambda: not (b.reach_url or "").startswith(s1), 300)  # s1 is gone (b is between servers, or on s2)
+    r = await asyncio.wait_for(a.call_peer(b.identity.pub, engage(b.identity.pub), url=f"{s1}/r/{b.identity.pub}"), 10)
+    assert r["ok"] and b.url.startswith(s2)
+
+
+async def test_p10c4_only_a_call_that_surely_never_arrived_is_sent_again(world):
+    from a2a.client.errors import AgentCardResolutionError
+    from arena.a2a import never_delivered
+    from arena.peer.reach import PeerReach
+    assert never_delivered(AgentCardResolutionError("no card")) and never_delivered(httpx.ConnectError("refused"))
+    resp = httpx.Response(503, request=httpx.Request("POST", "http://x/rpc"))
+    assert never_delivered(httpx.HTTPStatusError("503", request=resp.request, response=resp))
+    for maybe_arrived in (httpx.ReadTimeout("slow"), RuntimeError("bad answer"), KeyError("x")):
+        assert not never_delivered(maybe_arrived)
+
+    calls, naps = [], []
+
+    def caller(exc):
+        async def a2a_call(url, msg, timeout=None, **kw):
+            calls.append(url)
+            raise exc
+        return a2a_call
+
+    async def nap(sec):
+        naps.append(sec)
+
+    class Fixed(PeerReach):
+        async def profile_of(self, pub):
+            return {"pub": pub, "url": f"http://now/{len(calls)}", "connections": [{"kind": "a2a", "url": f"http://now/{len(calls)}"}]}
+
+    s = dataclasses.replace(world.s, peer_call_retries=3, peer_call_retry_sec=0.5)
+    r = Fixed(None, {}, caller(httpx.ReadTimeout("slow")), lambda: None, settings=s, sleep=nap)
+    with pytest.raises(httpx.ReadTimeout):
+        await r.call("k" * 64, {"op": "x"})
+    assert len(calls) == 1 and naps == []  # it may have arrived: never sent twice
+    calls.clear()
+    r = Fixed(None, {}, caller(AgentCardResolutionError("no card")), lambda: None, settings=s, sleep=nap)
+    with pytest.raises(AgentCardResolutionError):
+        await r.call("k" * 64, {"op": "x"})
+    assert calls == ["http://now/0", "http://now/1", "http://now/2", "http://now/3"]  # the profile is read again each time
+    assert naps == [0.5, 1.0, 2.0]  # the wait doubles
+
+
+async def test_p10c4_a_pending_answer_is_looked_at_where_the_peer_is_now(world):
+    world.s = dataclasses.replace(world.s, a2a_task_wait_sec=0.3, a2a_human_wait_sec=0.3)
+    _, s1, srv1 = await world.connectivity()
+    _, s2, _ = await world.connectivity()
+    desk = OwnerDesk(lambda: 0.0, keep=50)
+    b = await world.behind(await world.peer("b", DeskOwner(desk, world.s), [AskOwner()], port=False), [s1, s2])
+    a = await world.peer("a")
+    r = await a.call_peer(b.identity.pub, engage(b.identity.pub), timeout=5)
+    assert r.get("pending") and r["pub"] == b.identity.pub and r["url"].startswith(s1)  # the person has not answered yet
+    srv1.should_exit = True
+    assert await wait_for(lambda: (b.reach_url or "").startswith(s2), 300)  # b moved to the second server
+    desk.answer(next(iter(desk.items)), {"yes": True, "why": "좋아요"})
+    done = await a.check_task(r["url"], r["task_id"], pub=r["pub"])  # the old address is dead; the key finds it
+    assert done["ok"] and done["sig"]

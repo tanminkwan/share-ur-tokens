@@ -181,4 +181,6 @@ flowchart TD
 - **게시 전의 다시 게시는 하지 않는다**: `Peer.repost()`는 아직 아무것도 게시하지 않았으면 아무것도 하지 않는다(첫 게시가 지금 이름과 주소를 싣는다). 닉네임은 `set_nick`이 바로 home에 저장한다.
 - **배치**: 서버는 Arena 이미지에 함께 들어 있고 `deploy/connectivity`가 `command: ["connectivity"]`로 띄운다(상태가 없어 volume이 없다). 설정은 `CONNECTIVITY_*`만. Arena peer를 위해 `.env.example`이 `CONNECTIVITY_PATHS`를 A2A 경로 셋으로 둔다. 독립 이미지로 나누는 것은 서버를 따로 배포할 때 한다.
 - **실제 프로세스 시험**: `deploy/relay-test`(공유 네트워크 없는 `net-a`, `net-b`), `tests/test_p10_docker.py`. 결과: [test-results.md](test-results.md).
-- **아직(P10-C4와 함께)**: 기본 비서는 이벤트마다 상대 주소를 기억한다(공지의 `issuer_url`, 받은 메시지의 `url`). 상대가 길을 바꾸면 상대가 무언가 보내 올 때까지 옛 주소로 부른다. 연결 오류가 나면 broker에서 그 키의 지금 `url`을 읽어 한 번 다시 부르는 것이 고칠 길이다.
+- **P10-C4, 다시 보내기는 부르는 쪽이**: relay 서버가 끊긴 연결을 붙들고 있다가 이어 주지 않는다(서버는 상태를 적게 둔다). 대신 `PeerReach.call`(상대 키로 부르는 모든 호출)이, 상대가 받지 못한 것이 **확실한** 실패만 다시 보낸다. `arena.a2a.never_delivered`: 카드를 못 읽음(메시지보다 먼저 일어남), 연결이 안 됨, 503. 시간 초과나 답의 오류는 상대가 이미 처리했을 수 있으므로 다시 보내지 않는다(같은 계약이 두 번 가지 않게). 다시 보낼 때마다 broker에서 상대의 프로필을 다시 읽으므로, 같은 relay에 다시 붙었든 다른 서버로 옮겼든 direct로 바뀌었든 지금 주소로 간다. 횟수 `ARENA_PEER_CALL_RETRIES`(3), 간격 `ARENA_PEER_CALL_RETRY_SEC`(1초)에서 두 배씩(1+2+4초).
+- **기다리는 답도 지금 주소에서**: 상대 키로 부른 호출이 pending이면 답에 `pub`이 붙고, 기본 비서의 `WaitingCalls`가 그것을 기억해 다시 볼 때 `check_task(url, id, pub=...)`가 프로필의 지금 A2A 주소로 간다(task는 상대의 같은 A2A 앱에 있다).
+- **이벤트 메시지는 원래 지금 주소로 간다**: 기본 비서는 상대 키를 알면 `call_peer`로 보내고, 이것은 매번 프로필을 읽는다. 이벤트마다 기억한 주소(`issuer_url`, 받은 메시지의 `url`)는 프로필이 없을 때만 쓴다. 10-E 결과에 "낡은 주소로 부른다"고 적은 것은 틀렸고 고쳤다.

@@ -81,7 +81,7 @@ class Peer:
                                  lambda: self.clock())  # does a broker group of mine keep a ledger? (P6-N)
         self._trust = self.trust.cache
         self.rest = RestTransport(settings)
-        self.reach = PeerReach(identity, brokers, self.call, lambda: self.rest, lambda: self.settings.a2a_human_wait_sec)  # reaching peers by their listed connections (P6-A8, Q1)
+        self.reach = PeerReach(identity, brokers, self.call, lambda: self.rest, lambda: self.settings.a2a_human_wait_sec, settings=settings)  # reaching peers by their listed connections (P6-A8, Q1)
         self._requests = DirectRequests(settings)
         self.events = EventRouter(settings, installer=AppInstaller(settings) if (settings.app_store_urls or settings.app_store_discover) else None)
         self.scheduler = Scheduler(settings)  # "이 시각에 이 일": timers kept in the home, handed to the app that set them
@@ -350,8 +350,11 @@ class Peer:
             self.watch.hold(token, r["task_id"]) if r.get("pending") else self.watch.done(token)
         return r
 
-    async def check_task(self, url: str, task_id: str, wait: float | None = None) -> dict:
-        """look again at a call that came back pending (an A2A task of a slow answer)"""
+    async def check_task(self, url: str, task_id: str, wait: float | None = None, pub: str | None = None) -> dict:
+        """look again at a call that came back pending (an A2A task of a slow answer). With the peer's key (pub), at the
+        address its profile names now: it may have moved since the call (another relay, or direct)"""
+        if pub:
+            url = await self.reach.a2a_url(pub) or url
         check = getattr(self.transport, "check_task", None)
         return await check(url, task_id, wait) if check else {"ok": False, "error": "this transport has no tasks", "task_id": task_id}
 

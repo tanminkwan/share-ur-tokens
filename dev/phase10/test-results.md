@@ -56,6 +56,7 @@ flowchart LR
 | 7 | A→B, B→A 대화가 서로의 relay를 거쳐 감 | ✅ 양쪽 timeline에 `in` |
 | 8 | 서버 `/health`: 붙은 키 2, 중계한 바이트 > 0, 거절 0 | ✅ |
 | 9 | 카드의 `supportedInterfaces[0].url`이 relay 주소의 `/rpc` | ✅ (로그로 확인) |
+| 10 | connectivity 컨테이너를 재시작하고 곧바로 A가 말을 건넴: 두 peer가 다시 붙고 그 말이 B에게 감(P10-C4, 5절) | ✅ 3회 연속 |
 
 직접 해 보기: `deploy/build.sh agent-arena:relay-test`, `cd deploy/relay-test && ARENA_IMAGE=agent-arena:relay-test docker compose up -d`, 브라우저(이 서버)에서 `http://127.0.0.1:19183/#token=relay-test`와 `http://127.0.0.1:19283/#token=relay-test`. 끝나면 `docker compose down -v`.
 
@@ -71,8 +72,24 @@ flowchart LR
 
 ## 4. 남은 것 (고치지 않음, 기록)
 
-- **P10-C4 + 이벤트 안의 주소 기억**: 기본 비서는 이벤트마다 상대의 주소를 기억한다(공지의 `issuer_url`, 받은 메시지의 `url`). 상대가 direct↔relay를 바꾸거나 다른 connectivity 서버로 옮기면, 상대가 무언가를 보내 올 때까지 옛 주소로 부른다(그 호출은 오류). 고치는 길: 호출이 연결 오류로 실패하면 broker에서 그 키의 지금 프로필 `url`을 읽어 한 번 다시 부른다. P10-C4와 함께 할 일이다.
+- ~~이벤트 안의 주소 기억이 낡는다~~: **처음 적은 것이 틀렸다.** 기본 비서는 상대 키를 알면 `call_peer`로 보내고 매번 프로필을 읽는다. 기억한 주소는 프로필이 없을 때만 쓴다. 정말 낡은 주소로 가던 곳은 기다리는 답(pending task)을 다시 보는 길 하나였고, 5절(P10-C4)에서 고쳤다.
 - **처음 본 원장 기록**: 기본 비서는 이벤트 원장을 처음 볼 때 위치만 기억하고 알리지 않는다(이미 있던 설계). 계약이 그 전에 오르면 받는 쪽 timeline에 원장 줄이 없다. relay와 상관없다.
 - **닉네임 표시 시점**: 받는 쪽 directory가 상대 닉네임을 읽기 전에 만든 줄에는 기본 닉네임(`필명-xxxxxx`)이 찍힌다. 뒤의 줄은 맞다. 9단계의 `Directory.refresh` 간격 문제이고 relay와 상관없다.
 - **P10-H2 내용 열람**: relay 운영자는 지나가는 A2A 내용을 읽을 수 있다(서명은 되어 있어 바꾸면 들킨다). `docs/security-assessment.md` S15에 적었다.
 - 10-D(STUN, `udp` 상태)는 10-E 뒤로 미뤘다(사용자 2026-11-08: "10-E부터 진행해").
+
+## 5. P10-C4: 받지 못한 호출을 지금 주소로 다시 보내기
+
+> 2026-11-08. 사용자: "P10-C4부터 진행해".
+
+| 시험 (`tests/test_p10_relay.py`) | 확인한 것 | 결과 |
+|---|---|---|
+| `test_p10c4_a_call_while_the_relay_is_down_goes_through_once_the_peer_is_back` | relay 서버가 내려간 동안 부른 호출이 바로 오류가 되지 않고, 서버가 같은 주소로 돌아와 상대가 다시 붙으면 그 호출이 간다 | 통과 |
+| `test_p10c4_a_call_goes_to_the_new_address_when_the_peer_moved` | 상대가 다른 서버로 옮겼고 부르는 쪽은 옛 주소를 들고 있어도 지금 주소로 간다 | 통과 |
+| `test_p10c4_only_a_call_that_surely_never_arrived_is_sent_again` | 카드를 못 읽음·연결 안 됨·503만 다시 보낸다. 시간 초과와 답의 오류는 한 번만. 매번 프로필을 다시 읽고 간격이 두 배씩 는다 | 통과 |
+| `test_p10c4_a_pending_answer_is_looked_at_where_the_peer_is_now` | 사람이 아직 답하지 않은 호출(pending)을, 상대가 다른 서버로 옮긴 뒤 옛 주소가 아니라 지금 주소에서 다시 보고 답을 받는다 | 통과 |
+
+- 실제 프로세스: docker 시험(2절 10번)에서 connectivity 컨테이너를 재시작한 직후 보낸 말이 다시 보내기로 전달된다. 3회 연속 통과.
+- 비용: 꺼져 있는 peer에게 보낸 호출은 바로 실패하지 않고 1+2+4초 뒤에 실패한다. 끄려면 `ARENA_PEER_CALL_RETRIES=0`.
+- 주소(url)만 아는 호출(`ctx.call(url)`, 키가 없는 직접 요청)은 다시 보내지 않는다. 지금 주소를 찾을 키가 없기 때문이다.
+- 앱 SDK의 `check_task`에 선택 인자 `pub`이 더해졌다(`arena/sdk/context.py`). 없으면 예전과 같다.

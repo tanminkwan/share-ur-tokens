@@ -98,7 +98,7 @@ async def test_the_basic_assistant_asks_with_its_tool_and_finishes_a_pending_ans
         asked.append((msg, {"group_id": group, "event_id": event}))
         return {"ok": False, "pending": True, "task_id": "t-e", "url": "mem://b", "error": "still waiting: waiting for the owner"}
 
-    async def check_task(url, task_id, wait=None):
+    async def check_task(url, task_id, wait=None, pub=None):
         msg, meta = asked[0]
         return await eco.t.call("mem://b", msg, meta=meta)
     eco.host.call_peer, eco.host.check_task = call_peer, check_task

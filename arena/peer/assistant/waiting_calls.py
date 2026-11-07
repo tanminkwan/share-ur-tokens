@@ -28,7 +28,7 @@ class WaitingCalls:
 
     def hold(self, ctx, st, answer: dict, kind: str, data: dict) -> dict:
         """keep a pending answer to finish later; -> what the tool reports now"""
-        st.waiting_calls[answer["task_id"]] = {"url": answer["url"], "kind": kind, "data": data, "since": ctx.clock()}
+        st.waiting_calls[answer["task_id"]] = {"url": answer["url"], "pub": answer.get("pub"), "kind": kind, "data": data, "since": ctx.clock()}
         self._wake_later(ctx, st)
         return {"ok": False, "pending": True, "task_id": answer["task_id"], "waiting_for": answer.get("error", ""),
                 "note": "상대가 아직 답하지 않았다(사람이 정하는 중일 수 있다). 거절이 아니다. 코드가 정해진 간격으로 다시 확인해 "
@@ -44,7 +44,7 @@ class WaitingCalls:
         for tid, w in list(st.waiting_calls.items()):
             if task_id and tid != task_id:
                 continue
-            r = await ctx.check_task(w["url"], tid)
+            r = await ctx.check_task(w["url"], tid, pub=w.get("pub"))  # where the peer is now, if it moved
             if r.get("pending"):
                 out.append({"task_id": tid, "kind": w["kind"], "pending": True, "waiting_for": r.get("error", "")})
                 continue

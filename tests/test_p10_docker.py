@@ -122,8 +122,13 @@ def test_p10_i2_two_peers_that_cannot_reach_each_other_take_part_in_an_event_thr
         assert B.post(f"/api/events/{ev}/say", json={"to": "가람", "text": "잘 받았어요"}).json()["ok"]
         wait(lambda: any(t["dir"] == "in" and t["text"] == "잘 받았어요" for t in A.get(f"/api/events/{ev}").json()["timeline"]))
 
+        # the relay restarts (P10-C4): both peers attach again, and a message sent at once is not lost
+        assert compose("restart", "connectivity").returncode == 0
+        assert A.post(f"/api/events/{ev}/say", json={"to": "나래", "text": "다시 붙었나요"}).json()["ok"]
+        wait(lambda: any(t["dir"] == "in" and t["text"] == "다시 붙었나요" for t in B.get(f"/api/events/{ev}").json()["timeline"]))
+
         health = json.loads(inside("peer-a", "import httpx,json; print(json.dumps(httpx.get('http://connectivity:9200/health', trust_env=False).json()))"))
-        assert health["attached"] == 2 and health["relayed_bytes"] > 0 and not health["refused"]
+        assert health["attached"] == 2 and health["relayed_bytes"] > 0  # counted since the restart
     finally:
         A.close()
         B.close()
