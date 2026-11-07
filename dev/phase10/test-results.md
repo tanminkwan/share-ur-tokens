@@ -6,7 +6,7 @@
 
 | 묶음 | 시험 파일 | 방식 | 결과 |
 |---|---|---|---|
-| 10-A 서버 | `tests/test_p10_connectivity_service.py` (22) | 실제 loopback 서버. 한도, 만료, 남의 요청에 응답 못 함, 경로 허용 목록, 크기, 서명 | 통과 |
+| 10-A 서버 | `tests/test_p10_connectivity_service.py` (17) | 실제 loopback 서버. 한도, 만료, 남의 요청에 응답 못 함, 경로 허용 목록, 크기, 서명 | 통과 |
 | 10-B relay | `tests/test_p10_relay.py` 10-B (6) | 포트를 열지 않은 peer를 실제 A2A로 호출. 느린 답과 webhook, 경로 제한, 서버 failover, 늦게 뜬 서버 | 통과 |
 | 10-C 점검 | `tests/test_p10_relay.py` 10-C (7) | direct/relay 결정, 사설 출발지, 전환과 다시 게시, 출발 IP로만 되돌아감, 서명 검사, 횟수 제한, 창 표시 | 통과 |
 | 10-E 고친 것 | `tests/test_p10_relay.py` 10-E (3) | 긴 poll 대기에도 relay 주소를 바로 앎, 첫 게시가 이미 닿는 주소, 게시 전 다시 게시는 아무것도 안 함 | 통과 |
