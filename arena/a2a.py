@@ -63,11 +63,14 @@ class _JsonExecutor(AgentExecutor):
         pass
 
 
-def build_a2a_app(name: str, description: str, url: str, skills: list[str], handler: Handler, version: str = "1.0",
+def build_a2a_app(name: str, description: str, url, skills: list[str], handler: Handler, version: str = "1.0",
                   answer_wait: float = 5.0, task_store=None, push: bool = True, streaming: bool = True, routes=()) -> Starlette:
     """task_store: where slow answers' tasks are kept (a FileTaskStore in the peer's home survives a restart);
     push: notify a caller's webhook when a task changes (arena/a2a_push.py); streaming: accept SSE (message:stream);
-    routes: more routes on the same server (the peer's own webhook)"""
+    routes: more routes on the same server (the peer's own webhook); url: an address, or a function giving the address now
+    (it can change while the server runs: the card is fitted to it on each request)"""
+    url_now = url if callable(url) else (lambda: url)
+    url = url_now()
     card = AgentCard(
         name=name, description=description, version=version,
         supported_interfaces=[AgentInterface(url=url.rstrip("/") + RPC_PATH, protocol_binding="JSONRPC", protocol_version="1.0")],
@@ -81,7 +84,15 @@ def build_a2a_app(name: str, description: str, url: str, skills: list[str], hand
                   "push_sender": BasePushNotificationSender(httpx.AsyncClient(timeout=10.0), store, push_url_validator=push_url_ok)}
     rh = DefaultRequestHandlerV2(agent_executor=_JsonExecutor(handler, answer_wait), task_store=task_store or InMemoryTaskStore(), agent_card=card,
                                  **pushes)
-    return Starlette(routes=create_agent_card_routes(card) + create_jsonrpc_routes(rh, rpc_url=RPC_PATH) + list(routes))
+    async def fitted(c):
+        want = url_now().rstrip("/") + RPC_PATH
+        if c.supported_interfaces[0].url == want:
+            return c
+        out = AgentCard()
+        out.CopyFrom(c)
+        out.supported_interfaces[0].url = want
+        return out
+    return Starlette(routes=create_agent_card_routes(card, card_modifier=fitted) + create_jsonrpc_routes(rh, rpc_url=RPC_PATH) + list(routes))
 
 
 class A2ATransport:

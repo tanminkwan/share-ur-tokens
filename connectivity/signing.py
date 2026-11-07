@@ -23,9 +23,10 @@ def public_hex(key: Ed25519PrivateKey) -> str:
     return key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex()
 
 
-def sign_headers(key: Ed25519PrivateKey, method: str, path: str, now: float | None = None) -> dict:
+def sign_headers(signer, key_hex: str, method: str, path: str, now: float | None = None) -> dict:
+    """signer: bytes -> ed25519 signature bytes (whoever holds the key signs; the key itself never has to be handed over)"""
     ts = repr(float(time.time() if now is None else now))
-    return {H_KEY: public_hex(key), H_TS: ts, H_SIG: key.sign(_target(method, path, ts)).hex()}
+    return {H_KEY: key_hex, H_TS: ts, H_SIG: signer(_target(method, path, ts)).hex()}
 
 
 def verify_headers(headers, method: str, path: str, now: float, window: float) -> str:

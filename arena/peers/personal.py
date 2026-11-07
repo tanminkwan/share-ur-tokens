@@ -77,6 +77,10 @@ async def run(s: Settings, built=None) -> None:
     for app in peer.apps:
         if hasattr(app, "address"):
             print(f"{app.name}: {app.address}", flush=True)
+    if s.personal_peer_connectivity:  # reached through a connectivity server too (P10); the layers above never know
+        from ..peer.relay_link import RelayLink
+        peer.relay = RelayLink(peer, s.personal_peer_connectivity)
+        asyncio.create_task(peer.relay.run())
     await Presence(peer).keep()  # posts the profile, keeps connecting to brokers that do not answer yet
 
 

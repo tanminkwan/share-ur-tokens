@@ -70,7 +70,7 @@ flowchart LR
 | `connectivity/reach.py` | inbound 점검(되돌아가 보기)과 주소 제한 |
 | `connectivity/stun.py` | 선택: STUN binding(UDP). 없어도 모든 일이 된다 |
 | `connectivity/client.py` | 범용 클라이언트: 붙기, poll, 받은 요청을 주어진 ASGI 앱에 넣기, 점검. 누가 쓰는지 모른다 |
-| `arena/peer/reach.py`(가칭) | **Arena 쪽 어댑터(유일하게 connectivity를 아는 곳)**: peer 키로 클라이언트를 만들고 A2A 앱을 넘기며, 나온 주소를 peer의 알리는 주소로 쓴다 |
+| `arena/peer/relay_link.py` | **Arena 쪽 어댑터(유일하게 connectivity를 아는 곳)**: peer 키로 클라이언트를 만들고 A2A 앱을 넘기며, 나온 주소를 peer의 알리는 주소로 쓴다 |
 
 ## 4. 서버 경로 (모두 TCP)
 
@@ -123,7 +123,7 @@ flowchart TD
 
 ## 7. peer 쪽 (ConnectivityLink)
 
-- **설정**: `ARENA_<종류>_PEER_CONNECTIVITY=주소(|주소…)`(broker 주소와 같은 모양, 먼저 적은 것이 우선, 기본 비어 있음 = 꺼짐). 종류마다 `…_PEER_NICK`처럼 설정 항목을 더한다. 이것은 Arena peer의 설정이다(connectivity 서버의 설정이 아니다).
+- **설정**: `ARENA_PERSONAL_PEER_CONNECTIVITY=주소,주소…`(쉼표 구분, 먼저 적은 것이 우선, 기본 비어 있음 = 꺼짐). 지금은 견본 개인 peer만 쓴다(특수 peer는 공인 주소에서 도는 것이 보통). 종류마다 `…_PEER_NICK`처럼 설정 항목을 더한다. 이것은 Arena peer의 설정이다(connectivity 서버의 설정이 아니다).
 - **상태** `LinkState`: `mode`(`direct`, `relay`, `none`), `via`(붙은 서버 주소), `relay_base`, `udp`(`true`, `false`, `null`).
 - **effective URL** `Peer.url`: `mode == relay`이면 `relay_base`, 아니면 `config.url`. 지금 `config.url`을 직접 쓰는 곳 가운데 **외부에 알리는 곳**이 이것으로 바뀐다: 프로필의 `connections`, 에이전트 카드, 호출할 때 알리는 알림 주소(`node.py:157, 261, 321`)와 `ctx.url`(`context.py:45`). 내 서버를 여는 곳(포트)은 `config.url` 그대로다.
 - **에이전트 카드**는 `a2a-sdk`의 `card_modifier`(요청마다 카드를 고칠 수 있는 인자, 설치된 1.3의 `create_agent_card_routes`에 있음)로 현재 effective URL을 낸다. 점검은 앱이 떠 있어야 하므로 앱을 먼저 연 뒤 하고, 결과가 바뀌면 카드도 바뀐다.
@@ -164,3 +164,12 @@ flowchart TD
 - **메모리/loopback**: 서버를 실제 loopback 포트에 띄우고, 막힌 peer는 포트를 열지 않는다(ASGI 직접 호출). 호출하는 peer는 실제 `A2ATransport`를 쓴다. 이렇게 하면 Agent Card 발견, JSON-RPC, task, webhook까지 진짜 경로로 시험된다.
 - **실제 프로세스(docker)**: 네트워크 둘(`net-a`, `net-b`)을 만들고 connectivity 컨테이너만 둘에 모두 붙인다. peer A는 `net-a`, peer B는 `net-b`에 두면 서로 닿지 않는다(direct 불가). 둘이 relay로 이벤트 개최, 참가, 계약, 대화까지 한다. UDP는 쓰지 않으므로 UDP가 막힌 환경과 같다(P10-I4). `ARENA_TEST_DOCKER=1`일 때만 도는 시험 + 사용자가 따라 할 문서.
 - LLM은 쓰지 않는다(사람 모드 peer끼리).
+
+## 12. 구현하며 정한 것 (10-A, 10-B)
+
+- **서명 함수**: `connectivity.signing.sign_headers(signer, key_hex, …)`는 키 객체가 아니라 서명하는 함수를 받는다. Arena는 `Identity.sign_bytes`를 넘긴다(개인키를 건네지 않는다).
+- **A2A 앱은 하나**: `Peer.a2a_app()`은 한 번만 만든다. 포트와 relay가 같은 앱, 같은 task 저장소에 요청을 넣는다(느린 답을 한쪽에서 만들고 다른 쪽에서 확인해도 같다).
+- **카드 주소**: `build_a2a_app`의 `url`은 함수일 수 있고, `card_modifier`로 요청마다 지금 주소를 넣는다(설치된 a2a-sdk 1.3에서 동작 확인).
+- **다시 게시**: 주소나 닉네임이 바뀌면 `Peer.repost()`가 마지막 프로필에서 `nick`, `url`, `connections`만 바꿔 버전을 올려 게시한다(LLM 호출 없음).
+- **서버가 사라지면** 클라이언트가 relay 주소를 거두고(`None`) peer는 자기 주소로 돌아가 다시 게시한다. 다음 서버를 차례로 시도한다.
+- 아직(10-C): inbound 점검이 없어서, connectivity 주소를 설정한 peer는 **늘 relay로 붙는다.**

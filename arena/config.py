@@ -114,6 +114,9 @@ class Settings(EnvSettings):
     recorder_ledger_file: str = F("ARENA_RECORDER_LEDGER_FILE", "data/ledger.jsonl", str, "원장 파일(JSONL)")
     recorder_require_group: bool = F("ARENA_RECORDER_REQUIRE_GROUP", True, _bool, "모든 항목이 선언된 broker 그룹의 group_id를 쓰도록 요구할지")
     recorder_readers: list[str] = F("ARENA_RECORDER_READERS", [], _list, "전체 열람 허용 공개키(쉼표 구분)")
+    # relay (P10): a peer reached through a connectivity server (arena/peer/relay_link.py)
+    peer_relay_hold_sec: float = F("ARENA_PEER_RELAY_HOLD_SEC", 25.0, float, "connectivity 서버에 poll 하나를 붙들어 두는 시간(초)")
+    peer_relay_concurrency: int = F("ARENA_PEER_RELAY_CONCURRENCY", 8, int, "relay로 받은 요청을 동시에 처리하는 수")
     # ledger rules
     access_log_size: int = F("ARENA_ACCESS_LOG_SIZE", 50, int, "접근 기록 보관 건수")
     # search
@@ -229,6 +232,7 @@ class Settings(EnvSettings):
     personal_peer_home: str = F("ARENA_PERSONAL_PEER_HOME", "data/personal", str, "견본 개인 peer의 홈 폴더(키, 공개 영역, 상태, 이벤트)")
     personal_peer_port: int = F("ARENA_PERSONAL_PEER_PORT", 9180, int, "견본 개인 peer의 A2A 포트")
     personal_peer_labels: list[str] = F("ARENA_PERSONAL_PEER_LABELS", [], _list, "견본 개인 peer의 라벨")
+    personal_peer_connectivity: list[str] = F("ARENA_PERSONAL_PEER_CONNECTIVITY", [], _list, "붙을 connectivity 서버 주소(쉼표 구분, 앞의 것이 우선). 비면 쓰지 않음: 지금처럼 자기 주소로만 받는다")
     personal_peer_nick: str = F("ARENA_PERSONAL_PEER_NICK", "", str, "personal peer의 처음 닉네임(필명 앞부분). 비우면 기본 닉네임. 실행 중에 바꾸면 peer home에 저장된 값이 우선")
     personal_peer_brokers: list[str] = F("ARENA_PERSONAL_PEER_BROKERS", [], _list, "견본 개인 peer가 쓰는 broker 그룹: 그룹=주소, 쉼표 구분")
     personal_apps: list[str] = F("ARENA_PERSONAL_APPS", [], _list, "견본 개인 peer에 꽂을 기본 탑재 화면 앱: console(통합 창: 관전과 개입) · desk(소유자 창구) · chat(내 비서와 대화). 비면 console")

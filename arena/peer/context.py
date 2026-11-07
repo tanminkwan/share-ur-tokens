@@ -42,7 +42,7 @@ class AppContext:
 
     @property
     def url(self) -> str:
-        return self._peer.config.url
+        return self._peer.url
 
     @property
     def operator(self) -> str:

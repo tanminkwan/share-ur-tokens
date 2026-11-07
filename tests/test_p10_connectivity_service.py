@@ -40,12 +40,12 @@ class Key:
 
 
 async def poll(c, k, hold=0.5, clock=None):
-    return await c.get(f"/poll?hold={hold}", headers=sign_headers(k.priv, "GET", "/poll", now=clock() if clock else None))
+    return await c.get(f"/poll?hold={hold}", headers=sign_headers(k.priv.sign, k.pub, "GET", "/poll", now=clock() if clock else None))
 
 
 async def answer(c, k, request_id, status=200, body=b"{}", headers=None, clock=None):
     path = f"/reply/{request_id}"
-    return await c.post(path, headers=sign_headers(k.priv, "POST", path, now=clock() if clock else None),
+    return await c.post(path, headers=sign_headers(k.priv.sign, k.pub, "POST", path, now=clock() if clock else None),
                         json={"status": status, "headers": headers or {}, "body": base64.b64encode(body).decode()})
 
 
@@ -210,9 +210,9 @@ async def test_p10a_poll_and_reply_need_the_keys_signature():
     k = Key()
     assert (await c.get("/poll?hold=0")).status_code == 401
     assert (await c.post("/reply/x", json={"status": 200, "body": ""})).status_code == 401
-    old = sign_headers(k.priv, "GET", "/poll", now=clock() - 3600)  # outside the time window
+    old = sign_headers(k.priv.sign, k.pub, "GET", "/poll", now=clock() - 3600)  # outside the time window
     assert (await c.get("/poll?hold=0", headers=old)).status_code == 401
-    other_path = sign_headers(k.priv, "GET", "/other", now=clock())
+    other_path = sign_headers(k.priv.sign, k.pub, "GET", "/other", now=clock())
     assert (await c.get("/poll?hold=0", headers=other_path)).status_code == 401
 
 

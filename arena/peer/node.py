@@ -56,6 +56,9 @@ class Peer:
         self.identity, self.settings, self.config, self.area, self.owner = identity, settings, config, area, owner
         self.llm, self.transport, self.log, self.brokers, self.clock = llm, transport, log, brokers, clock
         self.home = home  # PeerHome: what must survive a restart
+        self.relay = None  # the transport adapter to a connectivity server, if any (arena/peer/relay_link.py)
+        self.relay_url: str | None = None  # set by the transport adapter when I am reached through a relay (arena/peer/relay_link.py)
+        self._a2a_app = None
         saved = home.load_state() if home else {}
         self.nick = saved.get("nick") or config.nick or settings.pen_name_default_nick  # the home's value wins: the owner may have changed it
         bad = nick_error(self.nick, settings.nick_max_len)
@@ -154,7 +157,7 @@ class Peer:
 
     def connections(self) -> list:
         """the connections this peer's profile lists (P6-A7): the person's choice, or a2a at its url; a human contact only if set"""
-        out = [dict(c) for c in self.config.connections] or [{"kind": "a2a", "url": self.config.url}]
+        out = [dict(c) for c in self.config.connections] or [{"kind": "a2a", "url": self.url}]
         if self.settings.peer_human_contact and not any(c["kind"] == "human" for c in out):
             out.append({"kind": "human", "contact": self.settings.peer_human_contact})
         return out
@@ -198,6 +201,26 @@ class Peer:
 
     # ---- persistence across restarts ----
     @property
+    def url(self) -> str:
+        """the address others reach me at: a relay's address when I am behind one, else my own. Nothing above the
+        transport tells the two apart (P10-P3)"""
+        return self.relay_url or self.config.url
+
+    async def set_relay_url(self, url: str | None) -> None:
+        """the transport adapter says where I am reached now; the profile is posted again at once if it changed"""
+        if url != self.relay_url:
+            self.relay_url = url
+            self.log.emit("peer", self.pen, f"알리는 주소: {self.url}")
+            await self.repost()
+
+    async def repost(self) -> dict:
+        """post the last profile again with what changed (name, address) under a new version: no new summary, no LLM call"""
+        self.profiles.version += 1
+        last = self.last_profile
+        return await self.advertise(dict(last, nick=self.nick, url=self.url, connections=self.connections(), ver=self.profiles.version)
+                                    if last else None)
+
+    @property
     def pen(self) -> str:
         """this peer's name now: nickname-first characters of its key (changes when the owner changes the nickname)"""
         return pen_name(self.identity.pub, self.nick, self.settings.pen_name_len)
@@ -211,9 +234,7 @@ class Peer:
             return {"ok": False, "error": bad}
         if nick != self.nick:
             self.nick = nick
-            self.profiles.version += 1
-            last = self.last_profile  # post the same profile under the new name: no new summary, so no LLM call for a rename
-            await self.advertise(dict(last, nick=nick, ver=self.profiles.version) if last else None)
+            await self.repost()  # the same profile under the new name: no new summary, so no LLM call for a rename
         return {"ok": True, "nick": self.nick, "pen": self.pen}
 
     def persist(self) -> None:
@@ -256,11 +277,14 @@ class Peer:
         return list(self.last_profile["labels"]) if self.last_profile else list(self.config.labels)
 
     def a2a_app(self):
-        from ..a2a_tasks import FileTaskStore
-        store = FileTaskStore(self.home.path("a2a-tasks.json"), self.settings.a2a_task_keep) if self.home else None
-        return build_a2a_app(f"peer-{self.pen}", f"peer {self.pen}", self.config.url, self.skills(), self.handle,
-                             answer_wait=self.settings.a2a_answer_wait_sec, task_store=store, push=self.settings.a2a_push,
-                             streaming=self.settings.a2a_streaming, routes=[Route(NOTIFY_PATH, self._notified, methods=["POST"])])
+        """my A2A server, made once: the port and a relay (if any) hand requests to the same app and the same tasks"""
+        if self._a2a_app is None:
+            from ..a2a_tasks import FileTaskStore
+            store = FileTaskStore(self.home.path("a2a-tasks.json"), self.settings.a2a_task_keep) if self.home else None
+            self._a2a_app = build_a2a_app(f"peer-{self.pen}", f"peer {self.pen}", lambda: self.url, self.skills(), self.handle,
+                                          answer_wait=self.settings.a2a_answer_wait_sec, task_store=store, push=self.settings.a2a_push,
+                                          streaming=self.settings.a2a_streaming, routes=[Route(NOTIFY_PATH, self._notified, methods=["POST"])])
+        return self._a2a_app
 
     async def _notified(self, request):
         """my webhook: another peer says a task I called changed. Only a signal: I look again at that peer myself"""
@@ -316,9 +340,9 @@ class Peer:
         follow a slow answer (an A2A task) before giving back pending"""
         meta = {k: v for k, v in (("group_id", group), ("event_id", event), ("wait", wait)) if v}
         token = None
-        if self.settings.a2a_push and self.config.url.startswith("http"):  # tell the other peer where to say a slow answer changed
+        if self.settings.a2a_push and self.url.startswith("http"):  # tell the other peer where to say a slow answer changed
             token, wake = self.watch.issue(event)
-            meta["notify"] = {"url": self.config.url.rstrip("/") + NOTIFY_PATH, "token": token, "wake": wake}
+            meta["notify"] = {"url": self.url.rstrip("/") + NOTIFY_PATH, "token": token, "wake": wake}
         r = await self.transport.call(url, msg, timeout, meta) if meta else await self.transport.call(url, msg, timeout)
         if token:
             self.watch.hold(token, r["task_id"]) if r.get("pending") else self.watch.done(token)

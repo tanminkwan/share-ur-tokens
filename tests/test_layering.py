@@ -44,3 +44,12 @@ def test_p10_connectivity_is_a_service_of_its_own():
             if re.match(r"^\s*(from|import)\s+(arena|apps|demo|tests)\b", line) or re.search(r"\b(peer|agent|ledger|arena|a2a)\b", line, re.I):
                 bad.append(f"{f.relative_to(ROOT)}:{i}: {line.strip()[:80]}")
     assert not bad, "\n".join(bad)
+
+
+def test_p10_only_the_transport_adapter_knows_connectivity():
+    """user 2026-11-06: "broker와 connectivity는 추상화 계층에서는 인지 안 되는 존재". In Arena only arena/peer/relay_link.py
+    imports it (and the assembly that switches it on)"""
+    allowed = {"arena/peer/relay_link.py"}
+    bad = [str(f.relative_to(ROOT)) for f in PLATFORM if str(f.relative_to(ROOT)) not in allowed
+           and re.search(r"^\s*(from|import)\s+connectivity\b", f.read_text(encoding="utf-8"), re.M)]
+    assert not bad, bad
