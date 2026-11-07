@@ -133,20 +133,32 @@ async def test_p10b_only_the_a2a_paths_reach_the_peers_app(world):
         assert (await hc.get(b.url + "/.well-known/agent-card.json")).status_code == 200
 
 
-async def test_p10b_when_the_server_goes_the_peer_falls_back_and_moves_to_the_next(world):
-    dead = f"http://127.0.0.1:{free_port()}"  # nothing listens here
+async def test_p10b_when_the_server_goes_the_peer_keeps_its_relay_address_until_it_attaches_again(world):
+    """a relay that drops for a moment (a restart) changes nothing others see: the address stays, no profile is posted again.
+    Its own address would not help (nobody can open it); calls in the gap are sent again by the caller (P10-C4)"""
     _, server, srv = await world.connectivity()
-    b = await world.behind(await world.peer("b", port=False), [dead, server])
-    assert b.url.startswith(server) and b.relay.state["server"] == server
+    b = await world.behind(await world.peer("b", port=False), [server])
+    relay, ver = b.url, world.broker.profiles[b.identity.pub]["ver"]
     srv.should_exit = True  # the server goes away
-    for _ in range(300):
-        if b.reach_url is None:
-            break
-        await asyncio.sleep(0.05)
-    assert b.url == b.config.url and world.broker.profiles[b.identity.pub]["url"] == b.config.url
-    _, server2, _ = await world.connectivity()  # another comes; the peer is pointed at it next time it starts
-    b2 = await world.behind(await world.peer("b2", port=False), [dead, server2])
-    assert b2.url.startswith(server2)
+    assert await wait_for(lambda: b.relay.client.base is None, 300)
+    assert b.url == relay and b.relay.state["error"]  # the window says it is attaching again
+    assert world.broker.profiles[b.identity.pub]["url"] == relay and world.broker.profiles[b.identity.pub]["ver"] == ver
+    await restart_at(world, server)
+    assert await wait_for(lambda: b.relay.client.base == relay, 300)
+    assert world.broker.profiles[b.identity.pub]["ver"] == ver  # back at the same address: nothing to post
+
+
+async def test_p10b_when_the_server_goes_for_good_the_peer_moves_to_the_next_with_one_post(world):
+    dead = f"http://127.0.0.1:{free_port()}"  # nothing listens here
+    _, s1, srv1 = await world.connectivity()
+    _, s2, _ = await world.connectivity()
+    b = await world.behind(await world.peer("b", port=False), [dead, s1, s2])
+    assert b.url.startswith(s1) and b.relay.state["server"] == s1
+    ver = world.broker.profiles[b.identity.pub]["ver"]
+    srv1.should_exit = True
+    assert await wait_for(lambda: b.url.startswith(s2), 300)  # (the dead one is tried on the way, and skipped)
+    prof = world.broker.profiles[b.identity.pub]
+    assert prof["url"] == b.url and prof["ver"] == ver + 1  # one post: the new address, never the unreachable own one
 
 
 async def test_p10b_the_peer_attaches_once_the_server_comes(world):
@@ -313,7 +325,7 @@ async def test_p10c4_a_call_while_the_relay_is_down_goes_through_once_the_peer_i
     b = await world.behind(await world.peer("b", FakeOwner(yes=True, why="좋다"), [AskOwner()], port=False), [server])
     a = await world.peer("a")
     srv.should_exit = True  # the relay restarts: b is not reachable for a moment
-    assert await wait_for(lambda: b.reach_url is None, 300)
+    assert await wait_for(lambda: b.relay.client.base is None, 300)
     call = asyncio.create_task(a.call_peer(b.identity.pub, engage(b.identity.pub)))
     await asyncio.sleep(0.3)
     assert not call.done()  # not an error at once: it is trying again
