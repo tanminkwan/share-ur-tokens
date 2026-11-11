@@ -91,9 +91,11 @@ flowchart LR
 | 서명 호환 | `test_p10f_signing_without_a_body_is_what_it_was` | 본문 없는 서명(poll, reply, reach)은 이전과 같음 | 통과 |
 | 출구 규칙 | `tests/test_p10_out.py` (P10-F10) | 사설·loopback 주소는 바로, 이름은 풀린 주소로 판단, 풀리지 않는 이름은 바깥 | 통과 |
 | Arena 연결 | `tests/test_p10_relay.py` 10-F (5) | **실제 loopback 소켓**: relay 뒤의 peer가 다른 peer의 주소를 `/out`으로 불러 계약 응답을 받음(`out_calls > 0`), **실제 HTTP broker에 프로필 게시도 `/out`으로**, 모든 부품이 peer의 출구 하나를 씀(나중에 만든 recorder client 포함), 서버가 끄면 바로 나감, `ARENA_PEER_USE_OUT=false`, relay 주소인 상대는 `/out`을 거치지 않음. 시험에서는 loopback을 "바깥"으로 친다 | 통과 |
+| **docker 사내망** | `ARENA_TEST_DOCKER=1 pytest tests/test_p10_docker.py -k company_peer` (`deploy/intranet-test`) | 실제 컨테이너. `intranet`(docker internal, 밖으로 못 나감)에는 사내 peer(나래)와 connectivity만, `internet`에는 genesis·인터넷 peer(가람)·connectivity. 나래는 connectivity만 열리고 genesis·가람·google은 닫힘을 컨테이너 안에서 확인. 나래의 프로필이 relay 주소로 broker에 올라감(`/out`), 가람이 연 이벤트의 공지를 받고 참가(나래 → 가람, `/out`), 계약(가람 → 나래, relay, 원장 기록), 양쪽 말 주고받기. 서버 `/health`: `attached` 1, `out_calls` > 0, `bad_target` 거부 없음. `CONNECTIVITY_PUBLIC_URL`은 비워 둠 | 통과 (2026-11-11) |
 | 계층 | `tests/test_layering.py` | `connectivity/`에 Arena 낱말·import 없음 | 통과 |
 | 전체 | `pytest tests --ignore=tests/live` | | 통과 |
 
 - 고친 것: `/info`에 `out`이 더해져 `tests/test_p10_stun.py`의 `/info` 비교를 새 모양으로 바꿨다.
 - 시험하며 찾은 것: 같은 시각, 같은 본문이면 ed25519 서명이 똑같아 재전송으로 거부된다. 서명하는 쪽(`sign_headers`)이 한 프로세스 안에서 시각을 늘 늘려 쓰게 했다.
-- LLM은 쓰지 않았다. docker로 실제 사내망 같은 환경(`deploy/relay-test`)에서 `/out`을 돌려 보지는 않았다.
+- LLM은 쓰지 않았다(사람 모드 peer끼리).
+- docker 시험의 "인터넷"은 사설 대역(`172.31.252.0/24`)이라 서버에 `CONNECTIVITY_OUT_ALLOW`로 허용했다. 진짜 인터넷에서는 비워 둔다.

@@ -214,5 +214,5 @@ agent 모드는 공지가 올 때마다, 대화할 때마다 LLM을 부르므로
 - 사내망 PC에서 이 순서대로 설치하고 접속해 본 기록은 아직 없다. 설정 변수는 `arena/config.py`와 `docs/internal-network-test.md`, `deploy/relay-test/docker-compose.yml`(실제로 시험된 peer 설정)을 따랐다.
 - 서버 앞에 nginx stream을 둔 구성은 실제로 돌려 보지 않았다(코드로는 relay 주소가 peer가 붙은 주소로 정해지므로 중간에 무엇이 있어도 된다).
 - 사내 LLM 게이트웨이가 OpenAI 호환인지, 모델 이름이 무엇인지는 사내 환경에 따라 다르다.
-- 나가는 방향 중계로 broker 게시와 다른 peer 호출이 되는 것은 실제 소켓 시험으로 확인했다(`dev/phase10/out-gateway.md` 4절). docker로 사내망 같은 환경을 만들어 처음부터 끝까지 돌려 보지는 않았다.
+- 사내망을 흉내 낸 docker 시험(`deploy/intranet-test`: connectivity만 열린 사내 peer와 인터넷 peer)에서 broker 게시, 공지 받기, 참가, 계약, 말 주고받기까지 확인했다(`dev/phase10/out-gateway.md` 4절). 진짜 사내망과 진짜 인터넷에서 해 본 기록은 아직 없다.
 - 서버가 broker(9100)를 부를 때 자기 공인 주소로 되돌아 들어가야 한다(같은 호스트라면). 그 호스트의 망이 이것을 막으면 broker 주소에 닿지 못한다. 운영자가 서버에서 `curl http://<서버 공인 주소>:9100/health`로 확인한다.
