@@ -1,4 +1,5 @@
 """python -m arena.peers.personal  (settings: ARENA_PERSONAL_*, ARENA_LLM_* for an agent)
+   python -m arena.peers.personal show-pub   print my whole public key and pen name (to ask an operator for leave)
 
 The sample personal peer (P6-P6, P6-Q2): one program for the two people-facing types of dev/peer-spec.md, both facing
 other peers with a2a. ARENA_PERSONAL_MODE=agent: the agent drives and the person talks with it in the chat window.
@@ -19,6 +20,7 @@ from ..bundled.desk_web import DeskWebApp
 from ..bundled.owner_service import OwnerService
 from ..bundled.web import web_token as shared_web_token
 from ..config import ConfigError, Settings
+from ..crypto import pen_name
 from ..events import EventLog
 from ..llm import build_llm, llm_available
 from ..peer.assistant import EventAssistant
@@ -86,7 +88,24 @@ async def run(s: Settings, built=None) -> None:
     await Presence(peer).keep()  # posts the profile, keeps connecting to brokers that do not answer yet
 
 
-def main():
+def show_pub(s: Settings) -> None:
+    """print this peer's whole public key and pen name, without starting it: what the owner sends to a connectivity server's
+    operator to be let in (docs/peer-manual.md 4.4). The key is made now if the home has none yet; the secret key never shows"""
+    home = PeerHome(s.personal_peer_home, s)
+    me = home.identity()
+    nick = home.load_state().get("nick") or s.personal_peer_nick or s.pen_name_default_nick
+    print(f"public key: {me.pub}")
+    print(f"pen name:   {pen_name(me.pub, nick, s.pen_name_len)}")
+    print(f"home:       {home.root}")
+
+
+def main(argv=None):
+    import sys
+    args = sys.argv[1:] if argv is None else argv
+    if args[:1] == ["show-pub"]:
+        return show_pub(Settings.load())
+    if args:
+        raise SystemExit(f"알 수 없는 인자: {' '.join(args)} (쓸 수 있는 것: show-pub)")
     asyncio.run(run(Settings.load()))
 
 

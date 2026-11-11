@@ -40,7 +40,7 @@ flowchart LR
 
 이것 하나면 된다. broker(9100), 기록자(9101), recorder(9102), god(9103), 다른 peer, 인터넷의 LLM API는 따로 신청하지 않는다. 모두 서버가 대신 부른다.
 
-- **서버 쪽 조건**: 운영자가 connectivity 서버에 `CONNECTIVITY_OUT=true`를 켜 두어야 한다(기본은 꺼짐). 켜졌는지는 5절의 `/info`로 본다. 닫힌 커뮤니티면 운영자가 내 공개키를 `CONNECTIVITY_ALLOW_KEYS_FILE`에 넣어야 할 수 있다.
+- **서버 쪽 조건**: 운영자가 connectivity 서버에 `CONNECTIVITY_OUT=true`를 켜 두어야 한다(기본은 꺼짐). 켜졌는지는 5절의 `/info`로 본다. 쓸 수 있는 peer를 정해 둔 서버라면 내 공개키를 승인받아야 한다(4.4절).
 - **꺼져 있는 서버라면**: 나가는 길이 없으므로 9100, 9101, 9102, 9103을 따로 신청하고, 서버 밖의 다른 peer를 부르려면 그 IP:포트도 하나씩 신청해야 한다. 이 경우는 권하지 않는다.
 - 서버 앞에 nginx 같은 중계를 두어 포트가 다르면 그 포트로 신청한다.
 - 사내 LLM 게이트웨이처럼 사내에 있는 곳은 원래대로 닿으면 된다(사내 방화벽 정책에 따른다).
@@ -157,6 +157,49 @@ cat $HOME/arena-peer/web-token                  # docker: docker exec arena-peer
 
 토큰은 비밀번호다. 열자마자 주소창에서 지워지고 그 탭에만 남는다. 공유하지 않는다.
 
+### 4.4 공개키 확인과 사용 승인 신청
+
+connectivity 서버 운영자가 쓸 수 있는 peer를 정해 둔 서버(`CONNECTIVITY_ALLOW_KEYS_FILE`)라면, 내 공개키를 승인받아야 서버에 붙고 서버를 거쳐 나갈 수 있다. 승인 목록이 없는 서버라면 이 절은 건너뛴다(모르면 운영자에게 묻는다).
+
+```mermaid
+sequenceDiagram
+    participant Me as 나 (사내 PC)
+    participant Op as connectivity 서버 운영자
+    Me->>Me: 1. show-pub으로 공개키 확인 (키가 없으면 이때 만들어진다)
+    Me->>Op: 2. 공개키 64자와 필명으로 사용 승인 신청
+    Op->>Op: 3. 허용 목록 파일에 넣고 connectivity 재시작
+    Me->>Me: 4. peer 실행, 창 머리글 "중계로 연결됨" 확인
+```
+
+1. **공개키를 확인한다.** 3절의 설정(`ARENA_KEY_STORE`, `ARENA_PERSONAL_PEER_HOME`, `ARENA_PERSONAL_PEER_NICK`)을 준 셸에서:
+
+   ```bash
+   .venv/bin/python -m arena.peers.personal show-pub
+   ```
+
+   docker라면 실행 중인 컨테이너에서 `docker exec arena-peer python -m arena.peers.personal show-pub`, 띄우기 전이면 같은 볼륨으로:
+
+   ```bash
+   docker run --rm -e ARENA_KEY_STORE=file -e ARENA_PERSONAL_PEER_HOME=/app/data/home -e ARENA_PERSONAL_PEER_NICK=내닉네임 \
+     -v arena-peer:/app/data agent-arena:latest arena.peers.personal show-pub
+   ```
+
+   출력:
+
+   ```text
+   public key: 3f9a1c…(64자 hex)
+   pen name:   내닉네임-3f9a1c
+   home:       /home/me/arena-peer
+   ```
+
+   peer를 띄우지 않고 읽기만 한다. 홈 폴더에 키가 아직 없으면 이때 만들어지고, 나중에 peer가 이 키로 뜬다. console 창의 필명은 공개키의 앞 6자뿐이라 승인 신청에는 `public key` 줄의 64자 전체를 쓴다.
+2. **운영자에게 사용 승인을 신청한다.** 보낼 것: `public key`(64자), `pen name`, 누구의 peer인지. 공개키는 남에게 보여도 된다.
+   - **홈 폴더의 `identity.key`는 비밀키다. 절대 보내지 않는다.** 운영자도 이것을 요구하지 않는다. `show-pub`은 비밀키를 출력하지 않는다.
+3. 운영자가 승인한다(허용 목록에 넣고 connectivity를 재시작한다).
+4. **peer를 실행하고 확인한다**(4.1 또는 4.2). console 창 머리글이 `중계로 연결됨`이 되고 다른 peer와 공지가 보이면 된다(5절). 승인 전에 peer를 먼저 띄워 두었어도 된다: 서버가 거절하는 동안 peer는 멈추지 않고 다시 시도하고(2초부터 최대 60초 간격), 승인되면 스스로 붙는다.
+
+홈 폴더(`ARENA_PERSONAL_PEER_HOME`)를 지우거나 새 PC에서 새로 띄우면 키가 바뀐다. 그러면 다시 승인받아야 한다. 같은 키를 이어 쓰려면 홈 폴더를 백업해 옮긴다.
+
 ## 5. 연결 확인
 
 사내 PC에서는 9200만 닿으므로 아래처럼 확인한다.
@@ -195,8 +238,8 @@ agent 모드는 공지가 올 때마다, 대화할 때마다 LLM을 부르므로
 
 | 증상 | 확인 |
 |---|---|
-| 창 머리글이 `중계로 연결됨`이 아니다 / 프로필 주소가 안 바뀐다 | `curl -s http://<서버>:9200/health`가 되는지. 안 되면 방화벽(9200)이나 서버 DNS를 본다 |
-| 붙었는데 다른 peer가 안 보이고 공지가 안 온다 | `curl -s http://<서버>:9200/info`가 `"out": true`인지. `false`면 나가는 길이 없어 broker에 못 닿는다. 오류 내용에 `way out refused: 403 not_allowed`가 있으면 서버의 허용 키 목록에 내 키가 없다. `403 bad_target`이면 broker 주소가 공인 주소가 아니다(운영자가 `CONNECTIVITY_OUT_ALLOW`로 허용해야 한다) |
+| 창 머리글이 `중계로 연결됨`이 아니다 / 프로필 주소가 안 바뀐다 | `curl -s http://<서버>:9200/health`가 되는지. 안 되면 방화벽(9200)이나 서버 DNS를 본다. 되는데도 붙지 않으면 승인 목록이 있는 서버일 수 있다: 4.4절대로 공개키를 승인받았는지 운영자에게 확인한다 |
+| 붙었는데 다른 peer가 안 보이고 공지가 안 온다 | `curl -s http://<서버>:9200/info`가 `"out": true`인지. `false`면 나가는 길이 없어 broker에 못 닿는다. 오류 내용에 `way out refused: 403 not_allowed`가 있으면 서버의 허용 키 목록에 내 키가 없다(4.4절). `403 bad_target`이면 broker 주소가 공인 주소가 아니다(운영자가 `CONNECTIVITY_OUT_ALLOW`로 허용해야 한다) |
 | broker에 안 보인다 | `ARENA_PERSONAL_PEER_BROKERS` 형식이 `public=http://…:9100`인지 본다. 서버에서 `curl -s http://<서버>:9100/profiles`로 내 프로필을 찾는다 |
 | 이름으로 적었더니 안 붙는다 | 1.2절. 사내 DNS가 그 이름을 푸는지 `getent hosts <이름>`으로 본다. IP로 바꿔 보면 가려진다 |
 | 셸에 `HTTP_PROXY`가 있다 | 프록시를 거치지 않고 직접 나가는 환경이면 `unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy`로 지우고 다시 시도한다 |
