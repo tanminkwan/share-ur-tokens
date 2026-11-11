@@ -15,7 +15,7 @@ async def run(s: ConnectivitySettings) -> None:
     svc = ConnectivityService(s, allow_keys=load_allow_keys(s.allow_keys_file))
     log = logging.getLogger("connectivity")
     udp = await stun.serve(s.host, s.stun_port) if s.stun_port else None  # STUN on UDP only when the operator opens it
-    log.info("starting %s", json.dumps(dict(svc.health(), base=s.base_url, stun_port=s.stun_port or None)))
+    log.info("starting %s", json.dumps(dict(svc.health(), base=s.base_url or None, stun_port=s.stun_port or None)))
     try:
         await uvicorn.Server(uvicorn.Config(build_connectivity_app(svc), host=s.host, port=s.port, log_level="warning")).serve()
     finally:
