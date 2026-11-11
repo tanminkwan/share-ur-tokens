@@ -10,6 +10,7 @@ from typing import Callable
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from ..egress import Egress, share
 from ..a2a import Transport, build_a2a_app
 from ..a2a_push import NOTIFY_PATH, TOKEN_HEADER, TaskWatch, task_id_of
 from ..rest import RestTransport
@@ -67,7 +68,8 @@ class Peer:
         self.receipts = Receipts(home.load_receipts() if home else [], on_keep=home.append_receipt if home else None)
         self.profiles = ProfileBuilder()
         self.profiles.version = saved.get("profile_ver", 0)
-        self.recorder_factory: Callable[[str], RecorderAPI] = lambda url: RecorderClient(url, settings)
+        self.egress = Egress()  # my one way out: every call I make of my own leaves by it (arena/egress.py)
+        self.recorder_factory: Callable[[str], RecorderAPI] = lambda url: self._own(RecorderClient(url, settings))
         self.known_recorders: list[str] = list(dict.fromkeys(list(settings.peer_track_recorders) + saved.get("known_recorders", [])))
         self.app_states: dict = saved.get("apps", {})
         if "inbox" in saved:  # older homes kept the inbox at the top level
@@ -90,6 +92,7 @@ class Peer:
         if wants:  # peers that take part in events (or ask for them) get the built-in elements' apps
             self.builtins += [el.app(settings) for el in PEER_ELEMENTS.values() if el.app]
         self.apps = list(apps)
+        share(self.egress, self.transport, self.llm, self.area, self.rest, self.events.installer, *self.brokers.values())
         self._contexts: dict[int, AppContext] = {}
         self._ops: dict[str, tuple[object, Callable]] = {}
         self._register()
@@ -189,6 +192,11 @@ class Peer:
     def app_by_name(self, name: str):
         return next((a for a in self.apps + self.builtins if a.name == name), None)
 
+    def _own(self, part):
+        """a part made later (a recorder client) leaves by my way out too"""
+        share(self.egress, part)
+        return part
+
     def recorder(self, url: str) -> RecorderAPI:
         if url not in self.known_recorders:
             self.known_recorders.append(url)
@@ -285,7 +293,8 @@ class Peer:
             store = FileTaskStore(self.home.path("a2a-tasks.json"), self.settings.a2a_task_keep) if self.home else None
             self._a2a_app = build_a2a_app(f"peer-{self.pen}", f"peer {self.pen}", lambda: self.url, self.skills(), self.handle,
                                           answer_wait=self.settings.a2a_answer_wait_sec, task_store=store, push=self.settings.a2a_push,
-                                          streaming=self.settings.a2a_streaming, routes=[Route(NOTIFY_PATH, self._notified, methods=["POST"])])
+                                          streaming=self.settings.a2a_streaming, routes=[Route(NOTIFY_PATH, self._notified, methods=["POST"])],
+                                          egress=lambda: self.egress)
         return self._a2a_app
 
     async def _notified(self, request):

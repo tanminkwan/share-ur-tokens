@@ -5,6 +5,7 @@ from typing import Protocol
 
 import httpx
 
+from ..egress import Egress
 from ..config import Settings
 from ..crypto import Identity
 from ..signing import sign_request
@@ -34,13 +35,14 @@ class RecorderClient:
     def __init__(self, base_url: str, settings: Settings, http_client: httpx.AsyncClient | None = None):
         self.base_url, self.settings = base_url.rstrip("/"), settings
         self._http = http_client
+        self.egress = Egress()  # how calls leave (arena/egress.py); a peer hands its own one in
 
     async def _call(self, method: str, path: str, identity: Identity | None = None, json: dict | None = None) -> dict:
         headers = sign_request(identity, method, path) if identity else {}
         if self._http is not None:
             r = await self._http.request(method, self.base_url + path, json=json, headers=headers)
         else:
-            async with httpx.AsyncClient(timeout=self.settings.http_timeout_sec) as hc:
+            async with self.egress.client(timeout=self.settings.http_timeout_sec) as hc:
                 r = await hc.request(method, self.base_url + path, json=json, headers=headers)
         return r.json()
 

@@ -13,6 +13,7 @@ import shutil
 import httpx
 
 from ..crypto import pen_name
+from ..egress import Egress
 from ..sdk.packaging import check_package, load_app_file
 from .plugin import app_fingerprint
 
@@ -20,10 +21,11 @@ from .plugin import app_fingerprint
 class AppInstaller:
     def __init__(self, settings, fetch_url=None):
         self.s = settings
+        self.egress = Egress()  # how calls leave (arena/egress.py); a peer hands its own one in
         self.fetch_url = fetch_url or self._http_get  # replaceable (tests, other transports)
 
     async def _http_get(self, url: str) -> str:
-        async with httpx.AsyncClient(timeout=self.s.http_timeout_sec) as hc:
+        async with self.egress.client(timeout=self.s.http_timeout_sec) as hc:
             r = await hc.get(url)
             r.raise_for_status()
             return r.text

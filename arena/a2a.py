@@ -20,6 +20,7 @@ from a2a.types import (AgentCapabilities, AgentCard, AgentInterface, AgentSkill,
                        SendMessageRequest, TaskPushNotificationConfig)
 from starlette.applications import Starlette
 
+from .egress import Egress, EgressTransport
 from .a2a_push import push_url_ok
 from .a2a_tasks import SlowAnswer, TaskFollower
 from .config import Settings
@@ -81,11 +82,12 @@ class _JsonExecutor(AgentExecutor):
 
 
 def build_a2a_app(name: str, description: str, url, skills: list[str], handler: Handler, version: str = "1.0",
-                  answer_wait: float = 5.0, task_store=None, push: bool = True, streaming: bool = True, routes=()) -> Starlette:
+                  answer_wait: float = 5.0, task_store=None, push: bool = True, streaming: bool = True, routes=(), egress=None) -> Starlette:
     """task_store: where slow answers' tasks are kept (a FileTaskStore in the peer's home survives a restart);
     push: notify a caller's webhook when a task changes (arena/a2a_push.py); streaming: accept SSE (message:stream);
     routes: more routes on the same server (the peer's own webhook); url: an address, or a function giving the address now
-    (it can change while the server runs: the card is fitted to it on each request)"""
+    (it can change while the server runs: the card is fitted to it on each request); egress: a function giving the Egress the
+    webhook sender leaves by (arena/egress.py), None for httpx's usual way"""
     url_now = url if callable(url) else (lambda: url)
     url = url_now()
     card = AgentCard(
@@ -98,7 +100,7 @@ def build_a2a_app(name: str, description: str, url, skills: list[str], handler: 
     if push:
         store = InMemoryPushNotificationConfigStore()
         pushes = {"push_config_store": store, "push_url_validator": push_url_ok,  # refused up front, and checked again on sending
-                  "push_sender": BasePushNotificationSender(httpx.AsyncClient(timeout=10.0), store, push_url_validator=push_url_ok)}
+                  "push_sender": BasePushNotificationSender(httpx.AsyncClient(timeout=10.0, **({"transport": EgressTransport(egress)} if egress else {})), store, push_url_validator=push_url_ok)}
     rh = DefaultRequestHandlerV2(agent_executor=_JsonExecutor(handler, answer_wait), task_store=task_store or InMemoryTaskStore(), agent_card=card,
                                  **pushes)
     async def fitted(c):
@@ -116,6 +118,11 @@ class A2ATransport:
     def __init__(self, settings: Settings):
         self.timeout, self.wait = settings.a2a_timeout_sec, settings.a2a_task_wait_sec
         self.follower = TaskFollower(settings.a2a_task_poll_sec, fallback=settings.a2a_push_fallback_sec)
+        self.egress = Egress()  # how my calls leave (arena/egress.py); a peer hands its own one in
+
+    @property
+    def via(self):
+        return self.egress.via
 
     async def call(self, url, msg, timeout=None, meta=None):
         """discover the Agent Card at url, send one JSON message, parse the JSON reply.
@@ -133,7 +140,7 @@ class A2ATransport:
         if notify:
             config.task_push_notification_config.CopyFrom(TaskPushNotificationConfig(url=notify["url"], token=notify["token"]))
         request = SendMessageRequest(message=message, configuration=config)
-        async with httpx.AsyncClient(timeout=timeout or self.timeout, headers=headers) as hc:
+        async with self.egress.client(timeout=timeout or self.timeout, headers=headers) as hc:
             client = await create_client(url, ClientConfig(streaming=False, httpx_client=hc))
             last = None
             async for r in client.send_message(request):
@@ -147,7 +154,7 @@ class A2ATransport:
     async def check_task(self, url, task_id, wait=None):
         """look again at a task a call gave back as pending (wait: how long to follow it now; 0 = just look)"""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as hc:
+            async with self.egress.client(timeout=self.timeout) as hc:
                 client = await create_client(url, ClientConfig(streaming=False, httpx_client=hc))
                 task = await client.get_task(GetTaskRequest(id=task_id))
                 return _with_url(await self.follower.follow(client, task, wait or 0), url)

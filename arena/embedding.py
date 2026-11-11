@@ -6,6 +6,7 @@ from typing import Protocol
 
 import httpx
 
+from .egress import Egress
 from .config import Settings
 
 
@@ -21,12 +22,13 @@ class HttpEmbedder:
     def __init__(self, settings: Settings, http: httpx.AsyncClient | None = None):
         settings.require("embed_url")
         self.settings, self._http, self.dim = settings, http, None
+        self.egress = Egress()  # how calls leave (arena/egress.py); a peer hands its own one in
 
     async def _post(self, texts):
         url = self.settings.embed_url.rstrip("/") + "/embed"
         if self._http is not None:
             return await self._http.post(url, json={"texts": texts})
-        async with httpx.AsyncClient(timeout=self.settings.embed_timeout_sec) as hc:
+        async with self.egress.client(timeout=self.settings.embed_timeout_sec) as hc:
             return await hc.post(url, json={"texts": texts})
 
     async def _batch(self, texts):

@@ -12,17 +12,16 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from .out import HOP, METHODS, OutError
 from .reach import CheckLimit, probe, source_allowed
 from .service import ConnectivityService, Refused
-from .signing import SignatureError, verify_headers
+from .signing import H_SIG, SignatureError, verify_headers
 
 KEY = re.compile(r"^[0-9a-f]{64}$")
-HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade",
-       "host", "content-length"}  # never passed: they belong to one hop, or are recomputed
 
 
-def _err(status: int, message: str) -> JSONResponse:
-    return JSONResponse({"ok": False, "error": message}, status_code=status)
+def _err(status: int, message: str, why: str | None = None) -> JSONResponse:
+    return JSONResponse({"ok": False, "error": message, **({"why": why} if why else {})}, status_code=status)
 
 
 def _pass(headers, drop: set) -> dict:
@@ -107,12 +106,50 @@ def build_connectivity_app(svc: ConnectivityService) -> Starlette:
         ok = await probe(ip, port, key, s.reach_timeout_sec)
         return JSONResponse({"ok": True, "reachable": ok, "source": ip, "why": "" if ok else "no signed answer at that port"})
 
+    async def out(r: Request):
+        """send one request for a signed key to the URL it names (dev/phase10/out-gateway.md)"""
+        def refused(status, why, message):
+            return _err(status, svc.refuse(status, why, message).message, why)
+        if not s.out_enabled:
+            return refused(403, "out_off", "the way out is off on this server")
+        raw = b""
+        async for chunk in r.stream():
+            raw += chunk
+            if len(raw) > 2 * s.max_body_bytes + 65536:  # the body is base64 inside JSON, with headers around it
+                return refused(413, "big_request", "request too large")
+        try:
+            key = verify_headers(r.headers, r.method, r.url.path, now=svc.clock(), window=s.sig_window_sec, body=raw)
+        except SignatureError as e:
+            return _err(401, str(e))
+        if not svc.take_signature(r.headers.get(H_SIG) or ""):
+            return _err(401, "this signature was already used")
+        if svc.allow_keys is not None and key not in svc.allow_keys:
+            return refused(403, "not_allowed", "this key may not use the way out")
+        try:
+            d = json.loads(raw)
+            url, method = d["url"], str(d["method"]).upper()
+            headers = {str(k): str(v) for k, v in (d.get("headers") or {}).items()}
+            body = base64.b64decode(d.get("body") or "", validate=True)
+            if not isinstance(url, str) or method not in METHODS:
+                raise ValueError
+        except (ValueError, TypeError, KeyError, AttributeError):
+            return _err(400, "body must be JSON {url, method, headers: {}, body: base64}")
+        if len(body) > s.max_body_bytes:
+            return refused(413, "big_request", "request body too large")
+        try:
+            status, out_headers, out_body = await svc.out.forward(key, url, method, headers, body)
+        except OutError as e:
+            return refused(e.status, e.why, e.message)
+        svc.out_calls += 1
+        svc.out_bytes += len(body) + len(out_body)
+        return JSONResponse({"ok": True, "status": status, "headers": out_headers, "body": base64.b64encode(out_body).decode("ascii")})
+
     async def health(_):
         return JSONResponse(svc.health())
 
     async def info(_):
-        """what a client may use besides HTTP: the STUN port (UDP, on this host) or null"""
-        return JSONResponse({"ok": True, "stun_port": s.stun_port or None})
+        """what a client may use besides HTTP: the STUN port (UDP, on this host) or null; whether the way out (/out) is on"""
+        return JSONResponse({"ok": True, "stun_port": s.stun_port or None, "out": bool(s.out_enabled)})
 
     return Starlette(routes=[
         Route("/health", health),
@@ -120,5 +157,6 @@ def build_connectivity_app(svc: ConnectivityService) -> Starlette:
         Route("/poll", poll),
         Route("/reply/{request_id}", reply, methods=["POST"]),
         Route("/reach", reach, methods=["POST"]),
+        Route("/out", out, methods=["POST"]),
         Route("/r/{key}/{path:path}", tunnel, methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]),
     ])

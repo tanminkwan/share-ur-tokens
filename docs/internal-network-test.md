@@ -104,6 +104,7 @@ flowchart LR
 - peer 쪽: `ARENA_PERSONAL_PEER_CONNECTIVITY=http://<BROKER_HOST>:9200`. 창 머리글에 `직접 연결됨` 또는 `중계로 연결됨`이 보인다.
 - 서버 쪽: `cd deploy/connectivity && cp .env.example .env`, `CONNECTIVITY_HOST=0.0.0.0`, `docker compose up -d`. `CONNECTIVITY_PUBLIC_URL`은 비워 둔다: relay 주소는 peer가 붙을 때 쓴 주소로 정해지므로 앞에 nginx 같은 중계가 있어도 된다. 서버 앞 주소와 peer가 붙는 주소가 다를 때만 넣는다.
 
+- **나가는 방향 중계(선택, 10-F)**: 막힌 peer가 서버 밖의 다른 peer를 부를 때 상대마다 방화벽을 신청하지 않게 한다. 서버에 `CONNECTIVITY_OUT=true`를 주면(기본 꺼짐) 막힌 peer가 밖으로 부르는 것(broker, recorder, god, 다른 peer, 인터넷의 LLM)이 모두 서버를 거쳐 나가고, peer 쪽 방화벽은 9200 하나면 된다. 사내 주소는 바로 간다. 서버가 사설 대역으로 나가야 하면 `CONNECTIVITY_OUT_ALLOW`, 포트를 좁히려면 `CONNECTIVITY_OUT_PORTS`. 켜기 전에 `docs/security-assessment.md` S15의 `/out` 항목을 본다.
 - STUN(선택): 서버에 `CONNECTIVITY_STUN_PORT=3478`을 주면 peer 창에 `UDP 됨`/`UDP 안 됨`이 보인다. 보이기만 하고 경로는 바뀌지 않으니 막아 두어도 된다.
 
 ```text

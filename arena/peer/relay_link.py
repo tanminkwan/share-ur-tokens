@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 from urllib.parse import urlsplit
 
-from connectivity.client import TunnelClient
+from connectivity.client import OutTransport, TunnelClient
 from starlette.routing import Route
 
 from ..a2a import RPC_PATH
@@ -36,6 +36,15 @@ class RelayLink:
         self.udp: dict = {}  # the STUN check, once at start: shown only, no path depends on it (P10-C6, C7)
         self._udp_task: asyncio.Task | None = None
         self._relay: asyncio.Task | None = None
+        self.out = OutTransport(self.client)  # my calls leave through the server's way out while I am behind a relay and it offers one
+
+    def _calls_leave_by(self, relay: bool) -> None:
+        """behind a relay every call I make leaves through the server's way out (it decides per call: the servers' own
+        addresses, addresses inside my own network, and a server without a way out are reached straight); reachable
+        directly, calls go straight out as always"""
+        egress = getattr(self.peer, "egress", None)
+        if egress is not None:
+            egress.via = self.out if relay and self.peer.settings.peer_use_out else None
 
     async def _on_base(self, base: str | None) -> None:
         """a new relay address is posted at once. A dropped relay changes nothing others see: my own address would not help
@@ -56,11 +65,13 @@ class RelayLink:
         if r["reachable"]:
             await self._stop_relay()
             self.mode = "direct"
+            self._calls_leave_by(False)
             host = r.get("source") or ""
             seen = f"http://{f'[{host}]' if ':' in host else host}:{self.port}"
             await self.peer.set_reach_url(None if self.peer.settings.public_host or not host else seen)
         elif r["reachable"] is False or self.mode == "checking":  # unknown (no server answered) keeps what was decided
             self.mode = "relay"
+            self._calls_leave_by(True)
             if self._relay is None or self._relay.done():
                 self._relay = asyncio.create_task(self.client.run())
         return self.mode
@@ -122,4 +133,4 @@ class RelayLink:
         """for the owner's window: how I am reached (shown, never posted in the profile)"""
         return {"mode": self.mode, "relay": self.client.base, "server": self.client.server or self.last_check.get("server"),
                 "source": self.last_check.get("source"), "error": self.client.last_error or self.last_check.get("error"),
-                "udp": self.udp.get("udp"), "mapped": self.udp.get("mapped")}
+                "udp": self.udp.get("udp"), "mapped": self.udp.get("mapped"), "out": bool(self.mode == "relay" and self.client.out_ok)}

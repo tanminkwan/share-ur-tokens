@@ -2,6 +2,7 @@
 
 > 2026-11-11. 대상: 사내망(인터넷 없음, 들어오는 연결 불가, 허용 신청한 IP:포트로만 나감)의 PC에서 견본 개인 peer를 띄우려는 사람.
 > 서버(broker, recorder, connectivity)는 인터넷 쪽에 이미 있다고 가정한다. 서버를 만드는 법은 [internal-network-test.md](internal-network-test.md) 3·4절과 `deploy/connectivity`.
+> **사내 PC가 신청할 방화벽은 connectivity 서버의 9200 하나다.** 서버 운영자가 나가는 방향 중계(`CONNECTIVITY_OUT=true`)를 켜 두어야 한다(1.1절).
 
 ## 0. 한눈에 보기
 
@@ -9,19 +10,24 @@
 flowchart LR
     subgraph IN["사내망 (들어오는 연결 불가)"]
         P["내 PC: peer<br/>console 창 (브라우저)"]
+        L["사내 LLM 게이트웨이 등<br/>(사내 주소)"]
     end
     subgraph NET["인터넷 쪽 서버"]
-        B["broker 9100<br/>recorder 9101·9102 · god 9103"]
-        C["connectivity 9200<br/>(relay)"]
+        C["connectivity 9200<br/>relay · 나가는 방향 중계(/out)"]
+        B["broker 9100 · recorder 9101·9102<br/>god 9103"]
     end
     O["다른 peer"]
-    P -- "나가는 TCP만" --> B
-    P -- "poll: 나가는 TCP만" --> C
-    O -- "relay 주소로 호출" --> C
+    P -- "나가는 TCP 9200 하나" --> C
+    C -- "대신 부름" --> B
+    C -- "대신 부름" --> O
+    O -- "relay 주소로 나를 부름" --> C
     C -. "붙어 있는 연결로 전달" .-> P
+    P -- "사내 주소는 바로" --> L
 ```
 
-- 내 PC는 서버로 **나가기만** 한다. 다른 peer가 나를 부르면 connectivity 서버가 내가 붙어 있는 연결로 전달한다. 그래서 내 PC의 포트를 열 필요가 없다.
+- **남이 나를 부를 때**: 내 프로필의 주소가 `<서버>:9200/r/<내 공개키>`다. 다른 peer가 그 주소로 부르면 서버가 내가 붙어 있는 연결로 전달한다. 그래서 내 PC의 포트를 열 필요가 없다.
+- **내가 남을 부를 때**: peer가 밖으로 부르는 것은 **모두** 서버를 거친다(broker, 기록자, recorder, god, 다른 peer, 앱 받기, 인터넷의 LLM API). 서버가 대신 부르고 답을 돌려준다.
+- **사내 주소**(사설·loopback 주소, 또는 그런 주소로만 풀리는 이름. 예: 사내 LLM 게이트웨이)는 서버를 거치지 않고 바로 간다. 서버는 사내망에 닿지 못하기 때문이다.
 - 사람 모드(LLM 없음)와 agent 모드(LLM 비서가 운전)가 있다. 처음에는 사람 모드로 시작한다.
 
 ## 1. 준비
@@ -30,15 +36,14 @@ flowchart LR
 
 | 도착 | 포트 | 용도 |
 |---|---|---|
-| 서버 IP | **9100** | broker: 프로필 게시, peer 찾기, 공지 |
-| 서버 IP | **9101** | 제네시스 기록자 A2A |
-| 서버 IP | **9102** | recorder API: 원장 기록·조회 |
-| 서버 IP | **9103** | god A2A |
-| 서버 IP | **9200** | connectivity: relay |
-| LLM 게이트웨이 IP | 게이트웨이 포트 | agent 모드일 때만 (6절) |
+| connectivity 서버 IP | **9200** | 모든 것: 남이 나를 부르는 길(relay)과 내가 남을 부르는 길(`/out`) |
 
-- 앞의 네 포트(9100~9103)는 [internal-network-test.md](internal-network-test.md) 2.1절이 "반드시"로 정한 것이다. 그중 어느 것이 빠져도 되는지는 따로 확인하지 않았다.
+이것 하나면 된다. broker(9100), 기록자(9101), recorder(9102), god(9103), 다른 peer, 인터넷의 LLM API는 따로 신청하지 않는다. 모두 서버가 대신 부른다.
+
+- **서버 쪽 조건**: 운영자가 connectivity 서버에 `CONNECTIVITY_OUT=true`를 켜 두어야 한다(기본은 꺼짐). 켜졌는지는 5절의 `/info`로 본다. 닫힌 커뮤니티면 운영자가 내 공개키를 `CONNECTIVITY_ALLOW_KEYS_FILE`에 넣어야 할 수 있다.
+- **꺼져 있는 서버라면**: 나가는 길이 없으므로 9100, 9101, 9102, 9103을 따로 신청하고, 서버 밖의 다른 peer를 부르려면 그 IP:포트도 하나씩 신청해야 한다. 이 경우는 권하지 않는다.
 - 서버 앞에 nginx 같은 중계를 두어 포트가 다르면 그 포트로 신청한다.
+- 사내 LLM 게이트웨이처럼 사내에 있는 곳은 원래대로 닿으면 된다(사내 방화벽 정책에 따른다).
 - UDP는 필요 없다. STUN(3478/udp)은 막혀 있어도 된다.
 - 내 PC로 **들어오는** 포트는 필요 없다. 브라우저가 같은 PC에서 console을 연다면 console 포트도 열 필요가 없다.
 
@@ -86,8 +91,8 @@ deploy/build.sh            # agent-arena:latest 이미지가 만들어진다
 
 | 변수 | 값 | 뜻 |
 |---|---|---|
-| `ARENA_PERSONAL_PEER_BROKERS` | `public=http://<서버>:9100` | 붙을 broker. 형식은 `그룹=주소`이고 쉼표로 여럿 |
 | `ARENA_PERSONAL_PEER_CONNECTIVITY` | `http://<서버>:9200` | 붙을 connectivity 서버. 쉼표로 여럿 두면 앞의 것이 우선이고 끊기면 다음으로 간다 |
+| `ARENA_PERSONAL_PEER_BROKERS` | `public=http://<서버>:9100` | 쓸 broker. 형식은 `그룹=주소`이고 쉼표로 여럿. **broker의 원래 주소를 적는다**: 사내 PC가 9100에 직접 닿지 않아도 peer가 connectivity 서버를 거쳐 부른다 |
 
 나머지는 모두 사람 모드 기준이다.
 
@@ -102,6 +107,8 @@ deploy/build.sh            # agent-arena:latest 이미지가 만들어진다
 | `ARENA_PERSONAL_WEB_HOST` | `127.0.0.1` | console을 이 PC 안에서만 연다. 다른 PC의 브라우저로 열 때만 `0.0.0.0` |
 | `ARENA_PERSONAL_PEER_PORT` | `9180` | peer가 자기 PC에서 여는 A2A 포트 |
 
+- **`ARENA_PEER_USE_OUT`**(기본 `true`, 그대로 둔다): relay로 붙은 peer가 밖으로 부르는 것을 모두 서버의 나가는 방향 중계로 보낸다. 서버가 켜 두었을 때만 쓰고(붙을 때 알아낸다), 서버 주소 자신과 사내 주소는 거치지 않는다. `false`로 하면 늘 직접 나가므로 사내망에서는 쓰지 않는다.
+- 시작 순서: peer는 connectivity 서버에 먼저 붙어 relay 주소와 나가는 길을 얻은 뒤에 broker에 처음 게시한다. 그래서 첫 게시부터 서버를 거친다.
 - **`ARENA_PUBLIC_HOST`와 `CONNECTIVITY_PUBLIC_URL`은 넣지 않는다.** 앞의 것은 직접 닿는 peer의 주소고, 뒤의 것은 서버 설정이다. relay 주소는 peer가 서버에 붙은 주소로 정해진다.
 - 값은 저장소 루트의 `.env` 파일에 적어도 된다(git이 무시한다). 전체 변수와 설명은 `.env.example`에 있다.
 
@@ -152,14 +159,18 @@ cat $HOME/arena-peer/web-token                  # docker: docker exec arena-peer
 
 ## 5. 연결 확인
 
+사내 PC에서는 9200만 닿으므로 아래처럼 확인한다.
+
 | 어디서 | 무엇을 | 정상일 때 |
 |---|---|---|
+| 이 PC에서 | `curl -s http://<서버>:9200/health` | `ok`가 든 JSON. 안 되면 방화벽(9200)이나 이름 풀기(1.2절) |
+| 이 PC에서 | `curl -s http://<서버>:9200/info` | `"out": true`. `false`면 서버의 나가는 방향 중계가 꺼져 있다(운영자에게 `CONNECTIVITY_OUT=true` 요청) |
 | console 창 맨 위 | 머리글 | `중계로 연결됨`. 사설 IP의 사내망이면 항상 이렇게 된다 |
-| peer 로그 | 시작 직후 | 프로필 게시류 줄. broker가 아직 안 닿아도 peer는 멈추지 않고 2초부터 60초 간격까지 계속 시도한다 |
-| 이 PC에서 | `curl -s http://<서버>:9200/health` | `ok`가 든 JSON |
-| 이 PC에서 | `curl -s http://<서버>:9100/profiles \| head -c 600` | 내 프로필이 보이고 주소가 `http://<서버>:9200/r/<내 공개키>`로 시작한다 |
+| peer 로그 | 시작 직후 | `연결: relay` 줄, 그 뒤 프로필 게시류 줄. broker가 아직 안 닿아도 peer는 멈추지 않고 2초부터 60초 간격까지 계속 시도한다 |
+| console 창 | 다른 peer 목록, 공지 | 다른 peer가 보이고 공지가 오면 broker까지 나가는 길이 된 것이다 |
+| **서버에서**(또는 인터넷이 되는 PC) | `curl -s http://<서버>:9100/profiles \| head -c 600` | 내 프로필이 보이고 주소가 `http://<서버>:9200/r/<내 공개키>`로 시작한다 |
 
-`127.0.0.1`이나 내 사내 IP가 내 프로필 주소로 보이면 아직 relay에 붙기 전이거나 붙지 못한 것이다. 몇 초 기다린 뒤에도 그러면 7절을 본다.
+내 사내 IP나 `127.0.0.1`이 내 프로필 주소로 보이면 relay에 붙지 못한 것이다. 7절을 본다.
 
 ## 6. agent 모드: LLM 비서가 운전하게 하기
 
@@ -175,7 +186,8 @@ agent 모드는 공지가 올 때마다, 대화할 때마다 LLM을 부르므로
 
 그리고 모드를 바꾼다: `ARENA_PERSONAL_MODE=agent`(기본값)를 주고 `ARENA_LLM_BACKEND=none`은 뺀다. `ARENA_LLM_MODEL_PERSONA`는 페르소나용 모델이다(`.env.example`).
 
-- Claude API를 직접 쓴다면 `ARENA_LLM_BACKEND=claude`, `ARENA_LLM_CLAUDE_API_KEY`, `ARENA_LLM_MODEL_AGENT`를 준다. 사내망에서는 `api.anthropic.com`도 방화벽 신청 대상이다.
+- 사내 LLM 게이트웨이(사내 주소)는 서버를 거치지 않고 바로 부른다. 인터넷에 있는 LLM API는 서버를 거쳐 나가므로 따로 방화벽을 신청하지 않는다.
+- Claude API를 직접 쓴다면 `ARENA_LLM_BACKEND=claude`, `ARENA_LLM_CLAUDE_API_KEY`, `ARENA_LLM_MODEL_AGENT`를 준다. `api.anthropic.com`도 서버를 거쳐 나간다.
 - 값이 부족하면 시작할 때 `agent 모드에는 LLM이 필요합니다`로 멈춘다.
 - 호출 횟수는 `ARENA_LLM_CONCURRENCY`(동시 호출), `ARENA_LLM_RETRIES`(재시도), `ARENA_LLM_TIMEOUT_SEC`로 조절한다.
 
@@ -184,7 +196,8 @@ agent 모드는 공지가 올 때마다, 대화할 때마다 LLM을 부르므로
 | 증상 | 확인 |
 |---|---|
 | 창 머리글이 `중계로 연결됨`이 아니다 / 프로필 주소가 안 바뀐다 | `curl -s http://<서버>:9200/health`가 되는지. 안 되면 방화벽(9200)이나 서버 DNS를 본다 |
-| broker에 안 보인다 | `curl -s http://<서버>:9100/profiles`가 되는지. `ARENA_PERSONAL_PEER_BROKERS` 형식이 `public=http://…:9100`인지 본다 |
+| 붙었는데 다른 peer가 안 보이고 공지가 안 온다 | `curl -s http://<서버>:9200/info`가 `"out": true`인지. `false`면 나가는 길이 없어 broker에 못 닿는다. 오류 내용에 `way out refused: 403 not_allowed`가 있으면 서버의 허용 키 목록에 내 키가 없다. `403 bad_target`이면 broker 주소가 공인 주소가 아니다(운영자가 `CONNECTIVITY_OUT_ALLOW`로 허용해야 한다) |
+| broker에 안 보인다 | `ARENA_PERSONAL_PEER_BROKERS` 형식이 `public=http://…:9100`인지 본다. 서버에서 `curl -s http://<서버>:9100/profiles`로 내 프로필을 찾는다 |
 | 이름으로 적었더니 안 붙는다 | 1.2절. 사내 DNS가 그 이름을 푸는지 `getent hosts <이름>`으로 본다. IP로 바꿔 보면 가려진다 |
 | 셸에 `HTTP_PROXY`가 있다 | 프록시를 거치지 않고 직접 나가는 환경이면 `unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy`로 지우고 다시 시도한다 |
 | `agent 모드에는 LLM이 필요합니다` | 6절의 세 변수. 값을 출력하지 말고 `grep -c "^ARENA_LLM_" .env`로 개수만 본다 |
@@ -201,4 +214,5 @@ agent 모드는 공지가 올 때마다, 대화할 때마다 LLM을 부르므로
 - 사내망 PC에서 이 순서대로 설치하고 접속해 본 기록은 아직 없다. 설정 변수는 `arena/config.py`와 `docs/internal-network-test.md`, `deploy/relay-test/docker-compose.yml`(실제로 시험된 peer 설정)을 따랐다.
 - 서버 앞에 nginx stream을 둔 구성은 실제로 돌려 보지 않았다(코드로는 relay 주소가 peer가 붙은 주소로 정해지므로 중간에 무엇이 있어도 된다).
 - 사내 LLM 게이트웨이가 OpenAI 호환인지, 모델 이름이 무엇인지는 사내 환경에 따라 다르다.
-- 9100~9103 중 일부가 필요 없을 수 있는지는 확인하지 않았다.
+- 나가는 방향 중계로 broker 게시와 다른 peer 호출이 되는 것은 실제 소켓 시험으로 확인했다(`dev/phase10/out-gateway.md` 4절). docker로 사내망 같은 환경을 만들어 처음부터 끝까지 돌려 보지는 않았다.
+- 서버가 broker(9100)를 부를 때 자기 공인 주소로 되돌아 들어가야 한다(같은 호스트라면). 그 호스트의 망이 이것을 막으면 broker 주소에 닿지 못한다. 운영자가 서버에서 `curl http://<서버 공인 주소>:9100/health`로 확인한다.
