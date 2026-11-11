@@ -50,7 +50,7 @@ def build_connectivity_app(svc: ConnectivityService) -> Starlette:
             return _err(400, "hold must be a number")
         except Refused as e:
             return _err(e.status, e.message)
-        return JSONResponse({"ok": True, "base": f"{s.base_url}/r/{key}",
+        return JSONResponse({"ok": True, "base": f"{s.base_url}/r/{key}" if s.base_url else None,
                              "requests": [dict(t.view(), body=base64.b64encode(t.body).decode("ascii")) for t in items]})
 
     async def reply(r: Request):

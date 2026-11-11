@@ -62,7 +62,7 @@ async def test_p10a_a_request_is_passed_to_the_polling_server_and_its_answer_com
     k = Key()
     first = await poll(c, k, hold=0, clock=clock)  # the first poll starts the session and says where callers reach it
     assert first.status_code == 200 and first.json()["requests"] == []
-    assert first.json()["base"] == f"http://127.0.0.1:9200/r/{k.pub}"
+    assert first.json()["base"] is None  # no CONNECTIVITY_PUBLIC_URL: the server does not guess its outside address; the peer uses the one it connected to
     assert svc.health()["attached"] == 1
     call = asyncio.create_task(c.post(f"/r/{k.pub}/rpc?x=1", content=b'{"hello":1}', headers={"content-type": "application/json"}))
     seen, r = await serve_one(c, k, 201, b'{"answer":2}', {"content-type": "application/json", "etag": "e1"}, clock=clock)

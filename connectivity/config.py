@@ -24,7 +24,7 @@ def F(key: str, default, parse, doc: str):
 class ConnectivitySettings:
     host: str = F("CONNECTIVITY_HOST", "127.0.0.1", str, "듣는 주소(container 안에서는 0.0.0.0)")
     port: int = F("CONNECTIVITY_PORT", 9200, int, "HTTP 포트")
-    public_url: str = F("CONNECTIVITY_PUBLIC_URL", "", str, "붙은 쪽이 남에게 알릴 주소의 앞부분(예: https://connect.example.com). 비면 http://HOST:PORT")
+    public_url: str = F("CONNECTIVITY_PUBLIC_URL", "", str, "붙은 쪽이 남에게 알릴 주소의 앞부분(예: https://connect.example.com). 비면 서버는 추측하지 않고, 붙은 쪽이 붙을 때 쓴 주소를 그대로 쓴다(중간에 무엇이 있어도 된다). 서버 앞 주소와 peer가 붙는 주소가 다를 때만 설정")
     max_attached: int = F("CONNECTIVITY_MAX_ATTACHED", 1000, int, "동시에 붙을 수 있는 키 수")
     max_inflight: int = F("CONNECTIVITY_MAX_INFLIGHT", 16, int, "한 키에게 동시에 전달 중인 요청 수 상한")
     rate_per_sec: float = F("CONNECTIVITY_RATE_PER_SEC", 20.0, float, "출발 IP 하나가 한 키에게 보낼 수 있는 초당 요청 수")
@@ -57,4 +57,5 @@ class ConnectivitySettings:
 
     @property
     def base_url(self) -> str:
-        return (self.public_url or f"http://{self.host}:{self.port}").rstrip("/")
+        """the outside address when the operator set one, else "" (the client then uses the address it connected to)"""
+        return self.public_url.rstrip("/")

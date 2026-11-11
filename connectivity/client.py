@@ -73,7 +73,7 @@ class TunnelClient:
                     raise TunnelError(f"poll answered {r.status_code}: {r.text[:200]}")
                 d = r.json()
                 self.server, hold = server, self.hold
-                await self._set_base(d["base"])
+                await self._set_base(d.get("base") or f"{server}/r/{self.key}")  # the server names its outside address only when told to; else the one I connected to
                 for req in d.get("requests", []):
                     t = asyncio.create_task(self._handle(hc, local, server, req))
                     self._tasks.add(t)

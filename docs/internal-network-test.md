@@ -102,7 +102,7 @@ flowchart LR
 - relay로 닿는 peer에게는 2.1절 5번(`BROKER_HOST` → `PEER_HOST:9180`)이 **필요 없다**. 나가는 TCP 9200만 있으면 된다. UDP는 쓰지 않는다.
 - 사내망 주소(10.x)는 사설 대역이라 서버는 기본으로 되돌아가 보지 않고 모두 relay로 보낸다. 사내망에서 direct 판정을 쓰려면 서버에 `CONNECTIVITY_PROBE_ALLOW=10.0.0.0/8`을 준다.
 - peer 쪽: `ARENA_PERSONAL_PEER_CONNECTIVITY=http://<BROKER_HOST>:9200`. 창 머리글에 `직접 연결됨` 또는 `중계로 연결됨`이 보인다.
-- 서버 쪽: `cd deploy/connectivity && cp .env.example .env`, `CONNECTIVITY_HOST=0.0.0.0`, `CONNECTIVITY_PUBLIC_URL=http://<BROKER_HOST>:9200`, `docker compose up -d`.
+- 서버 쪽: `cd deploy/connectivity && cp .env.example .env`, `CONNECTIVITY_HOST=0.0.0.0`, `docker compose up -d`. `CONNECTIVITY_PUBLIC_URL`은 비워 둔다: relay 주소는 peer가 붙을 때 쓴 주소로 정해지므로 앞에 nginx 같은 중계가 있어도 된다. 서버 앞 주소와 peer가 붙는 주소가 다를 때만 넣는다.
 
 - STUN(선택): 서버에 `CONNECTIVITY_STUN_PORT=3478`을 주면 peer 창에 `UDP 됨`/`UDP 안 됨`이 보인다. 보이기만 하고 경로는 바뀌지 않으니 막아 두어도 된다.
 
