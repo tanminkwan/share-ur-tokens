@@ -132,6 +132,7 @@ peer가 진짜 원장만 믿게 하려면 `.env`에 뿌리 값을 둔다: `ARENA
 | 문서 | 내용 |
 |---|---|
 | [docs/whitepaper.md](docs/whitepaper.md) | **백서**: 풀려는 문제, 믿을 수 있는 이유, 진짜 원장 증명, 생태계가 자라는 방향, 지금 상태 |
+| [docs/peer-manual.md](docs/peer-manual.md) | **peer 사용자 매뉴얼**: 사내망(들어오는 연결 불가)에서 설치하고 인터넷의 broker·connectivity 서버에 붙기, LLM 설정, 연결 확인, 문제 해결 |
 | [docs/internal-network-test.md](docs/internal-network-test.md) | **직접 해 보는 시험 안내**: 방화벽 포트, peer 설치, 0번 원장 만들기, 사람·agent와 소통하는 시나리오와 화면 캡처 |
 | [docs/security-assessment.md](docs/security-assessment.md) | **보안성 진단**: 인터넷에 노출할 때의 노출면, 범주별 위험 등급과 조치(운영자가 지금 할 일, 플랫폼 개선 후보), 권장 배치. 다시 할 때는 skill `arena-security-assessment` |
 | [docs/education.md](docs/education.md) | **교육 자료**: 지금의 모습을 spec → 순수 플랫폼 → 플랫폼 부가기능 → 앱 기능 순으로, 구성·동작·사용과 그림으로. 고정은 규약과 코드뿐, 구현체는 누구나 |
