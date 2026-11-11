@@ -6,6 +6,7 @@ from typing import Iterable, Protocol
 
 import httpx
 
+from ..egress import Egress
 from ..config import Settings
 from ..crypto import Identity
 from ..signing import sign_request
@@ -57,6 +58,7 @@ def _ad(identity: Identity, profile: dict) -> dict:
 class BrokerClient:
     def __init__(self, base_url: str, settings: Settings, http_client: httpx.AsyncClient | None = None):
         self.base_url, self.settings, self._http = base_url.rstrip("/"), settings, http_client
+        self.egress = Egress()  # how calls leave (arena/egress.py); a peer hands its own one in
 
     async def _call(self, method, path, identity=None, json=None, params=None) -> dict:
         headers = sign_request(identity, method, path) if identity else {}
@@ -64,7 +66,7 @@ class BrokerClient:
         if self._http is not None:
             r = await self._http.request(method, self.base_url + path, **kw)
         else:
-            async with httpx.AsyncClient(timeout=self.settings.http_timeout_sec) as hc:
+            async with self.egress.client(timeout=self.settings.http_timeout_sec) as hc:
                 r = await hc.request(method, self.base_url + path, **kw)
         return r.json()
 

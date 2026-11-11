@@ -87,6 +87,20 @@ class ConnectivityService:
         self.relayed_bytes = 0
         self.refused: dict[str, int] = {}
         self.started = clock()
+        from .out import OutGateway  # here, not at the top: out.py uses RateLimit from this file
+        self.out = OutGateway(settings, clock=clock)
+        self.out_calls = self.out_bytes = 0
+        self.signatures: dict[str, float] = {}  # signatures already used by /out, until their time window has passed
+
+    def take_signature(self, sig: str) -> bool:
+        """True the first time a signature is seen (within its time window), False for a copy of it"""
+        now = self.clock()
+        for k in [k for k, until in self.signatures.items() if until < now]:
+            del self.signatures[k]
+        if sig in self.signatures:
+            return False
+        self.signatures[sig] = now + 2 * self.s.sig_window_sec
+        return True
 
     def refuse(self, status: int, why: str, message: str) -> Refused:
         """a refusal, counted by why (for /health)"""
@@ -179,4 +193,5 @@ class ConnectivityService:
         self.expire()
         return {"ok": True, "name": "connectivity", "attached": len(self.attached),
                 "inflight": sum(len(a.inflight) for a in self.attached.values()), "relayed_bytes": self.relayed_bytes,
-                "refused": dict(self.refused), "uptime_sec": round(self.clock() - self.started, 1)}
+                "refused": dict(self.refused), "out_calls": self.out_calls, "out_bytes": self.out_bytes,
+                "uptime_sec": round(self.clock() - self.started, 1)}

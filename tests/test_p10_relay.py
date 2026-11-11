@@ -51,11 +51,11 @@ class World:
         self.servers.append(srv)
         return svc, f"http://127.0.0.1:{port}", srv
 
-    async def peer(self, name, owner=None, apps=(), port=True, post=True):
+    async def peer(self, name, owner=None, apps=(), port=True, post=True, brokers=None):
         (self.tmp / name).mkdir()
         url = f"http://127.0.0.1:{free_port()}"
         p = Peer(Identity.generate(), self.s, PeerConfig(url=url), LocalFolderArea(str(self.tmp / name), self.s), owner or NoOwner(),
-                 NoLLM(), A2ATransport(self.s), EventLog(keep=50, echo=False), brokers={"public": InMemoryBrokerClient(self.broker)},
+                 NoLLM(), A2ATransport(self.s), EventLog(keep=50, echo=False), brokers=brokers or {"public": InMemoryBrokerClient(self.broker)},
                  apps=list(apps))
         if port:  # a peer behind a firewall serves nothing: nobody can reach this address
             self.servers.append(await serve_background(p.a2a_app(), "127.0.0.1", int(url.rsplit(":", 1)[1])))
@@ -398,3 +398,72 @@ async def test_p10c4_a_pending_answer_is_looked_at_where_the_peer_is_now(world):
     desk.answer(next(iter(desk.items)), {"yes": True, "why": "좋아요"})
     done = await a.check_task(r["url"], r["task_id"], pub=r["pub"])  # the old address is dead; the key finds it
     assert done["ok"] and done["sig"]
+
+
+async def outside(host):  # loopback stands in for "somewhere on the internet"
+    return False
+
+
+# ---- 10-F: the way out. A peer behind a relay calls others through the server too (dev/phase10/out-gateway.md) ----
+async def test_p10f9_a_peer_behind_a_relay_calls_another_peer_through_the_servers_way_out(world):
+    svc, server, _ = await world.connectivity(out_enabled=True, out_allow=["127.0.0.0/8"])  # loopback stands in for "somewhere on the internet"
+    b = await world.behind(await world.peer("b", port=False), [server])
+    b.relay.out.local = outside
+    a = await world.peer("a", FakeOwner(yes=True, why="좋다"), [AskOwner()])
+    assert b.relay.state["out"] is True and b.transport.via is not None
+    r = await b.call(a.url, engage(a.identity.pub))  # a's own address: b's call leaves through the server
+    assert r["ok"] and r["sig"]
+    assert svc.out_calls > 0 and svc.health()["refused"] == {}
+
+
+async def test_p10f9_without_a_way_out_on_the_server_the_call_goes_straight(world):
+    svc, server, _ = await world.connectivity()  # the way out is off (the default)
+    b = await world.behind(await world.peer("b", port=False), [server])
+    a = await world.peer("a", FakeOwner(yes=True, why="좋다"), [AskOwner()])
+    r = await b.call(a.url, engage(a.identity.pub))
+    assert r["ok"] and svc.out_calls == 0 and b.relay.state["out"] is False
+
+
+async def test_p10f9_use_out_can_be_turned_off_on_the_peer(world):
+    svc, server, _ = await world.connectivity(out_enabled=True, out_allow=["127.0.0.0/8"])
+    world.s = dataclasses.replace(world.s, peer_use_out=False)
+    b = await world.behind(await world.peer("b", port=False), [server])
+    a = await world.peer("a", FakeOwner(yes=True, why="좋다"), [AskOwner()])
+    assert b.transport.via is None
+    r = await b.call(a.url, engage(a.identity.pub))
+    assert r["ok"] and svc.out_calls == 0
+
+
+async def test_p10f9_a_call_to_a_peer_behind_a_relay_is_not_sent_through_the_way_out(world):
+    """its address is the server's own: the server is right there"""
+    svc, server, _ = await world.connectivity(out_enabled=True, out_allow=["127.0.0.0/8"])
+    b = await world.behind(await world.peer("b", FakeOwner(yes=True, why="좋다"), [AskOwner()], port=False), [server])
+    a = await world.behind(await world.peer("a", port=False), [server])
+    r = await a.call(b.url, engage(b.identity.pub))
+    assert r["ok"] and r["sig"] and svc.out_calls == 0
+
+
+async def test_p10f9_every_call_of_a_peer_behind_a_relay_leaves_by_the_server_broker_and_recorder_too(world):
+    """the principle: one way out. The broker is a real HTTP server here; posting the profile goes through /out"""
+    from arena.broker.api import build_broker_app
+    from arena.broker.client import BrokerClient
+    from arena.broker.failover import FailoverBrokerClient
+    port = free_port()
+    world.servers.append(await serve_background(build_broker_app(world.broker), "127.0.0.1", port))
+    svc, server, _ = await world.connectivity(out_enabled=True, out_allow=["127.0.0.0/8"])
+    group = FailoverBrokerClient([BrokerClient(f"http://127.0.0.1:{port}", world.s)], world.s)
+    b = await world.peer("b", port=False, post=False, brokers={"public": group})
+    assert group.clients[0].egress is b.egress and b.transport.egress is b.egress and b.rest.egress is b.egress
+    assert b.recorder("http://127.0.0.1:1").egress is b.egress  # made later, it leaves by the same way
+    p = RelayLink(b, [server])
+    p.out.local = outside
+    b.relay = p
+    world.tasks.append(asyncio.create_task(p.run()))
+    for _ in range(300):
+        if b.reach_url:
+            break
+        await asyncio.sleep(0.02)
+    before = svc.out_calls
+    await b.advertise()  # the first post, once the relay address is known (as a peer does at start)
+    assert world.broker.profiles[b.identity.pub]["url"] == f"{server}/r/{b.identity.pub}"  # posted through the way out
+    assert svc.out_calls > before

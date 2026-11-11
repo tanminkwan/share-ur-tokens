@@ -39,6 +39,12 @@ class ConnectivitySettings:
     check_per_hour: int = F("CONNECTIVITY_CHECK_PER_HOUR", 30, int, "한 키가 inbound 점검을 요청할 수 있는 시간당 횟수")
     reach_timeout_sec: float = F("CONNECTIVITY_REACH_TIMEOUT_SEC", 5.0, float, "inbound 점검에서 되돌아가 보는 제한 시간(초)")
     stun_port: int = F("CONNECTIVITY_STUN_PORT", 0, int, "STUN(UDP) 포트. 0이면 열지 않음, 표준은 3478")
+    out_enabled: bool = F("CONNECTIVITY_OUT", False, _bool, "나가는 방향 중계(POST /out)를 켤지. 서명한 키가 준 URL로 서버가 대신 나가 준다. 기본은 꺼짐")
+    out_allow: list = F("CONNECTIVITY_OUT_ALLOW", [], _list, "/out이 갈 수 있는 사설 대역(CIDR). 비면 공인 주소만(사설·loopback·link-local은 거부)")
+    out_ports: list = F("CONNECTIVITY_OUT_PORTS", [], lambda raw: [int(x) for x in _list(raw)], "/out이 갈 수 있는 포트(쉼표 구분). 비면 모든 포트")
+    out_rate_per_sec: float = F("CONNECTIVITY_OUT_RATE_PER_SEC", 10.0, float, "한 키가 /out으로 보낼 수 있는 초당 요청 수")
+    out_max_inflight: int = F("CONNECTIVITY_OUT_MAX_INFLIGHT", 8, int, "한 키가 /out으로 동시에 진행할 수 있는 요청 수")
+    out_timeout_sec: float = F("CONNECTIVITY_OUT_TIMEOUT_SEC", 30.0, float, "/out이 상대의 답을 기다리는 시간(초)")
     sig_window_sec: float = F("CONNECTIVITY_SIG_WINDOW_SEC", 60.0, float, "서명 시각 허용 폭(초)")
     trust_forwarded: bool = F("CONNECTIVITY_TRUST_FORWARDED", False, _bool, "앞에 둔 reverse proxy의 X-Forwarded-For를 출발 IP로 믿을지")
 

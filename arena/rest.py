@@ -12,6 +12,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from .egress import Egress
 from .a2a import H_EVENT, H_GROUP, _dispatch
 
 OPS_PATH = "/ops/{op}"
@@ -37,6 +38,7 @@ def build_rest_app(handler) -> Starlette:
 class RestTransport:
     def __init__(self, settings, http: httpx.AsyncClient | None = None):
         self.timeout, self._http = settings.http_timeout_sec, http
+        self.egress = Egress()  # how calls leave (arena/egress.py); a peer hands its own one in
 
     async def call(self, url: str, msg: dict, timeout: float | None = None, meta: dict | None = None) -> dict:
         meta = meta or {}
@@ -46,6 +48,6 @@ class RestTransport:
         if self._http is not None:
             r = await self._http.post(target, json=body, headers=headers)
         else:
-            async with httpx.AsyncClient(timeout=timeout or self.timeout) as hc:
+            async with self.egress.client(timeout=timeout or self.timeout) as hc:
                 r = await hc.post(target, json=body, headers=headers)
         return r.json()

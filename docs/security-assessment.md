@@ -41,7 +41,7 @@ flowchart LR
 | recorder API 공개 조회 | `/log`, `/entries`, `/trust`, `/events`, `/track`, `/content`, `/links`, `/delegates`, `/health`, `/codes`, `/codebooks`는 서명 없이. `/chain`, `/access-log`는 허용된 키의 서명 요청만 | `arena/recorder/api.py`, `dev/protocol.md` 4.1 |
 | peer A2A | 누구나 메시지를 보낼 수 있다. 이벤트 메시지는 본문에 서명(protocol 6.4), 그룹·이벤트 머리를 먼저 확인(6.2) | `dev/protocol.md` 6절 |
 | 사람의 창 | Bearer token이 맞아야 `/api`. 페이지 자체는 열림. 기본 듣는 주소는 `127.0.0.1` | `arena/bundled/web_api.py` `token_guard`, `ARENA_PERSONAL_WEB_HOST`, `ARENA_GENESIS_GOD_WEB_HOST` |
-| connectivity 서버(10단계, 선택) | `/r/<키>/…`는 누구나 부른다. 닿는 곳은 그 키로 붙은 peer의 허용 경로뿐. 붙기(`/poll`, `/reply`)와 점검(`/reach`)은 키 서명, `/health`는 숫자만 | `connectivity/api.py`, `dev/phase10/design.md` |
+| connectivity 서버(10단계, 선택) | `/r/<키>/…`는 누구나 부른다. 닿는 곳은 그 키로 붙은 peer의 허용 경로뿐. 붙기(`/poll`, `/reply`)와 점검(`/reach`)과 나가는 방향 중계(`/out`, 기본 꺼짐)는 키 서명, `/health`는 숫자만 | `connectivity/api.py`, `dev/phase10/design.md` |
 | 키 교체·위임 | **네트워크에 없다.** 멈춘 폴더에서 명령으로, god은 오프라인 서명 | `arena/ceremony/` |
 
 ## 2. 요약
@@ -177,7 +177,9 @@ flowchart LR
   - 붙기와 응답은 키 서명(`X-Conn-*`, 시각 허용 폭 `SIG_WINDOW_SEC`)이 있어야 한다. 남의 요청에는 응답할 수 없다.
   - inbound 점검(`/reach`)은 요청이 온 **출발 IP로만**, 1024 이상 포트 하나에, 고정 경로로 되돌아간다. 사설·loopback·link-local은 `CONNECTIVITY_PROBE_ALLOW`에 있을 때만. 키당 시간당 횟수 제한(`CHECK_PER_HOUR`). 되돌아갈 때 proxy 환경 변수와 redirect를 따르지 않는다.
   - 내용을 저장하지 않는다(메모리에서 바로 전달, 로그에 내용 없음).
+  - **나가는 방향 중계(`POST /out`, 10-F, 기본 꺼짐 `CONNECTIVITY_OUT`)**: 서명한 키가 준 URL로 서버가 대신 나가 준다. 이것이 켜지면 서버는 **열린 proxy 후보**가 되므로 막는 장치가 여럿이다: 서명이 본문(대상 URL)까지 묶고(sha256), 같은 서명은 한 번만 받으며(재전송 거부), `CONNECTIVITY_ALLOW_KEYS_FILE`이 있으면 그 키만. 대상은 http·https만, 사용자 정보 없음, **서버가 이름을 풀어 모든 주소가 공인**이어야 하고(사설·loopback·link-local 거부, 예외는 `CONNECTIVITY_OUT_ALLOW`) 연결은 **확인한 IP로** 한다(DNS 바꿔치기 방지). `CONNECTIVITY_OUT_PORTS`로 포트를 좁힐 수 있다. 키당 초당 수(`OUT_RATE_PER_SEC`), 동시 수(`OUT_MAX_INFLIGHT`), 본문·응답 크기(`MAX_BODY_BYTES`), 제한 시간(`OUT_TIMEOUT_SEC`). 리다이렉트를 따르지 않고 환경 proxy를 쓰지 않으며 쿠키·hop-by-hop 헤더는 넘기지 않는다. `/health`는 호출 수와 거부 사유별 수만 센다. peer 쪽에서는 relay 뒤에 있는 동안 스스로 부르는 모든 호출(broker, recorder, A2A, LLM 등)이 출구 하나(`arena/egress.py`)로 이 길을 지나고, 서버 자신과 사설 주소는 바로 간다.
 - **위험**:
+  - **`/out`이 켜진 서버**: 키를 만든 누구나(허용 목록이 없으면) 이 서버의 공인 주소로 나가는 호출을 시킬 수 있다. 서버의 대역폭·평판이 쓰이고, 서버 IP에서 남의 서버로 가는 요청이 보인다. 내부망은 공인 주소 검사로 막힌다. 서버를 사설 대역이 닿는 곳에 두면서 `OUT_ALLOW`를 넓게 주면 그 대역이 열린다.
   - **내용 열람**: A2A 메시지는 서명되어 있어 바꾸면 들키지만 암호화되어 있지 않다. relay 운영자(또는 TLS 없는 구간의 누구나)는 지나가는 내용을 읽는다(P10-H2).
   - **누구나 붙기**: `CONNECTIVITY_ALLOW_KEYS_FILE`이 없으면 키를 만든 누구나 붙어 서버의 주소 아래에서 답한다. 경로 허용 목록이 비어 있으면 아무 내용(HTML 포함)이나 서버 도메인으로 내보낼 수 있다(피싱 발판).
   - **출발 IP 위장**: `CONNECTIVITY_TRUST_FORWARDED=true`를 앞단 없이 켜면 `X-Forwarded-For`로 출발 IP를 꾸며 점검이 남의 주소(1024 이상 포트, 고정 경로 POST)로 가게 할 수 있다.
@@ -188,6 +190,7 @@ flowchart LR
   - `CONNECTIVITY_PATHS`는 늘 채운다(`deploy/connectivity/.env.example`의 값).
   - 닫힌 커뮤니티면 `CONNECTIVITY_ALLOW_KEYS_FILE`로 붙을 키를 정한다.
   - `/health`의 `refused`를 감시한다.
+  - `/out`은 필요할 때만 켠다. 켜면 `CONNECTIVITY_ALLOW_KEYS_FILE`로 키를 정하고, `OUT_ALLOW`는 비워 두며(꼭 필요한 대역만), 포트를 알면 `OUT_PORTS`로 좁힌다.
 - **조치(플랫폼)**:
   - `SEC-13`: 끝과 끝 사이 암호화(P10-H2, 상대 공개키로 본문 봉인). relay 운영자를 믿지 않아도 되게 한다.
   - `SEC-14`: 붙기를 broker 구성원과 잇기(서버 분산 때, 설계 9절).

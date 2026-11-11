@@ -7,6 +7,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import inspect
+import ipaddress
+import json
+import socket
+import time
 from urllib.parse import urlsplit
 
 import httpx
@@ -18,6 +22,14 @@ from .signing import sign_headers
 
 class TunnelError(Exception):
     pass
+
+
+class OutRefused(Exception):
+    """the server refused or could not carry a call through its way out (status and why as the server named them)"""
+
+    def __init__(self, status: int, why: str, message: str):
+        super().__init__(f"{status} {why}: {message}")
+        self.status, self.why, self.message = status, why, message
 
 
 class TunnelClient:
@@ -32,6 +44,9 @@ class TunnelClient:
         self.gate = asyncio.Semaphore(concurrency)
         self.base: str | None = None  # where callers reach me now (<server>/r/<key>), None while not attached
         self.server: str | None = None
+        self.out_ok = False  # does the server I am attached to offer its way out (GET /info)? learnt when I attach
+        self.http = None  # a function giving the httpx client for /out (tests: a client reaching the server in process); None: a new one each time
+        self._out_known: str | None = None
         self.last_error: str | None = None
         self._tasks: set = set()
 
@@ -43,8 +58,42 @@ class TunnelClient:
                 if inspect.isawaitable(r):
                     await r
 
-    def _signed(self, server: str, method: str, path: str) -> dict:
-        return sign_headers(self.signer, self.key, method, urlsplit(server).path.rstrip("/") + path)
+    def _signed(self, server: str, method: str, path: str, body: bytes | None = None) -> dict:
+        return sign_headers(self.signer, self.key, method, urlsplit(server).path.rstrip("/") + path, body=body)
+
+    def is_server(self, url: str) -> bool:
+        """is this URL one of my servers' own (same scheme, host and port)? Such a call needs no way out: the server is right there"""
+        u = urlsplit(url)
+        origin = lambda x: (x.scheme, x.hostname, x.port or {"http": 80, "https": 443}.get(x.scheme))
+        return any(origin(urlsplit(s)) == origin(u) for s in self.servers)
+
+    async def out(self, method: str, url: str, headers: dict, body: bytes, timeout: float = 60.0) -> tuple[int, dict, bytes]:
+        """one call for me through the server's way out: (status, headers, body) of the answer, or OutRefused"""
+        server = self.server or self.servers[0]
+        payload = json.dumps({"url": url, "method": method, "headers": dict(headers), "body": base64.b64encode(body).decode("ascii")}).encode()
+        hc = self.http() if self.http else httpx.AsyncClient(timeout=timeout)
+        try:
+            r = await hc.post(f"{server}/out", content=payload, headers=self._signed(server, "POST", "/out", payload))
+        finally:
+            if not self.http:
+                await hc.aclose()
+        try:
+            d = r.json()
+        except ValueError:
+            raise OutRefused(r.status_code, "bad_answer", r.text[:100]) from None
+        if r.status_code != 200 or not d.get("ok"):
+            raise OutRefused(r.status_code, d.get("why") or "", d.get("error") or "")
+        return int(d["status"]), d.get("headers") or {}, base64.b64decode(d.get("body") or "")
+
+    async def _learn_out(self, hc: httpx.AsyncClient, server: str) -> None:
+        """once per server I attach to: does it offer the way out?"""
+        if self._out_known == server:
+            return
+        try:
+            self.out_ok = bool((await hc.get(f"{server}/info")).json().get("out"))
+        except Exception:  # noqa: BLE001  (an older server, or not there)
+            self.out_ok = False
+        self._out_known = server
 
     async def run(self, rounds: int | None = None) -> None:
         """attach and serve forever (rounds: how many servers to try before returning, for tests)"""
@@ -73,6 +122,7 @@ class TunnelClient:
                     raise TunnelError(f"poll answered {r.status_code}: {r.text[:200]}")
                 d = r.json()
                 self.server, hold = server, self.hold
+                await self._learn_out(hc, server)
                 await self._set_base(d.get("base") or f"{server}/r/{self.key}")  # the server names its outside address only when told to; else the one I connected to
                 for req in d.get("requests", []):
                     t = asyncio.create_task(self._handle(hc, local, server, req))
@@ -132,3 +182,62 @@ class TunnelClient:
                               json={"status": status, "headers": headers, "body": base64.b64encode(body).decode("ascii")})
             except Exception as e:  # noqa: BLE001
                 self.last_error = f"reply {req['id']}: {type(e).__name__}: {e}"
+
+
+async def inside_my_network(host: str, timeout: float = 2.0) -> bool:
+    """is this host on my side of the firewall (a private, loopback or link-local address, or a name that resolves only
+    to such)? A name that does not resolve here is not: it is somewhere outside"""
+    try:
+        a = ipaddress.ip_address(host.strip("[]"))
+        return not a.is_global
+    except ValueError:
+        pass
+    try:
+        infos = await asyncio.wait_for(asyncio.get_running_loop().getaddrinfo(host, None, type=socket.SOCK_STREAM), timeout)
+        addresses = {i[4][0].split("%")[0] for i in infos}
+        return bool(addresses) and all(not ipaddress.ip_address(x).is_global for x in addresses)
+    except (OSError, asyncio.TimeoutError, ValueError):
+        return False
+
+
+class OutTransport(httpx.AsyncBaseTransport):
+    """an httpx transport for a client behind a firewall: calls go through the server's way out, except the servers' own
+    addresses, addresses inside my own network, and when the server offers no way out (they go straight, through `inner`).
+    local: async host -> bool, "is this host inside my network" (replaceable in tests)"""
+
+    def __init__(self, client: TunnelClient, inner: httpx.AsyncBaseTransport | None = None, local=inside_my_network, local_ttl: float = 60.0):
+        self.client, self._inner, self.local, self.local_ttl = client, inner, local, local_ttl
+        self._known: dict[str, tuple[bool, float]] = {}
+
+    async def _is_local(self, host: str) -> bool:
+        now = time.monotonic()
+        hit = self._known.get(host)
+        if hit and now - hit[1] < self.local_ttl:
+            return hit[0]
+        v = await self.local(host)
+        self._known[host] = (v, now)
+        return v
+
+    @property
+    def inner(self) -> httpx.AsyncBaseTransport:
+        if self._inner is None:
+            self._inner = httpx.AsyncHTTPTransport()
+        return self._inner
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if not self.client.out_ok or self.client.is_server(str(request.url)) or await self._is_local(request.url.host):
+            return await self.inner.handle_async_request(request)
+        body = await request.aread()
+        wait = (request.extensions.get("timeout") or {}).get("read")
+        try:
+            status, headers, content = await self.client.out(request.method, str(request.url), dict(request.headers), body,
+                                                              timeout=(wait or 60.0) + 5.0)
+        except OutRefused as e:
+            raise httpx.ConnectError(f"way out refused: {e}", request=request) from None
+        except httpx.HTTPError as e:
+            raise httpx.ConnectError(f"cannot reach the way out: {type(e).__name__}", request=request) from None
+        return httpx.Response(status, headers=headers, content=content, request=request)
+
+    async def aclose(self) -> None:
+        if self._inner is not None:
+            await self._inner.aclose()

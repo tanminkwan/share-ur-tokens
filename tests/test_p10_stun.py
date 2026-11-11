@@ -97,8 +97,8 @@ async def test_p10c7_the_server_names_its_stun_port_and_the_client_checks_udp(wo
     _, server, _ = await world.connectivity(stun_port=port)
     _, plain, _ = await world.connectivity()
     async with httpx.AsyncClient() as hc:
-        assert (await hc.get(f"{server}/info")).json() == {"ok": True, "stun_port": port}
-        assert (await hc.get(f"{plain}/info")).json() == {"ok": True, "stun_port": None}
+        assert (await hc.get(f"{server}/info")).json() == {"ok": True, "stun_port": port, "out": False}
+        assert (await hc.get(f"{plain}/info")).json() == {"ok": True, "stun_port": None, "out": False}
     stun_server = await stun.serve("127.0.0.1", port)  # the HTTP server here does not open UDP itself (python -m does)
     try:
         c = TunnelClient([plain, server], "k" * 64, lambda b: b"", None)

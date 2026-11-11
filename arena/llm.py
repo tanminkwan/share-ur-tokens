@@ -16,6 +16,7 @@ from typing import Callable, Protocol
 import httpx
 
 from .config import ConfigError, Settings
+from .egress import Egress, EgressTransport
 
 
 class LLMError(Exception):
@@ -61,6 +62,7 @@ class CompatLLM:
     def __init__(self, settings: Settings, http: httpx.AsyncClient | None = None, sleep: Callable = asyncio.sleep):
         settings.require("llm_base_url", "llm_api_key", "llm_model_agent")
         self.settings, self._http, self._sleep = settings, http, sleep
+        self.egress = Egress()  # how calls leave (arena/egress.py); a peer hands its own one in
         self._sem = asyncio.Semaphore(settings.llm_concurrency)
 
     async def _post(self, body):
@@ -68,7 +70,7 @@ class CompatLLM:
         url, headers = f"{s.llm_base_url.rstrip('/')}/v1/chat/completions", {"Authorization": f"Bearer {s.llm_api_key}"}
         if self._http is not None:
             return await self._http.post(url, json=body, headers=headers)
-        async with httpx.AsyncClient(timeout=s.llm_timeout_sec) as hc:
+        async with self.egress.client(timeout=s.llm_timeout_sec) as hc:
             return await hc.post(url, json=body, headers=headers)
 
     async def ask_json(self, *, system, schema, user=None, messages=None, effort=None, model=None, on_usage=None):
@@ -111,7 +113,10 @@ class ClaudeLLM:
         settings.require("llm_claude_api_key", "llm_model_agent")
         import anthropic
         self.settings, self._anthropic = settings, anthropic
-        self._client = anthropic.AsyncAnthropic(api_key=settings.llm_claude_api_key, timeout=settings.llm_timeout_sec)
+        self.egress = Egress()  # how calls leave (arena/egress.py); a peer hands its own one in
+        self._client = anthropic.AsyncAnthropic(api_key=settings.llm_claude_api_key, timeout=settings.llm_timeout_sec,
+                                                http_client=httpx.AsyncClient(timeout=settings.llm_timeout_sec,
+                                                                              transport=EgressTransport(lambda: self.egress)))
         self._sem = asyncio.Semaphore(settings.llm_concurrency)
 
     async def ask_json(self, *, system, schema, user=None, messages=None, effort=None, model=None, on_usage=None):
