@@ -1,0 +1,101 @@
+# intranet test (dev/phase10/out-gateway.md, 10-F): a peer on a company network that can open nothing but the connectivity
+# server takes part in an event with a peer on the internet.
+#   intranet (docker "internal": no way out of it): peer-b, connectivity
+#   internet:                                        genesis (broker, recorder, god), peer-a, connectivity
+# peer-b reaches only the connectivity server (as a firewall that lets port 9200 out, and nothing else). Everything it calls
+# of its own (the broker, the recorder, god, peer-a) leaves through the server's way out (POST /out); others reach it at its
+# relay address. peer-a sits on the internet with its own port open. The internet network's private range stands in for
+# public addresses (CONNECTIVITY_OUT_ALLOW): the way out reaches public addresses only, otherwise.
+# Human mode, no LLM. From this directory:
+#   docker compose up -d      (image from deploy/build.sh)
+#   peer-a console: http://127.0.0.1:${INTRANET_TEST_A_CONSOLE:-19383}   token: intranet-test (or INTRANET_TEST_TOKEN)
+#   peer-b has no published port (an internal network cannot publish one): docker compose exec peer-b ...
+#   docker compose down -v    (throws the test ledger away)
+# The automated version: ARENA_TEST_DOCKER=1 pytest tests/test_p10_docker.py -k intranet
+x-arena: &arena
+  image: ${ARENA_IMAGE:-agent-arena:latest}
+  restart: "no"
+x-no-proxy: &no-proxy
+  HTTP_PROXY: ""
+  HTTPS_PROXY: ""
+  http_proxy: ""
+  https_proxy: ""
+x-peer-env: &peer-env
+  <<: *no-proxy
+  ARENA_KEY_STORE: file
+  ARENA_LLM_BACKEND: none
+  ARENA_HOST: 0.0.0.0
+  ARENA_PERSONAL_MODE: human
+  ARENA_PERSONAL_PEER_HOME: /app/data/peer
+  ARENA_PERSONAL_PEER_BROKERS: public=http://genesis:9100
+  ARENA_PERSONAL_WEB_HOST: 0.0.0.0
+  ARENA_PERSONAL_WEB_TOKEN: ${INTRANET_TEST_TOKEN:-intranet-test}
+
+services:
+  genesis:
+    <<: *arena
+    command: ["arena.genesis"]
+    networks: [internet]
+    environment:
+      <<: *no-proxy
+      ARENA_KEY_STORE: file
+      ARENA_LLM_BACKEND: none
+      ARENA_HOST: 0.0.0.0
+      ARENA_PUBLIC_HOST: genesis
+      ARENA_GENESIS_DIR: /app/data/genesis
+    volumes:
+      - genesis:/app/data
+
+  connectivity:
+    <<: *arena
+    command: ["connectivity"]
+    networks: [intranet, internet]
+    environment:
+      <<: *no-proxy
+      CONNECTIVITY_HOST: 0.0.0.0
+      CONNECTIVITY_PORT: 9200
+      # CONNECTIVITY_PUBLIC_URL is left empty: the relay address is the one peer-b attached to (http://connectivity:9200)
+      CONNECTIVITY_PATHS: /.well-known/agent-card.json,/rpc,/a2a/notify
+      CONNECTIVITY_CHECK_PER_HOUR: 1000
+      CONNECTIVITY_OUT: "true"
+      CONNECTIVITY_OUT_ALLOW: 172.31.252.0/24   # the "internet" here is a private range; on the real internet leave it empty
+
+  peer-a:   # on the internet, its own port open
+    <<: *arena
+    command: ["arena.peers.personal"]
+    networks: [internet]
+    environment:
+      <<: *peer-env
+      ARENA_PUBLIC_HOST: peer-a
+      ARENA_PERSONAL_PEER_NICK: 가람
+    ports:
+      - "127.0.0.1:${INTRANET_TEST_A_CONSOLE:-19383}:9183"
+    volumes:
+      - peer-a:/app/data
+
+  peer-b:   # on the company network: only the connectivity server can be reached
+    <<: *arena
+    command: ["arena.peers.personal"]
+    networks: [intranet]
+    environment:
+      <<: *peer-env
+      ARENA_PERSONAL_PEER_CONNECTIVITY: http://connectivity:9200
+      ARENA_PERSONAL_PEER_NICK: 나래
+    volumes:
+      - peer-b:/app/data
+
+networks:
+  intranet:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.251.0/24
+  internet:
+    ipam:
+      config:
+        - subnet: 172.31.252.0/24
+
+volumes:
+  genesis:
+  peer-a:
+  peer-b:

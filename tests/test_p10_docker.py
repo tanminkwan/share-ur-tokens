@@ -136,3 +136,101 @@ def test_p10_i2_two_peers_that_cannot_reach_each_other_take_part_in_an_event_thr
         A.close()
         B.close()
         compose("down", "-v")
+
+
+# ---- 10-F: a peer on a company network that can open only the connectivity server (deploy/intranet-test) ----
+@pytest.mark.skipif(shutil.which("docker") is None, reason="docker is not installed")
+def test_the_intranet_compose_lets_the_company_peer_reach_only_the_connectivity_server():
+    d = DEPLOY / "intranet-test"
+    r = subprocess.run(["docker", "compose", "config", "--format", "json"], cwd=d, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr[-300:]
+    c = json.loads(r.stdout)
+    sv, nets = c["services"], c["networks"]
+    assert nets["intranet"].get("internal") is True  # no way out of it, as a company network with a firewall
+    assert set(sv["peer-b"]["networks"]) == {"intranet"} and set(sv["connectivity"]["networks"]) == {"intranet", "internet"}
+    assert set(sv["genesis"]["networks"]) == set(sv["peer-a"]["networks"]) == {"internet"}
+    on_intranet = {name for name, s in sv.items() if "intranet" in s["networks"]}
+    assert on_intranet == {"peer-b", "connectivity"}  # the only thing the company peer can open is the connectivity server
+    env = sv["connectivity"]["environment"]
+    assert env["CONNECTIVITY_OUT"] == "true" and not env.get("CONNECTIVITY_PUBLIC_URL")
+    assert sv["peer-b"]["environment"]["ARENA_PERSONAL_PEER_CONNECTIVITY"] == "http://connectivity:9200"
+    assert sv["peer-b"]["environment"]["ARENA_PERSONAL_PEER_BROKERS"] == "public=http://genesis:9100"  # the broker's own address
+    assert "ports" not in sv["peer-b"]
+
+
+@docker
+def test_p10_f_a_company_peer_that_can_open_only_the_connectivity_server_takes_part_in_an_event():
+    project = f"intranet-test-{uuid.uuid4().hex[:6]}"
+    token = "intranet-test"
+    env = dict(os.environ, ARENA_IMAGE=IMAGE, INTRANET_TEST_A_CONSOLE="19383", INTRANET_TEST_TOKEN=token)
+
+    def compose(*args, timeout=300):
+        return subprocess.run(["docker", "compose", "-p", project, *args], cwd=DEPLOY / "intranet-test", env=env,
+                              capture_output=True, text=True, timeout=timeout)
+
+    def inside(service, code):
+        r = compose("exec", "-T", service, "python", "-c", code, timeout=60)
+        return r.stdout.strip()
+
+    def can_open(service, url):
+        return inside(service, f"import httpx\ntry:\n httpx.get({url!r}, trust_env=False, timeout=3); print('open')\nexcept Exception: print('closed')")
+
+    class InPeerB:
+        """peer-b's window API, called inside its container (a network with no way out cannot publish a port)"""
+        def _call(self, method, path, body=None):
+            code = ("import httpx,json,sys; r=httpx.request(sys.argv[1], 'http://127.0.0.1:9183'+sys.argv[2], "
+                    f"headers={{'Authorization': 'Bearer {token}'}}, json=json.loads(sys.argv[3]), trust_env=False, timeout=60); print(r.text)")
+            r = compose("exec", "-T", "peer-b", "python", "-c", code, method, path, json.dumps(body), timeout=90)
+            return json.loads(r.stdout)
+
+        def get(self, path):
+            return self._call("GET", path)
+
+        def post(self, path, body):
+            return self._call("POST", path, body)
+
+    build = subprocess.run([str(DEPLOY / "build.sh"), IMAGE], capture_output=True, text=True, timeout=900)
+    assert build.returncode == 0, build.stderr[-500:]
+    A = httpx.Client(base_url="http://127.0.0.1:19383", headers={"Authorization": f"Bearer {token}"}, trust_env=False, timeout=60)
+    B = InPeerB()
+    try:
+        up = compose("up", "-d")
+        assert up.returncode == 0, up.stderr[-500:]
+        a = wait(lambda: A.get("/api/state").json()["me"], 90)
+        b = wait(lambda: (lambda me: me if me["reach"] == "relay" else None)(B.get("/api/state")["me"]), 120)
+
+        # the company network: peer-b opens the connectivity server and nothing else
+        assert can_open("peer-b", "http://connectivity:9200/health") == "open"
+        assert can_open("peer-b", "http://genesis:9100/health") == "closed"
+        assert can_open("peer-b", "http://peer-a:9180/.well-known/agent-card.json") == "closed"
+        assert can_open("peer-b", "https://www.google.com/") == "closed"
+
+        # peer-b's profile reached the broker (through the way out) at its relay address; peer-a at its own
+        def listed():
+            got = json.loads(inside("peer-a", "import httpx,json; print(json.dumps({p['nick']: p['url'] for p in "
+                                              "httpx.get('http://genesis:9100/profiles', trust_env=False).json()['profiles']}))"))
+            return got if {"가람", "나래"} <= set(got) else None
+        got = wait(listed, 90)
+        assert got["나래"] == f"http://connectivity:9200/r/{b['pub']}" and got["가람"] == "http://peer-a:9180"
+
+        # an event between them: peer-a hosts on the internet, peer-b takes part from the company network
+        ev = A.post("/api/events", json={"title": "사내망 시험", "kind": "놀이", "rules": RULES, "policy": {"roles": ["member"]}}).json()
+        assert ev["ok"], ev
+        ev = ev["event_id"]
+        wait(lambda: any(e["event_id"] == ev for e in B.get("/api/state")["events"]), 90)  # the notice reached the company peer
+        assert B.post(f"/api/events/{ev}/tools/join_event", {"args": {}})["ok"]  # B → A: through the way out
+        wait(lambda: any(t["kind"] == "join" for t in A.get(f"/api/events/{ev}").json()["timeline"]))
+        c = A.post(f"/api/events/{ev}/tools/contract", json={"args": {"role": "member", "peer": "나래"}}).json()  # A → B: through B's relay
+        assert c["ok"] and c["contracts_so_far"] == 1, c
+        assert "member=나래-" in A.get(f"/api/events/{ev}").json()["state_line"]  # on the ledger, which peer-b cannot open itself
+        assert A.post(f"/api/events/{ev}/say", json={"to": "나래", "text": "인터넷에서 보냅니다"}).json()["ok"]
+        wait(lambda: any(t["dir"] == "in" and t["text"] == "인터넷에서 보냅니다" for t in B.get(f"/api/events/{ev}")["timeline"]))
+        assert B.post(f"/api/events/{ev}/say", {"to": "가람", "text": "사내망에서 답합니다"})["ok"]
+        wait(lambda: any(t["dir"] == "in" and t["text"] == "사내망에서 답합니다" for t in A.get(f"/api/events/{ev}").json()["timeline"]))
+
+        health = json.loads(inside("peer-a", "import httpx,json; print(json.dumps(httpx.get('http://connectivity:9200/health', trust_env=False).json()))"))
+        assert health["attached"] == 1 and health["relayed_bytes"] > 0  # peer-b is reached through the relay
+        assert health["out_calls"] > 0 and "bad_target" not in health["refused"]  # and calls out through the server
+    finally:
+        A.close()
+        compose("down", "-v")
