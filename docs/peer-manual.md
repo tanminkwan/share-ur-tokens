@@ -131,6 +131,26 @@ export ARENA_PERSONAL_PEER_NICK=내닉네임
 
 멈출 때는 Ctrl-C. 오래 돌릴 때는 `nohup … &`나 systemd 서비스로 돌린다.
 
+**Windows(cmd)**: 저장소 루트에 `run_arena.bat`을 만든다. `<서버>`는 이름이면 1.2절을 따른다.
+
+```bat
+@echo off
+cd /d %~dp0
+set "ARENA_KEY_STORE=file"
+set "ARENA_LLM_BACKEND=none"
+set "ARENA_PERSONAL_MODE=human"
+set "ARENA_PERSONAL_PEER_HOME=%USERPROFILE%\arena-peer"
+set "ARENA_PERSONAL_PEER_BROKERS=public=http://<서버>:9100"
+set "ARENA_PERSONAL_PEER_CONNECTIVITY=http://<서버>:9200"
+set "ARENA_PERSONAL_PEER_NICK=mynick"
+.venv\Scripts\python.exe -m arena.peers.personal
+pause
+```
+
+- `cd /d %~dp0`는 이 파일이 있는 폴더(저장소 루트)로 옮겨 간다. 다른 곳에서 더블클릭해도 `arena` 모듈을 찾는다.
+- 닉네임은 **영문**을 권한다. 배치 파일은 한국어 Windows에서 CP949로 읽혀서, UTF-8로 저장한 파일의 한글은 깨진다. 한글을 쓰려면 파일을 "ANSI"로 저장하거나, 맨 위에 `chcp 65001 >nul`을 넣고 UTF-8(BOM 없이)로 저장한다.
+- 서버의 설치와 가상 환경은 2.1절과 같다(`python -m venv .venv`, `.venv\Scripts\pip install -r requirements.txt`).
+
 ### 4.2 docker로
 
 ```bash
@@ -156,7 +176,15 @@ cat $HOME/arena-peer/web-token                  # docker: docker exec arena-peer
 # 브라우저: http://127.0.0.1:9183/#token=<위 토큰>
 ```
 
-토큰은 비밀번호다. 열자마자 주소창에서 지워지고 그 탭에만 남는다. 공유하지 않는다.
+Windows(cmd)에서는 이렇게 읽는다.
+
+```bat
+type %USERPROFILE%\arena-peer\web-token
+```
+
+- 토큰은 **처음 한 번 만들어 홈 폴더에 저장**된다. peer를 다시 시작해도 바뀌지 않는다(`ARENA_PERSONAL_WEB_TOKEN`을 정했다면 그 값이 우선한다).
+- 토큰은 비밀번호다. 열자마자 주소창에서 지워지고 그 탭에만 남는다. 공유하지 않는다.
+- 탭을 닫았다가 `http://127.0.0.1:9183/`만 다시 열면 토큰이 없어서 창이 열리지 않는다. 시작할 때 출력된 `#token=…` 주소나 위 방법으로 읽은 값으로 다시 연다.
 
 ### 4.4 공개키 확인과 사용 승인 신청
 
@@ -241,6 +269,8 @@ agent 모드는 공지가 올 때마다, 대화할 때마다 LLM을 부르므로
 |---|---|
 | 창 머리글이 `중계로 연결됨`이 아니다 / 프로필 주소가 안 바뀐다 | `curl -s http://<서버>:9200/health`가 되는지. 안 되면 방화벽(9200)이나 서버 DNS를 본다. 되는데도 붙지 않으면 승인 목록이 있는 서버일 수 있다: 4.4절대로 공개키를 승인받았는지 운영자에게 확인한다 |
 | 붙었는데 다른 peer가 안 보이고 공지가 안 온다 | `curl -s http://<서버>:9200/info`가 `"out": true`인지. `false`면 나가는 길이 없어 broker에 못 닿는다. 오류 내용에 `way out refused: 403 not_allowed`가 있으면 서버의 허용 키 목록에 내 키가 없다(4.4절). `403 bad_target`이면 broker 주소가 공인 주소가 아니다(서버와 같은 VPC의 사설 주소라면 운영자가 `CONNECTIVITY_OUT_ALLOW`로 그 주소를 허용해야 한다) |
+| 창이 `연결 중…`에서 안 넘어간다 / `토큰이 틀리다`고 나온다 | 주소 끝에 `#token=<값>`이 있는지, 값이 잘리지 않았는지 본다. 값은 4.3절의 `web-token` 파일과 같아야 한다. 새 탭에서 다시 열고, 옛 탭의 값이 남아 있지 않게 한다. 같은 포트(9183)를 쥔 옛 peer가 아직 떠 있으면 새 peer의 창이 열리지 않는다(Windows는 작업 관리자의 `python.exe`, Linux는 `ss -ltnp`로 본다) |
+| 시작할 때 `게시판 확인 실패: BrokerUnavailable … JSONDecodeError`가 한 번 나온다 | 옛 버전이다. 시작 순서 때문에 첫 broker 호출이 서버를 거치지 않고 직접 나가서 생긴다(사내망에서 사설 주소의 broker가 응답하지 않거나 안내 페이지를 준다). 코드를 최신 main으로 바꾸면 사라진다. 이후 호출은 서버를 거쳐 정상이므로 쓰는 데는 지장이 없다 |
 | broker에 안 보인다 | `ARENA_PERSONAL_PEER_BROKERS` 형식이 `public=http://…:9100`인지 본다. 서버에서 `curl -s http://<서버>:9100/profiles`로 내 프로필을 찾는다 |
 | 이름으로 적었더니 안 붙는다 | 1.2절. 사내 DNS가 그 이름을 푸는지 `getent hosts <이름>`으로 본다. IP로 바꿔 보면 가려진다 |
 | 셸에 `HTTP_PROXY`가 있다 | 프록시를 거치지 않고 직접 나가는 환경이면 `unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy`로 지우고 다시 시도한다 |
@@ -255,8 +285,8 @@ agent 모드는 공지가 올 때마다, 대화할 때마다 LLM을 부르므로
 
 ## 9. 이 매뉴얼에서 확인하지 못한 것
 
-- 사내망 PC에서 이 순서대로 설치하고 접속해 본 기록은 아직 없다. 설정 변수는 `arena/config.py`와 `docs/internal-network-test.md`, `deploy/relay-test/docker-compose.yml`(실제로 시험된 peer 설정)을 따랐다.
+- **2026-11-13 실제 사내 Windows PC 시험**: 사내 PC의 peer가 connectivity 하나(포트 포워딩된 주소)로 relay에 붙고, 서버와 같은 VPC의 사설 주소(`10.10.20.11:9100`)의 broker에 `/out`으로 게시하고 공지를 받았다. 서버의 peer와 이벤트에서 참가 신청, 계약, 양방향 메시지(사내 → 서버는 `/out`, 서버 → 사내는 relay)까지 확인했다. 서버와 같은 호스트의 시험용 peer 두 개와 한 건씩만 해 본 것이며 부하와 오래 돌린 기록은 없다. 이 순서의 설치 자체(2절)는 그 PC에서 다시 따라 해 본 기록이 아니다. 설정 변수는 `arena/config.py`와 `docs/internal-network-test.md`, `deploy/relay-test/docker-compose.yml`(실제로 시험된 peer 설정)을 따랐다.
 - 서버 앞에 nginx stream을 둔 구성은 실제로 돌려 보지 않았다(코드로는 relay 주소가 peer가 붙은 주소로 정해지므로 중간에 무엇이 있어도 된다).
 - 사내 LLM 게이트웨이가 OpenAI 호환인지, 모델 이름이 무엇인지는 사내 환경에 따라 다르다.
-- 사내망을 흉내 낸 docker 시험(`deploy/intranet-test`: connectivity만 열린 사내 peer와 인터넷 peer)에서 broker 게시, 공지 받기, 참가, 계약, 말 주고받기까지 확인했다(`dev/phase10/out-gateway.md` 4절). 진짜 사내망과 진짜 인터넷에서 해 본 기록은 아직 없다.
+- 사내망을 흉내 낸 docker 시험(`deploy/intranet-test`: connectivity만 열린 사내 peer와 인터넷 peer)에서 broker 게시, 공지 받기, 참가, 계약, 말 주고받기까지 확인했다(`dev/phase10/out-gateway.md` 4절). 진짜 인터넷 구간(서버가 공인 주소로 열린 곳)에서 해 본 기록은 아직 없다.
 - 서버가 broker(9100)를 부를 때 자기 공인 주소로 되돌아 들어가야 한다(같은 호스트라면). 그 호스트의 망이 이것을 막으면 broker 주소에 닿지 못한다. 운영자가 서버에서 `curl http://<서버 공인 주소>:9100/health`로 확인한다.

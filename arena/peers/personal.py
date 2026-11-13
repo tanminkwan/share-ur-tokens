@@ -78,14 +78,21 @@ async def run(s: Settings, built=None) -> None:
         peer.relay = RelayLink(peer, s.personal_peer_connectivity)  # before the windows open: they show "checking" at once
     await serve_background(peer.a2a_app(), s.host, s.personal_peer_port)
     peer.log.emit("peer", peer.pen, f"A2A {peer.config.url} · operator {peer.operator()}")
+    await start_peer(peer)
+    await Presence(peer).keep()  # posts the profile, keeps connecting to brokers that do not answer yet
+
+
+async def start_peer(peer: Peer) -> None:
+    """the relay first, then the apps. The first call an app makes (the event router reads the broker at once) must already leave
+    the way the relay decides: through the connectivity server's way out when I am behind a firewall. Started the other way
+    round, that first call goes straight out, where a private address (the broker in the server's network) is not reached"""
+    if peer.relay:
+        await peer.relay.start()  # also before the first post: the broker lists an address others can open
+        asyncio.create_task(peer.relay.run(started=True))
     await peer.start()  # the screen apps open their local web here
     for app in peer.apps:
         if hasattr(app, "address"):
             print(f"{app.name}: {app.address}", flush=True)
-    if peer.relay:
-        await peer.relay.start()  # before the first post: the broker lists an address others can open
-        asyncio.create_task(peer.relay.run(started=True))
-    await Presence(peer).keep()  # posts the profile, keeps connecting to brokers that do not answer yet
 
 
 def show_pub(s: Settings) -> None:
