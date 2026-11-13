@@ -10,7 +10,7 @@
 flowchart LR
     subgraph IN["사내망 (들어오는 연결 불가)"]
         P["내 PC: peer<br/>console 창 (브라우저)"]
-        L["사내 LLM 게이트웨이 등<br/>(사내 주소)"]
+        L["사내 LLM 게이트웨이<br/>(ARENA_LLM_BASE_URL, 사내 주소)"]
     end
     subgraph NET["인터넷 쪽 서버"]
         C["connectivity 9200<br/>relay · 나가는 방향 중계(/out)"]
@@ -22,12 +22,13 @@ flowchart LR
     C -- "대신 부름" --> O
     O -- "relay 주소로 나를 부름" --> C
     C -. "붙어 있는 연결로 전달" .-> P
-    P -- "사내 주소는 바로" --> L
+    P -- "LLM 게이트웨이만 바로" --> L
 ```
 
 - **남이 나를 부를 때**: 내 프로필의 주소가 `<서버>:9200/r/<내 공개키>`다. 다른 peer가 그 주소로 부르면 서버가 내가 붙어 있는 연결로 전달한다. 그래서 내 PC의 포트를 열 필요가 없다.
 - **내가 남을 부를 때**: peer가 밖으로 부르는 것은 **모두** 서버를 거친다(broker, 기록자, recorder, god, 다른 peer, 앱 받기, 인터넷의 LLM API). 서버가 대신 부르고 답을 돌려준다.
-- **사내 주소**(사설·loopback 주소, 또는 그런 주소로만 풀리는 이름. 예: 사내 LLM 게이트웨이)는 서버를 거치지 않고 바로 간다. 서버는 사내망에 닿지 못하기 때문이다.
+- **주소는 서버 쪽에서 보이는 주소로 적는다.** 서버에 붙은 뒤에는 사설 주소(예: 서버와 같은 VPC의 `10.10.x.x`)도 서버를 거친다. 같은 사내망의 다른 peer도 relay 주소로 보이므로 서버를 거친다.
+- **예외는 사내 LLM 게이트웨이 하나다.** `ARENA_LLM_BASE_URL`이 사내 주소(사설·loopback 주소, 또는 그런 주소로만 풀리는 이름)이면 바로 간다. 서버는 사내망에 닿지 못하기 때문이다. 서버 자신의 주소(9200)도 바로 간다.
 - 사람 모드(LLM 없음)와 agent 모드(LLM 비서가 운전)가 있다. 처음에는 사람 모드로 시작한다.
 
 ## 1. 준비
@@ -92,7 +93,7 @@ deploy/build.sh            # agent-arena:latest 이미지가 만들어진다
 | 변수 | 값 | 뜻 |
 |---|---|---|
 | `ARENA_PERSONAL_PEER_CONNECTIVITY` | `http://<서버>:9200` | 붙을 connectivity 서버. 쉼표로 여럿 두면 앞의 것이 우선이고 끊기면 다음으로 간다 |
-| `ARENA_PERSONAL_PEER_BROKERS` | `public=http://<서버>:9100` | 쓸 broker. 형식은 `그룹=주소`이고 쉼표로 여럿. **broker의 원래 주소를 적는다**: 사내 PC가 9100에 직접 닿지 않아도 peer가 connectivity 서버를 거쳐 부른다 |
+| `ARENA_PERSONAL_PEER_BROKERS` | `public=http://<서버>:9100` | 쓸 broker. 형식은 `그룹=주소`이고 쉼표로 여럿. **connectivity 서버가 닿는 broker 주소를 적는다**: peer는 이 주소를 서버를 거쳐 부르므로 사내 PC가 9100에 닿지 않아도 된다. broker가 서버와 같은 VPC에 있으면 그 사설 주소(예: `public=http://10.10.0.5:9100`)를 적고, 서버 운영자가 `CONNECTIVITY_OUT_ALLOW=10.10.0.5/32`로 그 주소를 허용한다. `127.0.0.1`은 안 된다(서버가 loopback을 거부한다). `public`은 태초부터 있는 만민 그룹의 이름이다 |
 
 나머지는 모두 사람 모드 기준이다.
 
@@ -107,7 +108,7 @@ deploy/build.sh            # agent-arena:latest 이미지가 만들어진다
 | `ARENA_PERSONAL_WEB_HOST` | `127.0.0.1` | console을 이 PC 안에서만 연다. 다른 PC의 브라우저로 열 때만 `0.0.0.0` |
 | `ARENA_PERSONAL_PEER_PORT` | `9180` | peer가 자기 PC에서 여는 A2A 포트 |
 
-- **`ARENA_PEER_USE_OUT`**(기본 `true`, 그대로 둔다): relay로 붙은 peer가 밖으로 부르는 것을 모두 서버의 나가는 방향 중계로 보낸다. 서버가 켜 두었을 때만 쓰고(붙을 때 알아낸다), 서버 주소 자신과 사내 주소는 거치지 않는다. `false`로 하면 늘 직접 나가므로 사내망에서는 쓰지 않는다.
+- **`ARENA_PEER_USE_OUT`**(기본 `true`, 그대로 둔다): relay로 붙은 peer가 밖으로 부르는 것을 사설 주소까지 모두 서버의 나가는 방향 중계로 보낸다. 서버가 켜 두었을 때만 쓰고(붙을 때 알아낸다), 서버 주소 자신과 사내 LLM 게이트웨이는 거치지 않는다. `false`로 하면 늘 직접 나가므로 사내망에서는 쓰지 않는다. 사내에만 있는 broker처럼 서버가 닿지 못하는 곳을 써야 할 때만 `false`로 한다.
 - 시작 순서: peer는 connectivity 서버에 먼저 붙어 relay 주소와 나가는 길을 얻은 뒤에 broker에 처음 게시한다. 그래서 첫 게시부터 서버를 거친다.
 - **`ARENA_PUBLIC_HOST`와 `CONNECTIVITY_PUBLIC_URL`은 넣지 않는다.** 앞의 것은 직접 닿는 peer의 주소고, 뒤의 것은 서버 설정이다. relay 주소는 peer가 서버에 붙은 주소로 정해진다.
 - 값은 저장소 루트의 `.env` 파일에 적어도 된다(git이 무시한다). 전체 변수와 설명은 `.env.example`에 있다.
@@ -229,7 +230,7 @@ agent 모드는 공지가 올 때마다, 대화할 때마다 LLM을 부르므로
 
 그리고 모드를 바꾼다: `ARENA_PERSONAL_MODE=agent`(기본값)를 주고 `ARENA_LLM_BACKEND=none`은 뺀다. `ARENA_LLM_MODEL_PERSONA`는 페르소나용 모델이다(`.env.example`).
 
-- 사내 LLM 게이트웨이(사내 주소)는 서버를 거치지 않고 바로 부른다. 인터넷에 있는 LLM API는 서버를 거쳐 나가므로 따로 방화벽을 신청하지 않는다.
+- `ARENA_LLM_BASE_URL`이 사내 주소이면 서버를 거치지 않고 바로 부른다. 이 주소 하나만 예외다. 인터넷에 있는 LLM API는 서버를 거쳐 나가므로 따로 방화벽을 신청하지 않는다.
 - Claude API를 직접 쓴다면 `ARENA_LLM_BACKEND=claude`, `ARENA_LLM_CLAUDE_API_KEY`, `ARENA_LLM_MODEL_AGENT`를 준다. `api.anthropic.com`도 서버를 거쳐 나간다.
 - 값이 부족하면 시작할 때 `agent 모드에는 LLM이 필요합니다`로 멈춘다.
 - 호출 횟수는 `ARENA_LLM_CONCURRENCY`(동시 호출), `ARENA_LLM_RETRIES`(재시도), `ARENA_LLM_TIMEOUT_SEC`로 조절한다.
@@ -239,7 +240,7 @@ agent 모드는 공지가 올 때마다, 대화할 때마다 LLM을 부르므로
 | 증상 | 확인 |
 |---|---|
 | 창 머리글이 `중계로 연결됨`이 아니다 / 프로필 주소가 안 바뀐다 | `curl -s http://<서버>:9200/health`가 되는지. 안 되면 방화벽(9200)이나 서버 DNS를 본다. 되는데도 붙지 않으면 승인 목록이 있는 서버일 수 있다: 4.4절대로 공개키를 승인받았는지 운영자에게 확인한다 |
-| 붙었는데 다른 peer가 안 보이고 공지가 안 온다 | `curl -s http://<서버>:9200/info`가 `"out": true`인지. `false`면 나가는 길이 없어 broker에 못 닿는다. 오류 내용에 `way out refused: 403 not_allowed`가 있으면 서버의 허용 키 목록에 내 키가 없다(4.4절). `403 bad_target`이면 broker 주소가 공인 주소가 아니다(운영자가 `CONNECTIVITY_OUT_ALLOW`로 허용해야 한다) |
+| 붙었는데 다른 peer가 안 보이고 공지가 안 온다 | `curl -s http://<서버>:9200/info`가 `"out": true`인지. `false`면 나가는 길이 없어 broker에 못 닿는다. 오류 내용에 `way out refused: 403 not_allowed`가 있으면 서버의 허용 키 목록에 내 키가 없다(4.4절). `403 bad_target`이면 broker 주소가 공인 주소가 아니다(서버와 같은 VPC의 사설 주소라면 운영자가 `CONNECTIVITY_OUT_ALLOW`로 그 주소를 허용해야 한다) |
 | broker에 안 보인다 | `ARENA_PERSONAL_PEER_BROKERS` 형식이 `public=http://…:9100`인지 본다. 서버에서 `curl -s http://<서버>:9100/profiles`로 내 프로필을 찾는다 |
 | 이름으로 적었더니 안 붙는다 | 1.2절. 사내 DNS가 그 이름을 푸는지 `getent hosts <이름>`으로 본다. IP로 바꿔 보면 가려진다 |
 | 셸에 `HTTP_PROXY`가 있다 | 프록시를 거치지 않고 직접 나가는 환경이면 `unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy`로 지우고 다시 시도한다 |

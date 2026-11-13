@@ -63,9 +63,7 @@ class TunnelClient:
 
     def is_server(self, url: str) -> bool:
         """is this URL one of my servers' own (same scheme, host and port)? Such a call needs no way out: the server is right there"""
-        u = urlsplit(url)
-        origin = lambda x: (x.scheme, x.hostname, x.port or {"http": 80, "https": 443}.get(x.scheme))
-        return any(origin(urlsplit(s)) == origin(u) for s in self.servers)
+        return any(origin(s) == origin(url) for s in self.servers)
 
     async def out(self, method: str, url: str, headers: dict, body: bytes, timeout: float = 60.0) -> tuple[int, dict, bytes]:
         """one call for me through the server's way out: (status, headers, body) of the answer, or OutRefused"""
@@ -200,13 +198,23 @@ async def inside_my_network(host: str, timeout: float = 2.0) -> bool:
         return False
 
 
+def origin(url: str) -> tuple:
+    """(scheme, host, port) of a URL, the port filled in from the scheme"""
+    u = urlsplit(url)
+    return u.scheme, u.hostname, u.port or {"http": 80, "https": 443}.get(u.scheme)
+
+
 class OutTransport(httpx.AsyncBaseTransport):
-    """an httpx transport for a client behind a firewall: calls go through the server's way out, except the servers' own
-    addresses, addresses inside my own network, and when the server offers no way out (they go straight, through `inner`).
+    """an httpx transport for a client behind a firewall: once attached, every call goes through the server's way out,
+    a private address too (the address is written as the server sees it: a broker in the server's own network is reached
+    by the server). Straight, through `inner`: the servers' own addresses, a server that offers no way out, and the few
+    origins named in `straight` while they are inside my own network (a company LLM gateway: the server cannot reach it).
     local: async host -> bool, "is this host inside my network" (replaceable in tests)"""
 
-    def __init__(self, client: TunnelClient, inner: httpx.AsyncBaseTransport | None = None, local=inside_my_network, local_ttl: float = 60.0):
+    def __init__(self, client: TunnelClient, inner: httpx.AsyncBaseTransport | None = None, straight: list[str] | None = None,
+                 local=inside_my_network, local_ttl: float = 60.0):
         self.client, self._inner, self.local, self.local_ttl = client, inner, local, local_ttl
+        self.straight = {origin(u) for u in straight or [] if u}
         self._known: dict[str, tuple[bool, float]] = {}
 
     async def _is_local(self, host: str) -> bool:
@@ -218,6 +226,10 @@ class OutTransport(httpx.AsyncBaseTransport):
         self._known[host] = (v, now)
         return v
 
+    async def _straight(self, url: str) -> bool:
+        o = origin(url)
+        return o in self.straight and await self._is_local(o[1])
+
     @property
     def inner(self) -> httpx.AsyncBaseTransport:
         if self._inner is None:
@@ -225,7 +237,7 @@ class OutTransport(httpx.AsyncBaseTransport):
         return self._inner
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        if not self.client.out_ok or self.client.is_server(str(request.url)) or await self._is_local(request.url.host):
+        if not self.client.out_ok or self.client.is_server(str(request.url)) or await self._straight(str(request.url)):
             return await self.inner.handle_async_request(request)
         body = await request.aread()
         wait = (request.extensions.get("timeout") or {}).get("read")

@@ -300,15 +300,38 @@ def test_p10f_signing_without_a_body_is_what_it_was():
         verify_headers(hb, "POST", "/out", now=1_800_000_000.0, window=60)
 
 
-async def test_p10f8_an_address_inside_my_own_network_is_reached_straight():
-    """a gateway in my own network (a company LLM, a private server) is reached as it always was: the server could not reach it"""
-    svc, c, clock, target = make(real_time=True)
+async def test_p10f8_a_private_address_goes_through_the_server_too():
+    """once attached, an address is written as the server sees it: a broker at 10.10.0.5 beside the server is reached by
+    the server (the operator allows that one address), not tried from my own network where it does not exist"""
+    svc, c, clock, target = make(real_time=True, out_allow=["10.10.0.5/32"])
     seen = Seen()
     tc = client_for(c, Key(), ["http://c"])
     async with httpx.AsyncClient(transport=OutTransport(tc, inner=httpx.MockTransport(seen))) as hc:
-        for url in ["http://10.1.2.3:8080/v1/chat/completions", "http://127.0.0.1:9000/", "http://192.168.1.5/", "http://[::1]/"]:
-            await hc.get(url)
-    assert len(seen.direct) == 4 and not target.seen
+        r = await hc.get("http://10.10.0.5:9100/profiles")
+        assert r.status_code == 200 and not seen.direct and len(target.seen) == 1
+        with pytest.raises(httpx.ConnectError) as e:  # another private address: still sent to the server, which refuses it
+            await hc.get("http://192.168.1.5/")
+    assert "bad_target" in str(e.value) and not seen.direct
+
+
+async def test_p10f8_only_the_llm_gateway_inside_my_network_is_reached_straight():
+    """a company LLM gateway is in my network, where the server cannot reach: named in `straight`, it goes straight while
+    it is inside; the same origin outside my network, or another port of that host, goes through the server"""
+    svc, c, clock, target = make(real_time=True)
+    seen = Seen()
+    tc = client_for(c, Key(), ["http://c"])
+    gw = "http://10.1.2.3:8080"
+    async with httpx.AsyncClient(transport=OutTransport(tc, inner=httpx.MockTransport(seen), straight=[gw, None])) as hc:
+        await hc.post(f"{gw}/v1/chat/completions", json={})
+        assert len(seen.direct) == 1
+        with pytest.raises(httpx.ConnectError):
+            await hc.get("http://10.1.2.3:9100/")  # same host, not the gateway's origin
+    assert len(seen.direct) == 1
+    seen = Seen()
+    async with httpx.AsyncClient(transport=OutTransport(tc, inner=httpx.MockTransport(seen), straight=["http://example.com"],
+                                                        local=outside)) as hc:
+        await hc.get("http://example.com/v1/chat/completions")  # a gateway on the internet: the server carries it
+    assert not seen.direct and len(target.seen) == 1
 
 
 async def test_p10f8_inside_my_network_is_told_by_the_address_or_what_the_name_resolves_to():
