@@ -120,7 +120,7 @@ class Settings(EnvSettings):
     peer_relay_concurrency: int = F("ARENA_PEER_RELAY_CONCURRENCY", 8, int, "relay로 받은 요청을 동시에 처리하는 수")
     peer_call_retries: int = F("ARENA_PEER_CALL_RETRIES", 3, int, "상대가 받지 못한 것이 확실한 호출(카드를 못 읽음, 연결 안 됨, 503)을 상대의 지금 주소로 다시 보내는 횟수. 받았을 수도 있는 호출은 다시 보내지 않는다")
     peer_call_retry_sec: float = F("ARENA_PEER_CALL_RETRY_SEC", 1.0, float, "다시 보내기 전에 기다리는 시간(초). 한 번마다 두 배")
-    peer_use_out: bool = F("ARENA_PEER_USE_OUT", True, _bool, "relay로 붙은 peer가 다른 peer의 A2A 주소를 부를 때 connectivity 서버의 나가는 방향 중계(/out)를 쓸지. 서버가 켜 두었을 때만 쓴다. false면 늘 직접 나간다")
+    peer_use_out: bool = F("ARENA_PEER_USE_OUT", True, _bool, "relay로 붙은 peer가 밖으로 부르는 것(사설 주소 포함)을 connectivity 서버의 나가는 방향 중계(/out)로 보낼지. 서버가 켜 두었을 때만 쓴다. 서버 자신과 사내 주소인 ARENA_LLM_BASE_URL은 바로 간다. false면 늘 직접 나간다")
     peer_stun_timeout_sec: float = F("ARENA_PEER_STUN_TIMEOUT_SEC", 2.0, float, "기동할 때 connectivity 서버의 STUN(UDP)에 답을 기다리는 시간(초). 답이 없으면 'UDP 안 됨'으로 보일 뿐 오류가 아니다")
     peer_relay_attach_wait_sec: float = F("ARENA_PEER_RELAY_ATTACH_WAIT_SEC", 5.0, float, "처음 시작할 때 relay에 붙기를 기다렸다가 프로필을 게시하는 최대 시간(초). 넘으면 붙는 대로 다시 게시")
     # ledger rules

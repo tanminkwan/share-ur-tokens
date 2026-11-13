@@ -400,15 +400,10 @@ async def test_p10c4_a_pending_answer_is_looked_at_where_the_peer_is_now(world):
     assert done["ok"] and done["sig"]
 
 
-async def outside(host):  # loopback stands in for "somewhere on the internet"
-    return False
-
-
 # ---- 10-F: the way out. A peer behind a relay calls others through the server too (dev/phase10/out-gateway.md) ----
 async def test_p10f9_a_peer_behind_a_relay_calls_another_peer_through_the_servers_way_out(world):
     svc, server, _ = await world.connectivity(out_enabled=True, out_allow=["127.0.0.0/8"])  # loopback stands in for "somewhere on the internet"
     b = await world.behind(await world.peer("b", port=False), [server])
-    b.relay.out.local = outside
     a = await world.peer("a", FakeOwner(yes=True, why="좋다"), [AskOwner()])
     assert b.relay.state["out"] is True and b.transport.via is not None
     r = await b.call(a.url, engage(a.identity.pub))  # a's own address: b's call leaves through the server
@@ -456,7 +451,6 @@ async def test_p10f9_every_call_of_a_peer_behind_a_relay_leaves_by_the_server_br
     assert group.clients[0].egress is b.egress and b.transport.egress is b.egress and b.rest.egress is b.egress
     assert b.recorder("http://127.0.0.1:1").egress is b.egress  # made later, it leaves by the same way
     p = RelayLink(b, [server])
-    p.out.local = outside
     b.relay = p
     world.tasks.append(asyncio.create_task(p.run()))
     for _ in range(300):

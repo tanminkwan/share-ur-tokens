@@ -31,7 +31,7 @@ sequenceDiagram
 | P10-F7 | `/health`는 **개수만** 센다(호출 수, 거부 이유별 수, 바이트). 무엇을 불렀는지는 남기지 않는다 | 정함 |
 | P10-F8 | 범용 클라이언트: `TunnelClient.out(...)`와 `httpx` transport(`OutTransport`). **붙은 서버의 주소(relay 주소 포함)는 서버를 거치지 않고 바로** 간다. 서버가 `out`을 알리지 않으면 바로 나간다 | 정함 |
 | P10-F9 | **원칙: peer의 출구는 하나다.** 사용자 2026-11-11: "남은 곳이 아니라, 그냥 그래야 하는 거잖아". peer가 스스로 부르는 HTTP는 **모두** peer의 `Egress`(`arena/egress.py`) 하나를 지난다: A2A(다른 peer, god, 기록자), broker API, recorder API, api 연결(REST), 앱 받기, URL 영역, 느린 답 알림(webhook), LLM, embedding. relay 방식이고 서버가 `out`을 알리면 출구가 `OutTransport`가 되고, 직접 방식이면 httpx의 보통 길(환경 proxy 포함)이다. 위 계층은 모른다(P10-P3) | 정함 |
-| P10-F10 | 출구가 호출마다 정한다: **서버 자신의 주소**(relay로 붙은 다른 peer 포함)와 **내 망 안의 주소**(사설·loopback·link-local 주소, 또는 그런 주소로만 풀리는 이름)는 바로 가고, 그 밖은 모두 `/out`. 그래서 사내 LLM 게이트웨이는 바로, 인터넷의 LLM API는 서버로 간다. 여기서 풀리지 않는 이름은 바깥으로 본다 | 정함 |
+| P10-F10 | 출구가 호출마다 정한다: **서버 자신의 주소**(relay로 붙은 다른 peer 포함)와 **내 망 안에 있는 LLM 게이트웨이**(`ARENA_LLM_BASE_URL`의 origin이 사설·loopback·link-local 주소이거나 그런 주소로만 풀리는 이름)만 바로 가고, 그 밖은 **사설 주소까지** 모두 `/out`. 붙은 뒤의 주소는 서버 쪽에서 보이는 주소로 적는다(서버와 같은 VPC의 broker `10.10.x.x`는 서버가 부르고, 운영자가 `CONNECTIVITY_OUT_ALLOW`로 그 주소만 허용). 같은 망의 peer끼리도 relay 주소로 서버를 거친다. 그래서 사내 LLM 게이트웨이는 바로, 인터넷의 LLM API는 서버로 간다. 여기서 풀리지 않는 이름은 바깥으로 본다. (2026-11-13 고침: 전에는 모든 사설 주소가 바로 가서 VPC 안의 broker에 닿지 못했다) | 정함 |
 | P10-F11 | 하지 않는 것: 끝과 끝 암호화(SEC-13). peer가 아닌 프로그램(브라우저 등)의 proxy 노릇 | 한계로 밝힘 |
 
 ## 3. 설계
@@ -87,10 +87,10 @@ flowchart LR
 | 묶음 | 시험 | 방식 | 결과 |
 |---|---|---|---|
 | 서버 `/out` | `tests/test_p10_out.py` (P10-F1~F7) | 상대는 `httpx.MockTransport`, 이름 풀기는 가짜 표. 기본 꺼짐, 서명이 본문을 묶음, 재전송 거부, 허용 키, 전달 내용, **확인한 IP로 연결**(Host와 SNI는 원래 이름), 쿠키·hop 헤더, 리다이렉트 안 따름, 사설·loopback·link-local·`localhost`·사설로 풀리는 이름·공인과 사설이 섞인 이름 거부, scheme·사용자 정보, `OUT_ALLOW`, `OUT_PORTS`, 초당 수, 동시 수, 요청·응답 크기, 못 닿음·시간 초과, `/health`에 내용 없음 | 통과 |
-| 범용 클라이언트 | `tests/test_p10_out.py` (P10-F8) | `OutTransport`가 제3자 호출을 서버로 보냄, 서버 자신의 주소는 바로, 서버에 `out`이 없으면 바로, 거부는 읽을 수 있는 오류 | 통과 |
+| 범용 클라이언트 | `tests/test_p10_out.py` (P10-F8, F10) | `OutTransport`가 제3자 호출을 서버로 보냄, 서버 자신의 주소는 바로, 서버에 `out`이 없으면 바로, 거부는 읽을 수 있는 오류, **사설 주소도 서버로**(허용한 `10.10.0.5`는 서버가 부르고 다른 사설 주소는 서버가 `bad_target`으로 거부), **내 망 안의 LLM 게이트웨이 origin만 바로**(같은 호스트의 다른 포트, 인터넷의 게이트웨이는 서버로) | 통과 (2026-11-13) |
 | 서명 호환 | `test_p10f_signing_without_a_body_is_what_it_was` | 본문 없는 서명(poll, reply, reach)은 이전과 같음 | 통과 |
 | 출구 규칙 | `tests/test_p10_out.py` (P10-F10) | 사설·loopback 주소는 바로, 이름은 풀린 주소로 판단, 풀리지 않는 이름은 바깥 | 통과 |
-| Arena 연결 | `tests/test_p10_relay.py` 10-F (5) | **실제 loopback 소켓**: relay 뒤의 peer가 다른 peer의 주소를 `/out`으로 불러 계약 응답을 받음(`out_calls > 0`), **실제 HTTP broker에 프로필 게시도 `/out`으로**, 모든 부품이 peer의 출구 하나를 씀(나중에 만든 recorder client 포함), 서버가 끄면 바로 나감, `ARENA_PEER_USE_OUT=false`, relay 주소인 상대는 `/out`을 거치지 않음. 시험에서는 loopback을 "바깥"으로 친다 | 통과 |
+| Arena 연결 | `tests/test_p10_relay.py` 10-F (5) | **실제 loopback 소켓**: relay 뒤의 peer가 다른 peer의 주소를 `/out`으로 불러 계약 응답을 받음(`out_calls > 0`), **실제 HTTP broker에 프로필 게시도 `/out`으로**, 모든 부품이 peer의 출구 하나를 씀(나중에 만든 recorder client 포함), 서버가 끄면 바로 나감, `ARENA_PEER_USE_OUT=false`, relay 주소인 상대는 `/out`을 거치지 않음. loopback 주소도 그대로 `/out`으로 간다(서버가 `OUT_ALLOW`로 허용) | 통과 |
 | **docker 사내망** | `ARENA_TEST_DOCKER=1 pytest tests/test_p10_docker.py -k company_peer` (`deploy/intranet-test`) | 실제 컨테이너. `intranet`(docker internal, 밖으로 못 나감)에는 사내 peer(나래)와 connectivity만, `internet`에는 genesis·인터넷 peer(가람)·connectivity. 나래는 connectivity만 열리고 genesis·가람·google은 닫힘을 컨테이너 안에서 확인. 나래의 프로필이 relay 주소로 broker에 올라감(`/out`), 가람이 연 이벤트의 공지를 받고 참가(나래 → 가람, `/out`), 계약(가람 → 나래, relay, 원장 기록), 양쪽 말 주고받기. 서버 `/health`: `attached` 1, `out_calls` > 0, `bad_target` 거부 없음. `CONNECTIVITY_PUBLIC_URL`은 비워 둠 | 통과 (2026-11-11) |
 | 계층 | `tests/test_layering.py` | `connectivity/`에 Arena 낱말·import 없음 | 통과 |
 | 전체 | `pytest tests --ignore=tests/live` | | 통과 |

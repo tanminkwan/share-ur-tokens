@@ -36,11 +36,13 @@ class RelayLink:
         self.udp: dict = {}  # the STUN check, once at start: shown only, no path depends on it (P10-C6, C7)
         self._udp_task: asyncio.Task | None = None
         self._relay: asyncio.Task | None = None
-        self.out = OutTransport(self.client)  # my calls leave through the server's way out while I am behind a relay and it offers one
+        # my calls leave through the server's way out while I am behind a relay and it offers one; only my LLM gateway, when
+        # it is inside my own network, is reached straight (the server cannot reach it)
+        self.out = OutTransport(self.client, straight=[s.llm_base_url] if s.llm_base_url else [])
 
     def _calls_leave_by(self, relay: bool) -> None:
         """behind a relay every call I make leaves through the server's way out (it decides per call: the servers' own
-        addresses, addresses inside my own network, and a server without a way out are reached straight); reachable
+        addresses, my LLM gateway inside my own network, and a server without a way out are reached straight); reachable
         directly, calls go straight out as always"""
         egress = getattr(self.peer, "egress", None)
         if egress is not None:
